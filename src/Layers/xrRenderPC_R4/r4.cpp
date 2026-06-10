@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "r4.h"
+#include "StreamlineWrapper.h" // g_SLWrapper / HAS_STREAMLINE (NV Streamline DLSS/Reflex)
 #include "../xrRender/fbasicvisual.h"
 #include "../../xrEngine/xr_object.h"
 #include "../../xrEngine/CustomHUD.h"
@@ -542,6 +543,31 @@ void CRender::create()
 	FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
 
 	Device.ModelDefferClear = xr_make_delegate(Models, &CModelPool::DeleteQueuedDeffer);
+
+	// SSS UPDATE 24 -- upscaler / DLSS setup ------------------------------------------------------------
+	// Output (display) resolution. Real_* defaults equal; true sub-native downscaling additionally requires
+	// rendering the scene/G-buffer/depth/mvec at Real_* (the RT + viewport rewire -- see
+	// docs/streamline_dlss_integration_plan.md). With DLAA (resolution token 1) Real_* == Target_* and DLSS
+	// runs 1:1 correctly without that rewire.
+	Device.Target_Width  = Device.dwWidth;
+	Device.Target_Height = Device.dwHeight;
+	Device.Real_Width    = Device.dwWidth;
+	Device.Real_Height   = Device.dwHeight;
+
+	// 72-entry centered Halton(2,3) temporal jitter table (plan Addendum B2): x = radInv2(i)-0.5,
+	// y = radInv3(i)-0.5. Index 0 -> (-0.5,-0.5). Consumed by ssfx_taa_jitter (shaders) and SL_DLSS_Evaluate.
+	for (u32 i = 0; i < 72; ++i)
+	{
+		float x = 0.0f, b2 = 0.5f;
+		for (u32 n = i; n; n >>= 1) { if (n & 1) x += b2; b2 *= 0.5f; }
+		float y = 0.0f, b3 = 1.0f / 3.0f;
+		for (u32 n = i; n; n /= 3) { y += (n % 3) * b3; b3 /= 3.0f; }
+		Device.HaltonJittering[i].set(x - 0.5f, y - 0.5f);
+	}
+
+#if HAS_STREAMLINE
+	g_SLWrapper.SL_Init(); // slInit + slSetD3DDevice + DLSS support + Reflex (plan Addendum A2)
+#endif
 }
 
 void CRender::destroy()

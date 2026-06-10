@@ -538,6 +538,12 @@ CRenderTarget::CRenderTarget()
 			rt_Generic.create(r2_RT_generic, w, h, D3DFMT_A8R8G8B8, 1);
 		}
 
+		// SSS UPDATE 24 -- DLSS/upscaler color output target (display resolution). See StreamlineWrapper.
+		if (RImplementation.o.dx11_hdr10)
+			rt_sceneAA.create("$user$scene_aa", w, h, D3DFMT_A16B16G16R16F, 1);
+		else
+			rt_sceneAA.create("$user$scene_aa", w, h, D3DFMT_A8R8G8B8, 1);
+
 		rt_fakescope.create(r2_RT_scopert, w, h, D3DFMT_A8R8G8B8, 1); //crookr fakescope
 
 		//--DSR-- HeatVision_start

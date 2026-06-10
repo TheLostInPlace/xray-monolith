@@ -6,6 +6,8 @@
 
 #include "stdafx.h"
 #include "StreamlineWrapper.h"
+#include "../../xrEngine/device.h"          // CRenderDevice Device (SDK-free)
+#include "../xrRender/xrRender_console.h"   // ps_ssfx_upscaler, ps_r_upscaler_qual_token, ...
 
 #if HAS_STREAMLINE
 #include <sl.h>
@@ -13,17 +15,19 @@
 #include <sl_reflex.h>
 #include <sl_dlss.h>
 #include <sl_pcl.h>
+#include <sl_helpers.h>   // sl::getResultAsStr
 
 #include "../xrRender/HW.h"
 #include "r4.h"
 #include "r4_rendertarget.h"
-#include "../../xrEngine/device.h"
 #include "../../xrEngine/igame_persistent.h"
 #include "../../xrEngine/environment.h"
-#include "../xrRender/xrRender_console.h"
 
 // File-scope viewport handle (in the original binary this is a global, not a member).
 static sl::ViewportHandle g_sl_viewport{ 0 };
+
+// Device.PCL_currentFrame is stored as void* (so xrEngine stays free of the SL SDK); cast it back here.
+static inline sl::FrameToken* SL_Frame() { return reinterpret_cast<sl::FrameToken*>(Device.PCL_currentFrame); }
 #endif // HAS_STREAMLINE
 
 SLWrapper g_SLWrapper;
@@ -31,8 +35,7 @@ SLWrapper g_SLWrapper;
 // ----------------------------------------------------------------------------------------------------
 void SLWrapper::UpdateRenderScale()
 {
-#if HAS_STREAMLINE
-    // Render-scale ratios per quality token (plan Addendum C2).
+    // Render-scale ratios per quality token (plan Addendum C2). SDK-free -- only touches Device fields.
     float scale;
     switch (ps_r_upscaler_qual_token)
     {
@@ -45,7 +48,6 @@ void SLWrapper::UpdateRenderScale()
     Device.Current_RenderScale = scale;
     Device.Real_Width  = (u32)(Device.Target_Width  * scale + 0.5f);
     Device.Real_Height = (u32)(Device.Target_Height * scale + 0.5f);
-#endif
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -91,7 +93,7 @@ void SLWrapper::SL_Init()
             adapter.deviceLUID            = (uint8_t*)&desc.AdapterLuid;
             adapter.deviceLUIDSizeInBytes = sizeof(desc.AdapterLuid);
 
-            if (slIsFeatureSupported(sl::kFeatureDLSS, &adapter) == sl::Result::eOk)
+            if (slIsFeatureSupported(sl::kFeatureDLSS, adapter) == sl::Result::eOk)
             {
                 SL_DLSS_Init();
                 m_bDlssInit = true;
@@ -156,7 +158,7 @@ void SLWrapper::SL_Reflex_Init() // plan Section 3 (corrected)
     adapter.deviceLUID            = (uint8_t*)&desc.AdapterLuid;
     adapter.deviceLUIDSizeInBytes = sizeof(desc.AdapterLuid);
 
-    if (slIsFeatureSupported(sl::kFeatureReflex, &adapter) != sl::Result::eOk)
+    if (slIsFeatureSupported(sl::kFeatureReflex, adapter) != sl::Result::eOk)
     {
         Msg("! NV Streamline : Reflex is not supported");
         m_bReflexInit = false;
@@ -217,7 +219,7 @@ void SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D ca
     consts.depthInverted        = sl::Boolean::eFalse;
     consts.cameraMotionIncluded = sl::Boolean::eTrue;                        // CORRECTED: 0x100 write
 
-    slSetConstants(consts, *Device.PCL_currentFrame, g_sl_viewport);
+    slSetConstants(consts, *SL_Frame(), g_sl_viewport);
 
     sl::Resource colorIn { sl::ResourceType::eTex2d, RImplementation.Target->rt_Generic_0->pSurface };
     sl::Resource colorOut{ sl::ResourceType::eTex2d, RImplementation.Target->rt_sceneAA->pSurface };
@@ -233,10 +235,10 @@ void SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D ca
         sl::ResourceTag{ &depth,    sl::kBufferTypeDepth,              sl::ResourceLifecycle::eValidUntilPresent, &extRender },
         sl::ResourceTag{ &mvec,     sl::kBufferTypeMotionVectors,      sl::ResourceLifecycle::eValidUntilPresent, &extRender },
     };
-    slSetTagForFrame(*Device.PCL_currentFrame, g_sl_viewport, inputs, 4, HW.pContext);
+    slSetTagForFrame(*SL_Frame(), g_sl_viewport, inputs, 4, HW.pContext);
 
     const sl::BaseStructure* evalInputs[1] = { &g_sl_viewport };
-    sl::Result r = slEvaluateFeature(sl::kFeatureDLSS, *Device.PCL_currentFrame, evalInputs, 1, HW.pContext);
+    sl::Result r = slEvaluateFeature(sl::kFeatureDLSS, *SL_Frame(), evalInputs, 1, HW.pContext);
     if (r != sl::Result::eOk)
         Msg("! NV Streamline : Failed the DLSS evaluation [ %s ]", sl::getResultAsStr(r));
 #endif
@@ -260,7 +262,7 @@ void SLWrapper::SL_Shutdown() // plan Section 5d
 void SLWrapper::SL_NewFrameToken()
 {
 #if HAS_STREAMLINE
-    slGetNewFrameToken(&Device.PCL_currentFrame, nullptr);
+    slGetNewFrameToken(reinterpret_cast<sl::FrameToken*&>(Device.PCL_currentFrame), nullptr);
 #endif
 }
 
@@ -268,7 +270,7 @@ void SLWrapper::SL_PCLMarker(int marker)
 {
 #if HAS_STREAMLINE
     if (Device.slDoPCL && Device.PCL_currentFrame)
-        slPCLSetMarker((sl::PCLMarker)marker, *Device.PCL_currentFrame);
+        slPCLSetMarker((sl::PCLMarker)marker, *SL_Frame());
 #endif
 }
 
@@ -276,6 +278,6 @@ void SLWrapper::SL_ReflexSleep()
 {
 #if HAS_STREAMLINE
     if (m_bReflexInit && Device.PCL_currentFrame)
-        slReflexSleep(*Device.PCL_currentFrame);
+        slReflexSleep(*SL_Frame());
 #endif
 }

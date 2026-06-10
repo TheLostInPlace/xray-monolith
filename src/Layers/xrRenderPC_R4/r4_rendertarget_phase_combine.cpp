@@ -3,6 +3,7 @@
 #include "../../xrEngine/environment.h"
 
 #include "../xrRender/dxEnvironmentRender.h"
+#include "StreamlineWrapper.h" // g_SLWrapper / HAS_STREAMLINE (NV Streamline DLSS)
 
 #define STENCIL_CULL 0
 
@@ -552,6 +553,21 @@ void CRenderTarget::phase_combine()
 	}
 
 	phase_lut();	
+
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- DLSS upscale (plan Addendum D). When DLSS is the active upscaler, upscale rt_Generic_0
+	// (+ depth + motion vectors) into rt_sceneAA, then copy back so the existing post/present path displays it.
+	// NOTE on activation: skip the SMAA/TAA passes below when ps_ssfx_upscaler == 2, and for true sub-native
+	// upscaling render the scene at Real_* with rt_sceneAA sampled downstream (the "last mile", see plan doc).
+	if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit)
+	{
+		ID3D11Resource* zres = nullptr;
+		HW.pBaseZB->GetResource(&zres);
+		if (zres) { HW.pContext->CopyResource(rt_tempzb->pSurface, zres); zres->Release(); }
+		g_SLWrapper.SL_DLSS_Evaluate();
+		HW.pContext->CopyResource(rt_Generic_0->pSurface, rt_sceneAA->pSurface);
+	}
+#endif
 
 	if(ps_r2_mask_control.x > 0)
 	{

@@ -3,6 +3,7 @@
 #include "xr_ioconsole.h"
 #include "xr_input.h"
 #include "../xrCore/profiler.h"
+#include "../Layers/xrRenderPC_R4/StreamlineWrapper.h" // g_SLWrapper (SDK-free; calls guarded by HAS_STREAMLINE)
 
 #pragma warning(disable:4995)
 // mmsystem.h
@@ -346,6 +347,14 @@ void CRenderDevice::on_idle()
 		Sleep(100);
 		return;
 	}
+
+#if HAS_STREAMLINE
+	// NV Streamline: acquire this frame's token (used by DLSS + PCL markers), then the latency ping
+	// (plan Addendum A4). slReflexSleep + the simulation/render-submit/present markers are a latency
+	// refinement added separately.
+	g_SLWrapper.SL_NewFrameToken();
+	g_SLWrapper.SL_PCLMarker(SL_PCL_ePCLatencyPing);
+#endif
 
 	PROF_FRAME("Main Thread");
 

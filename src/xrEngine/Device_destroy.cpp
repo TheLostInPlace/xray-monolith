@@ -5,6 +5,7 @@
 #include "IGame_Persistent.h"
 #include "xr_IOConsole.h"
 #include "MonitorList.h"
+#include "../Layers/xrRenderPC_R4/StreamlineWrapper.h" // g_SLWrapper (SDK-free header; calls guarded by HAS_STREAMLINE)
 
 void CRenderDevice::_Destroy(BOOL bKeepTextures)
 {
@@ -25,6 +26,10 @@ void CRenderDevice::_Destroy(BOOL bKeepTextures)
 void CRenderDevice::Destroy(void)
 {
 	if (!b_is_Ready) return;
+
+#if HAS_STREAMLINE
+	g_SLWrapper.SL_Shutdown(); // NV Streamline slShutdown (plan Section 5d)
+#endif
 
 	Log("Destroying Direct3D...");
 

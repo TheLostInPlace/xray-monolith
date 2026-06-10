@@ -104,6 +104,16 @@ public:
 	float fFOV;
 	float fASPECT;
 	float ViewportNear = 0.2f;
+
+	// SSS UPDATE 24 -- DLSS/FSR upscaler + NVIDIA Reflex / PCL (see Layers/xrRenderPC_R4/StreamlineWrapper)
+	u32   Target_Width  = 0;          // display / output resolution
+	u32   Target_Height = 0;
+	u32   Real_Width    = 0;          // internal render resolution (== Target_* unless the upscaler downscales)
+	u32   Real_Height   = 0;
+	float Current_RenderScale = 1.0f; // Real_* / Target_* ratio for the active quality mode
+	void* PCL_currentFrame = nullptr; // sl::FrameToken* (opaque here to keep xrEngine free of the SL SDK)
+	bool  slDoPCL = false;            // enable PCL latency markers
+	Fvector2 HaltonJittering[72];     // centered Halton(2,3) temporal jitter; filled in CRender::create
 protected:
 
 	u32 Timer_MM_Delta;
