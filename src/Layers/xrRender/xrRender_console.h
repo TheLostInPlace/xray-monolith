@@ -7,6 +7,15 @@ extern ECORE_API float ps_ssfx_fog_scattering;
 extern ECORE_API Fvector4 ps_ssfx_motionblur;
 extern ECORE_API Fvector4 ps_ssfx_taa;
 
+// SSS UPDATE 24 -- upscalers (DLSS / FSR3) + NVIDIA Reflex
+extern ECORE_API int ps_ssfx_upscaler;         // 0 = off, 1 = FSR, 2 = DLSS
+extern ECORE_API int ps_r_upscaler_qual_token; // 1 = DLAA/NativeAA .. 5 = Ultra Performance
+extern ECORE_API float ps_ssfx_upscaler_sharp; // post-upscale sharpening amount
+extern ECORE_API int ps_ssfx_reflex;           // 0 = off, 1 = low-latency, 2 = low-latency + boost
+extern ECORE_API int ps_r_dlsspreset_token;    // DLSS preset (0 = default)
+extern ECORE_API xr_token ssfx_upscaler_token[];
+extern ECORE_API xr_token ssfx_upscaler_res_token[];
+
 extern ECORE_API Fvector4 ps_ssfx_rain_drops_setup;
 extern ECORE_API int ps_ssfx_terrain_grass_align;
 extern ECORE_API int ps_ssfx_terrain_pom_refine;

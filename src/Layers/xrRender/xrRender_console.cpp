@@ -393,6 +393,29 @@ float hud_fov_aim_factor = 0;
 Fvector4 ps_ssfx_floravariation = { 0.025, 0.1, 0.025, 0.05 }; // Grass Int, Grass Freq, Foliage Int, Foliage Freq ( 0.025, 0.1, 0.03, 0.05 )
 Fvector4 ps_ssfx_motionblur = { 6, 0, 0, 0 }; // Samples, Intensity, Only HUD, -
 Fvector4 ps_ssfx_taa = { 1, 0.5f, 0.6f, 0 }; // Enable, Jitter, Sharpness, -
+
+// SSS UPDATE 24 -- upscalers (DLSS / FSR3) + NVIDIA Reflex
+int   ps_ssfx_upscaler         = 0;    // 0 = off, 1 = FSR, 2 = DLSS
+int   ps_r_upscaler_qual_token = 1;    // 1 = DLAA/NativeAA, 2 = Quality, 3 = Balanced, 4 = Performance, 5 = Ultra Performance
+float ps_ssfx_upscaler_sharp   = 0.0f; // post-upscale sharpening amount
+int   ps_ssfx_reflex           = 0;    // 0 = off, 1 = low-latency, 2 = low-latency + boost
+int   ps_r_dlsspreset_token    = 0;    // DLSS preset (0 = default)
+
+xr_token ssfx_upscaler_token[] = {
+	{ "off",  0 },
+	{ "fsr",  1 },
+	{ "dlss", 2 },
+	{ 0, 0 }
+};
+
+xr_token ssfx_upscaler_res_token[] = {
+	{ "dlaa/nativeaa",     1 },
+	{ "quality",           2 },
+	{ "balanced",          3 },
+	{ "performance",       4 },
+	{ "ultra performance", 5 },
+	{ 0, 0 }
+};
 Fvector4 ps_ssfx_fog = { 8, 1.3f, 0.1f, 0 }; // Height, Density, SunColor, -
 float ps_ssfx_fog_scattering = 0.6f; // Fog scattering intensity
 
@@ -1364,6 +1387,13 @@ void xrRender_initconsole()
 	// Screen Space Shaders
 	CMD4(CCC_Vector4, "ssfx_floravariation", &ps_ssfx_floravariation, Fvector4().set(0, 0, 0, 0), Fvector4().set(10, 1, 10, 1));
 	CMD4(CCC_Vector4, "ssfx_taa", &ps_ssfx_taa, Fvector4().set(0, 0, 0, 0), Fvector4().set(1, 1, 2, 1));
+
+	// SSS UPDATE 24 -- upscalers (DLSS / FSR3) + NVIDIA Reflex
+	CMD3(CCC_Token,   "ssfx_upscaler",            (u32*)&ps_ssfx_upscaler,         ssfx_upscaler_token);
+	CMD3(CCC_Token,   "ssfx_upscaler_resolution", (u32*)&ps_r_upscaler_qual_token, ssfx_upscaler_res_token);
+	CMD4(CCC_Float,   "ssfx_upscaler_sharp",      &ps_ssfx_upscaler_sharp,         0.0f, 1.0f);
+	CMD4(CCC_Integer, "ssfx_reflex",              &ps_ssfx_reflex,                 0,    2);
+	CMD4(CCC_Integer, "ssfx_dlss_preset",         &ps_r_dlsspreset_token,          0,    7);
 	CMD4(CCC_Vector4, "ssfx_motionblur", &ps_ssfx_motionblur, Fvector4().set(1, 0, 0, 0), Fvector4().set(16, 2, 1, 100));
 	CMD4(CCC_Float, "ssfx_fog_scattering", &ps_ssfx_fog_scattering, 0, 1);
 	CMD4(CCC_Vector4, "ssfx_fog", &ps_ssfx_fog, Fvector4().set(0, 0, 0, 0), Fvector4().set(20, 5, 1, 100));
