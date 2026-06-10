@@ -592,14 +592,14 @@ void CRenderTarget::phase_combine()
 	}
 
     //SMAA
-	if (ps_smaa_quality)
+	if (ps_smaa_quality && ps_ssfx_upscaler != 2) // DLSS does its own AA -- skip SMAA when DLSS-upscaling
 	{
         //PIX_EVENT(SMAA);
         phase_smaa();
         RCache.set_Stencil(FALSE);
     }    
 	
-	if (RImplementation.o.ssfx_taa && ps_ssfx_taa.x > 0)
+	if (RImplementation.o.ssfx_taa && ps_ssfx_taa.x > 0 && ps_ssfx_upscaler != 2) // DLSS replaces TAA when upscaling
 	{
 		phase_ssfx_taa();
 	}
