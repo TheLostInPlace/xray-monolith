@@ -22,7 +22,7 @@
 #pragma once
 
 #ifndef HAS_STREAMLINE
-#define HAS_STREAMLINE 0
+#define HAS_STREAMLINE 1 // NV Streamline active (SDK 2.10.3 in src/3rd party/Streamline). Set 0 to disable.
 #endif
 
 class SLWrapper

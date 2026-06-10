@@ -1,0 +1,51 @@
+NVIDIA Streamline 2.10.3 -- integration notes (DLSS Super Resolution + Reflex + PCL)
+====================================================================================
+
+Vendored SDK: include/ (headers) and lib/x64/sl.interposer.lib. Ported from "Screen Space
+Shaders UPDATE 24". Full reverse-engineering + design spec:
+docs/streamline_dlss_integration_plan.md (Addenda A-D) in the companion repo.
+
+WHAT IS WIRED (all binary-verified + checked against these SDK 2.10.3 headers)
+-----------------------------------------------------------------------------
+  - Console vars: ssfx_upscaler (off/fsr/dlss), ssfx_upscaler_resolution (dlaa..ultra
+    performance), ssfx_upscaler_sharp, ssfx_reflex, ssfx_dlss_preset
+    (src/Layers/xrRender/xrRender_console.{h,cpp})
+  - SLWrapper (src/Layers/xrRenderPC_R4/StreamlineWrapper.{h,cpp}):
+    SL_Init / SL_DLSS_Init / SL_Reflex_Init / SL_DLSS_Evaluate / SL_Shutdown +
+    frame-token/marker/reflex-sleep helpers + UpdateRenderScale
+  - CRenderDeviceData fields: Target_*/Real_*/Current_RenderScale/PCL_currentFrame(void*)/
+    slDoPCL/HaltonJittering[72]   (src/xrEngine/device.h)
+  - CRender::create: set Target_*/Real_*, fill Halton(2,3) jitter, call SL_Init
+  - CRenderDevice::on_idle: acquire frame token + PCL latency ping
+  - CRenderDevice::Destroy: slShutdown
+  - r4_rendertarget: rt_sceneAA (DLSS output)
+  - CRenderTarget::phase_combine: SL_DLSS_Evaluate upscale (ps_ssfx_upscaler == 2)
+
+BUILD CONFIG (already applied)
+------------------------------
+  - HAS_STREAMLINE = 1 in StreamlineWrapper.h (set 0 to compile Streamline out entirely)
+  - xrRender_R4.vcxproj  ClCompile -> AdditionalIncludeDirectories +=
+        $(SolutionDir)3rd party\Streamline\include
+  - xrEngine.vcxproj (the .exe)  Link -> AdditionalDependencies +=
+        $(SolutionDir)3rd party\Streamline\lib\x64\sl.interposer.lib
+
+RUNTIME DLLs (you must deploy these next to AnomalyDX11.exe)
+-----------------------------------------------------------
+From the matching 2.10.3 set (you already have them):
+  sl.interposer.dll  sl.common.dll  sl.pcl.dll  sl.reflex.dll  sl.dlss.dll  nvngx_dlss.dll
+sl.interposer.dll is in the exe import table, so the game will not launch if it is missing.
+
+FIRST-RUN VERIFICATION
+----------------------
+  1. Build (x64). Expect log: "- NV Streamline : SDK 2.10 Initialized".
+  2. ssfx_upscaler dlss ; ssfx_upscaler_resolution dlaa/nativeaa  -> "DLSS is available."
+     (DLAA = 1:1, correct without the dual-resolution rewire.)
+  3. ssfx_reflex 1 -> "Reflex low Latency available." on an RTX GPU.
+
+REMAINING "LAST MILE" (for true sub-native upscaling; DLAA works without it)
+----------------------------------------------------------------------------
+  - Render the scene/G-buffer/depth/mvec at Real_* (lower) instead of Target_*: the RT
+    allocation + viewport rewire. Currently Real_* == Target_* so DLSS runs at native res.
+  - When ps_ssfx_upscaler == 2, skip the SMAA/TAA passes in phase_combine.
+  - Confirm rt_sceneAA gets a UAV (DLSS writes it via compute).
+  See docs/streamline_dlss_integration_plan.md "last mile" notes.
