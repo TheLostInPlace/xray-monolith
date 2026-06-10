@@ -7,6 +7,7 @@
 #include "../../xrParticles/ParticlesAsyncManager.h"
 
 #include "../xrRender/QueryHelper.h"
+#include "StreamlineWrapper.h" // g_SLWrapper (NV Streamline DLSS dynamic resolution)
 
 void CRender::render_menu()
 {
@@ -72,6 +73,12 @@ void CRender::Render()
 		render_menu();
 		return;
 	};
+
+	// SSS UPDATE 24 -- render the 3D scene at Real_* when DLSS-upscaling (no-op otherwise); phase_combine
+	// restores Target_* before the upscale output. NOTE: assumes the scene/post viewports follow
+	// Device.dwWidth/dwHeight -- verify on a build (if the G-buffer viewport is fixed to the RT size, this
+	// needs an explicit set_viewport_size(Real_*) in phase_scene_begin instead).
+	g_SLWrapper.BeginSceneResolution();
 
 	IMainMenu* pMainMenu = g_pGamePersistent ? g_pGamePersistent->m_pMainMenu : 0;
 	bool bMenu = pMainMenu ? pMainMenu->CanSkipSceneRendering() : false;

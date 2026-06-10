@@ -561,6 +561,7 @@ void CRenderTarget::phase_combine()
 	// upscaling render the scene at Real_* with rt_sceneAA sampled downstream (the "last mile", see plan doc).
 	if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit)
 	{
+		g_SLWrapper.EndSceneResolution(); // back to Target_* for the upscale output + post/UI
 		ID3D11Resource* zres = nullptr;
 		HW.pBaseZB->GetResource(&zres);
 		if (zres) { HW.pContext->CopyResource(rt_tempzb->pSurface, zres); zres->Release(); }

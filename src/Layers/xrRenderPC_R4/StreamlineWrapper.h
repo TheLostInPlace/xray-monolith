@@ -48,6 +48,11 @@ public:
     // Safe to call without the SDK; only touches Device fields (which exist once HAS_STREAMLINE prerequisites
     // are met). Called from SL_Init and whenever the resolution token changes (before a vid_restart).
     void UpdateRenderScale();
+
+    // Dynamic resolution: render the scene at Real_* (Begin) then restore Target_* (End) before the upscale.
+    // No-op unless HAS_STREAMLINE and ps_ssfx_upscaler == 2 (DLSS). See r4_R_render.cpp / phase_combine.
+    void BeginSceneResolution();
+    void EndSceneResolution();
 };
 
 extern SLWrapper g_SLWrapper;

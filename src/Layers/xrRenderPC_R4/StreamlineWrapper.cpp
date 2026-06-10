@@ -51,6 +51,31 @@ void SLWrapper::UpdateRenderScale()
 }
 
 // ----------------------------------------------------------------------------------------------------
+// Dynamic resolution toggle. The scene + pre-upscale post render into the Real_* sub-rect of the full-size
+// RTs; phase_combine restores Target_* before the DLSS output. DLAA (Real_* == Target_*) makes both no-ops.
+void SLWrapper::BeginSceneResolution()
+{
+#if HAS_STREAMLINE
+    if (m_bDlssInit && ps_ssfx_upscaler == 2)
+    {
+        Device.dwWidth  = Device.Real_Width;
+        Device.dwHeight = Device.Real_Height;
+    }
+#endif
+}
+
+void SLWrapper::EndSceneResolution()
+{
+#if HAS_STREAMLINE
+    if (m_bDlssInit && ps_ssfx_upscaler == 2)
+    {
+        Device.dwWidth  = Device.Target_Width;
+        Device.dwHeight = Device.Target_Height;
+    }
+#endif
+}
+
+// ----------------------------------------------------------------------------------------------------
 void SLWrapper::SL_Init()
 {
 #if HAS_STREAMLINE
