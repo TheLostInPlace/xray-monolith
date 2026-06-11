@@ -525,34 +525,7 @@ void CRenderTarget::phase_combine()
 		phase_ssfx_motion_blur();
 	}
 
-	if (scope_3D_fake_enabled)
-	{
-		phase_3DSSReticle(); // Redotix99: for 3D Shader Based Scopes
-	}
-
-	//Compute blur textures
-	if (!Device.m_SecondViewport.IsSVPFrame()) // Temp fix for blur buffer and SVP
-		phase_blur();
-
-	//Compute bloom (new)
-	if (RImplementation.o.ssfx_bloom)
-	{
-		if (!Device.m_SecondViewport.IsSVPFrame())
-			phase_ssfx_bloom();
-		else
-			HW.pContext->ClearRenderTargetView(rt_ssfx_bloom1->pRT, ColorRGBA);
-	}
-	else
-	{
-		phase_pp_bloom();
-	}
-	
-	if (ps_r2_ls_flags.test(R2FLAG_DOF))
-	{	
-		phase_dof();
-	}
-
-	phase_lut();	
+	phase_lut();
 
 #if HAS_STREAMLINE
 	// SSS UPDATE 24 -- feed rt_sceneAA, ALWAYS (binary Addendum D: on the upscaler-off path the binary does
@@ -585,6 +558,47 @@ void CRenderTarget::phase_combine()
 		}
 	}
 #endif
+
+	// SSS UPDATE 24 -- binary phase order: lut -> upscale -> 3DSSReticle -> blur -> bloom (at Real_*
+	// resolution, restored to Target_* after) -> dof -> gasmask -> nightvision -> heatvision -> combine.
+	// These phases were moved here from before phase_lut: their blenders now read "$user$scene_aa",
+	// which is only valid after the upscale feed above.
+	if (scope_3D_fake_enabled)
+	{
+		phase_3DSSReticle(); // Redotix99: for 3D Shader Based Scopes
+	}
+
+	// Binary: blur + bloom run with Device.dwWidth/dwHeight = Real_* and the viewport set to match,
+	// then Target_* is restored (no-op at DLAA where Real == Target).
+	Device.dwWidth = Device.Real_Width;
+	Device.dwHeight = Device.Real_Height;
+	set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
+
+	//Compute blur textures
+	if (!Device.m_SecondViewport.IsSVPFrame()) // Temp fix for blur buffer and SVP
+		phase_blur();
+
+	//Compute bloom (new)
+	if (RImplementation.o.ssfx_bloom)
+	{
+		if (!Device.m_SecondViewport.IsSVPFrame())
+			phase_ssfx_bloom();
+		else
+			HW.pContext->ClearRenderTargetView(rt_ssfx_bloom1->pRT, ColorRGBA);
+	}
+	else
+	{
+		phase_pp_bloom();
+	}
+
+	Device.dwWidth = Device.Target_Width;
+	Device.dwHeight = Device.Target_Height;
+	set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
+
+	if (ps_r2_ls_flags.test(R2FLAG_DOF))
+	{
+		phase_dof();
+	}
 
 	if(ps_r2_mask_control.x > 0)
 	{

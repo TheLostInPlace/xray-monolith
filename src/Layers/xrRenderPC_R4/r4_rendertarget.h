@@ -226,7 +226,7 @@ public:
 	ref_shader s_ssfx_water_blur;
 	ref_shader s_ssfx_water_ssr;
 	ref_shader s_ssfx_ao;
-	//ref_shader s_ssfx_hud[5]; // SSS23: DEPRECATED
+	ref_shader s_ssfx_hud[5]; // SSS UPDATE 24 -- ssfx_hud_skin0..4 (hudtest HUD depth mask, r_dsgraph_render_hudfull)
 
 	Fmatrix Matrix_previous, Matrix_current;
 	//Fmatrix Matrix_HUD_previous, Matrix_HUD_current;

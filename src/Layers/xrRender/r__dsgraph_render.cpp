@@ -287,6 +287,50 @@ void CDSGraphManager::r_dsgraph_render_ScopeSorted()  //  Redotix99: for 3D Shad
 	r_dsgraph_render_graph_sorted(RGraph.mapScopeHUDSorted, true);
 	RImplementation.rmNormal();
 }
+
+// SSS UPDATE 24 -- render the FULL HUD draw list (mapHUD) into the "$user$hudtest" depth mask
+// using the dedicated ssfx_hud_skin0..4 shader set. Binary (r_dsgraph_render_hudfull): sorts mapHUD,
+// skips visuals with iScopeLense == 1 (the lens glass itself, flags & 0x600 == 0x200) and hand
+// visuals, overrides each element with Target->s_ssfx_hud[skinning]->E[0], and does NOT clear the
+// map (it is rendered normally later in PART-1). Viewport depth range 0..0.02 (rmNear), restored after.
+// NOTE: binary reads skinning from the SSS24-added SVS::skinning and skips pVisual->ishand (member
+// we do not have); we use the visual's own skinning stream count, hands are not skipped.
+void CDSGraphManager::r_dsgraph_render_hudfull()
+{
+#if RENDER == R_R4
+	PROF_EVENT("r_dsgraph_render_hudfull");
+	CHudInitializer initializer(true);
+	RImplementation.rmNear();
+
+	auto& map = RGraph.mapHUD;
+	std::sort(map.begin(), map.end());
+	for (auto& N : map)
+	{
+		dxRender_Visual* V = N.pVisual;
+		VERIFY(V);
+		if (!V->shader)
+			continue;
+		ShaderElement* E = V->shader->E[0]._get();
+		if (!E)
+			continue;
+		if (E->flags.iScopeLense == 1) // lens glass: excluded from the HUD depth mask
+			continue;
+
+		int skin = V->skinning;
+		clamp(skin, 0, 4);
+		ref_shader& sh = RImplementation.Target->s_ssfx_hud[skin];
+		if (!sh)
+			continue;
+
+		RCache.set_Element(sh->E[0]);
+		RCache.set_xform_world(*N.pMatrix);
+		V->Render(calcLOD(N.ssa, V->vis.sphere.R));
+	}
+	RCache.set_xform_world(Fidentity);
+
+	RImplementation.rmNormal();
+#endif
+}
 #endif
 
 void CDSGraphManager::r_dsgraph_render_sorted_hud()

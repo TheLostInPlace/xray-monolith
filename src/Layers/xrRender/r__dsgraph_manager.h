@@ -106,6 +106,7 @@ public:
 	// Anomaly
 #if defined(USE_DX11)
 	void r_dsgraph_render_ScopeSorted();
+	void r_dsgraph_render_hudfull(); // SSS UPDATE 24 -- HUD depth mask into "$user$hudtest"
 #endif
 	void r_dsgraph_render_cam_ui();
 	void r_dsgraph_render_water_ssr();

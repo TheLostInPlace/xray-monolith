@@ -723,13 +723,13 @@ CRenderTarget::CRenderTarget()
 
 	s_ssfx_ao.create(b_ssfx_ao, "ssfx_ao"); // SSR
 
-	// SSS 23: Deprecated
-	/*string32 cskin_buffer;
+	// SSS UPDATE 24 -- re-enabled (binary ctor creates ssfx_hud_skin0..4 for r_dsgraph_render_hudfull)
+	string32 cskin_buffer;
 	for (int skin_num = 0; skin_num < 5; skin_num++)
 	{
 		sprintf(cskin_buffer, "ssfx_hud_skin%i", skin_num);
 		s_ssfx_hud[skin_num].create(cskin_buffer);
-	}*/
+	}
 
 	// DIRECT (spot)
 	D3DFORMAT depth_format = (D3DFORMAT)RImplementation.o.HW_smap_FORMAT;

@@ -16,7 +16,7 @@ void CBlender_blur::Compile(CBlender_Compile& C)
 	{
 	case 0:	//Fullres Horizontal
 		C.r_Pass("stub_screen_space", "pp_blur", FALSE, FALSE, FALSE);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 (binary: 0x800 switch generic0 -> scene_aa)
 		C.r_dx10Texture("s_position", r2_RT_P);
 		C.r_dx10Texture("s_lut_atlas", "shaders\\lut_atlas");
 
@@ -36,7 +36,7 @@ void CBlender_blur::Compile(CBlender_Compile& C)
 		break;
 	case 2: //Halfres Horizontal
 		C.r_Pass("stub_screen_space", "pp_blur", FALSE, FALSE, FALSE);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 (binary: 0x800 switch generic0 -> scene_aa)
 		C.r_dx10Texture("s_position", r2_RT_P);
 		C.r_dx10Texture("s_lut_atlas", "shaders\\lut_atlas");
 
@@ -56,7 +56,7 @@ void CBlender_blur::Compile(CBlender_Compile& C)
 		break;
 	case 4: //Quarterres Horizontal
 		C.r_Pass("stub_screen_space", "pp_blur", FALSE, FALSE, FALSE);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 (binary: 0x800 switch generic0 -> scene_aa)
 		C.r_dx10Texture("s_position", r2_RT_P);
 		C.r_dx10Texture("s_lut_atlas", "shaders\\lut_atlas");
 

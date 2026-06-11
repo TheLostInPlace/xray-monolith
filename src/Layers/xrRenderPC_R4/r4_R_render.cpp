@@ -175,7 +175,7 @@ void CRender::Render()
 	// gamedata reticle shader (models_scope_reticle.s, s_posfullres) can sample it in phase_3DSSReticle.
 	// Binary (CRender::Render): gated on the SSS support bit (0x800, always on here) + scope_3D_fake_enabled;
 	// capture_hud, then if mapScopeHUDSorted is non-empty: clear hudtest to (1,1,1,1), setrt(hudtest + pBaseZB),
-	// r_dsgraph_render_hudfull (== our r_dsgraph_render_ScopeSorted), then clear depth.
+	// r_dsgraph_render_hudfull (full HUD list with the ssfx_hud_skin shaders), then clear depth.
 	// The map is re-captured by the normal PART-1 capture_hud below, exactly as the binary does (it also
 	// calls capture_hud twice).
 	if (scope_3D_fake_enabled)
@@ -187,7 +187,7 @@ void CRender::Render()
 			HW.pContext->ClearRenderTargetView(Target->rt_ssfx_hud->pRT, ColorRGBA_hud);
 
 			Target->u_setrt(Target->rt_ssfx_hud, NULL, NULL, HW.pBaseZB);
-			GMBase.r_dsgraph_render_ScopeSorted();
+			GMBase.r_dsgraph_render_hudfull();
 
 			HW.pContext->ClearDepthStencilView(HW.pBaseZB, D3D_CLEAR_DEPTH, 1.0f, 0);
 		}

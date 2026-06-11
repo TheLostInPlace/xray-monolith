@@ -22,12 +22,17 @@ void CRenderTarget::phase_nightvision()
 	
 	//////////////////////////////////////////////////////////////////////////
 	//Set MSAA/NonMSAA rendertarget
-#if defined(USE_DX10) || defined(USE_DX11)
+#if RENDER == R_R4
+	// SSS UPDATE 24 -- binary (0x800 path): render into rt_sceneFinal (the blender reads scene_aa),
+	// then refresh scene_aa from it so the rest of the post chain sees the NVG image.
+	ref_rt& dest_rt = rt_sceneFinal ? rt_sceneFinal : (RImplementation.o.dx10_msaa ? rt_Generic : rt_Color);
+	u_setrt(dest_rt, nullptr, nullptr, nullptr);
+#elif defined(USE_DX10) || defined(USE_DX11)
 	ref_rt& dest_rt = RImplementation.o.dx10_msaa ? rt_Generic : rt_Color;
 	u_setrt(dest_rt, nullptr, nullptr, nullptr);
 #else
 	u_setrt(rt_Generic_0, nullptr, nullptr, nullptr);
-#endif		
+#endif
 
 	RCache.set_CullMode(CULL_NONE);
 	RCache.set_Stencil(FALSE);
@@ -46,8 +51,14 @@ void CRenderTarget::phase_nightvision()
 	//Set geometry
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
-	
-#if defined(USE_DX10) || defined(USE_DX11)
+
+#if RENDER == R_R4
+	// Binary: CopyResource(rt_sceneAA <- rt_sceneFinal) on the 0x800 path, generic0 <- dest otherwise.
+	if (rt_sceneFinal && rt_sceneAA && dest_rt._get() == rt_sceneFinal._get())
+		HW.pContext->CopyResource(rt_sceneAA->pTexture->surface_get(), rt_sceneFinal->pTexture->surface_get());
+	else
+		HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+#elif defined(USE_DX10) || defined(USE_DX11)
 	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
 #endif
 };
