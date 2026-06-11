@@ -407,22 +407,7 @@ sl_console_hook_fn g_sl_on_upscaler_change = nullptr;
 sl_console_hook_fn g_sl_on_preset_change   = nullptr;
 sl_console_hook_fn g_sl_on_reflex_change   = nullptr;
 
-// Token / integer commands that re-apply Streamline options when changed at runtime (the binary's
-// CCC_Upscaling_Mode / CCC_DlssPreset_Mode / CCC_NvReflex behave the same way).
-class CCC_SLToken : public CCC_Token
-{
-	sl_console_hook_fn* hook;
-public:
-	CCC_SLToken(LPCSTR N, u32* V, xr_token* T, sl_console_hook_fn* h) : CCC_Token(N, V, T), hook(h) {}
-	virtual void Execute(LPCSTR args) { CCC_Token::Execute(args); if (*hook) (*hook)(); }
-};
-class CCC_SLInteger : public CCC_Integer
-{
-	sl_console_hook_fn* hook;
-public:
-	CCC_SLInteger(LPCSTR N, int* V, int _min, int _max, sl_console_hook_fn* h) : CCC_Integer(N, V, _min, _max), hook(h) {}
-	virtual void Execute(LPCSTR args) { CCC_Integer::Execute(args); if (*hook) (*hook)(); }
-};
+// (CCC_SLToken / CCC_SLInteger are defined further down, after the xr_ioc_cmd.h include.)
 
 // Names confirmed from the SSS 24 binary strings; ids are sl::DLSSPreset values.
 xr_token ssfx_dlss_preset_token[] = {
@@ -596,6 +581,24 @@ float r_rain_k = 99.0f;
 #if defined(USE_DX10) || defined(USE_DX11)
 #include "../xrRenderDX10/StateManager/dx10SamplerStateCache.h"
 #endif	//	USE_DX10
+
+// Token / integer commands that re-apply Streamline options when changed at runtime (the binary's
+// CCC_Upscaling_Mode / CCC_DlssPreset_Mode / CCC_NvReflex behave the same way). Defined here because
+// CCC_Token / CCC_Integer come from xr_ioc_cmd.h, included just above.
+class CCC_SLToken : public CCC_Token
+{
+	sl_console_hook_fn* hook;
+public:
+	CCC_SLToken(LPCSTR N, u32* V, xr_token* T, sl_console_hook_fn* h) : CCC_Token(N, V, T), hook(h) {}
+	virtual void Execute(LPCSTR args) { CCC_Token::Execute(args); if (*hook) (*hook)(); }
+};
+class CCC_SLInteger : public CCC_Integer
+{
+	sl_console_hook_fn* hook;
+public:
+	CCC_SLInteger(LPCSTR N, int* V, int _min, int _max, sl_console_hook_fn* h) : CCC_Integer(N, V, _min, _max), hook(h) {}
+	virtual void Execute(LPCSTR args) { CCC_Integer::Execute(args); if (*hook) (*hook)(); }
+};
 
 class CCC_ssfx_cascades : public CCC_Vector3
 {

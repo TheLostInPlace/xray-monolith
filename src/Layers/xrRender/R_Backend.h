@@ -194,8 +194,8 @@ private:
 	CMatrix*						matrices	[8	];	// matrices are supported only for FFP
 #endif
 
-	void Invalidate();
 public:
+	void Invalidate(); // resync the cached pipeline state (e.g. after DLSS/Streamline evaluate clobbers the context)
 	struct _stats
 	{
 		u32 polys;
