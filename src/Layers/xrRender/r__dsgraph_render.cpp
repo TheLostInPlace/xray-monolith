@@ -318,7 +318,11 @@ void CDSGraphManager::r_dsgraph_render_hudfull()
 		if (E->flags.iScopeLense == 1) // lens glass: excluded from the HUD depth mask
 			continue;
 
-		int skin = V->skinning;
+		// Binary: s_ssfx_hud[E->passes[0]->vs->skinning] -- the VS records which skinning variant it
+		// was compiled for (set from GetSkinningMode at creation). NOT V->skinning (global mode value):
+		// using that picked the non-skinned skin0 shader for skinned weapon meshes, leaving the HUD
+		// depth mask at the un-animated transform (reticle offset that grows with zoom).
+		int skin = (!E->passes.empty() && E->passes[0]->vs) ? E->passes[0]->vs->skinning : 0;
 		clamp(skin, 0, 4);
 		ref_shader& sh = RImplementation.Target->s_ssfx_hud[skin];
 		if (!sh)
