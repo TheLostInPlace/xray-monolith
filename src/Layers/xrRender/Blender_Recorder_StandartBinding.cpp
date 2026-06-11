@@ -616,6 +616,16 @@ static class cl_screen_res : public R_constant_setup
 	}
 } binder_screen_res;
 
+// SSS UPDATE 24 -- water flowmap setup (per-level values from ssfx_underground_check.script; the shader
+// documents the layout: xy = flow texture scale, zw = UV pos).
+static class cl_ssfx_flowmap_setup : public R_constant_setup
+{
+	virtual void setup(R_constant* C)
+	{
+		RCache.set_c(C, ps_ssfx_flowmap_setup);
+	}
+} binder_ssfx_flowmap_setup;
+
 // SSS UPDATE 24 -- the real (scene/render) resolution, distinct from screen_res while DLSS-upscaling
 // (binary: cl_screen_res_real). Used by SSS 24 shaders (e.g. night_vision.h) for pixel-coord Loads.
 static class cl_screen_res_real : public R_constant_setup
@@ -1444,6 +1454,7 @@ void CBlender_Compile::SetMapping()
 
 	r_Constant("screen_res", &binder_screen_res);
 	r_Constant("screen_res_real", &binder_screen_res_real); // SSS UPDATE 24
+	r_Constant("ssfx_flowmap_setup", &binder_ssfx_flowmap_setup); // SSS UPDATE 24 (water flowmap)
 	r_Constant("ogse_c_screen", &binder_screen_params);
 	r_Constant("near_far_plane", &binder_near_far_plane);
 	// misc

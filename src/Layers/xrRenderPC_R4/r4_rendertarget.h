@@ -185,6 +185,9 @@ public:
 	ref_rt rt_ssfx_ssr;
 	ref_rt rt_ssfx_water;
 	ref_rt rt_ssfx_water_waves;
+	ref_rt rt_ssfx_water_waves_tmp; // SSS UPDATE 24 -- waves ping-pong buffer (256x256, binary ctor)
+	ref_rt rt_ssfx_rain_ripples;    // SSS UPDATE 24 -- rain ripple normal buffer (512x512 FP16, binary ctor)
+	ref_rt rt_ssfx_hud;             // SSS UPDATE 24 -- "$user$hudtest" HUD depth mask (R16F, scope reticles)
 	ref_rt rt_ssfx_ao;
 	ref_rt rt_ssfx_il;
 

@@ -657,6 +657,10 @@ CRenderTarget::CRenderTarget()
 		rt_ssfx_volumetric_tmp.create(r2_RT_ssfx_volumetric_tmp, w / 8.0f, h / 8.0f, D3DFMT_A16B16G16R16F); // Volumetric
 		rt_ssfx_rain.create(r2_RT_ssfx_rain, w / 8.0f, h / 8.0f, D3DFMT_A8R8G8B8); // Rain refraction buffer
 		rt_ssfx_water_waves.create(r2_RT_ssfx_water_waves, 512, 512, D3DFMT_A8R8G8B8); // Water Waves
+		// SSS UPDATE 24 -- specs binary-confirmed (CRenderTarget ctor dump)
+		rt_ssfx_water_waves_tmp.create("$user$ssfx_water_waves_tmp", 256, 256, D3DFMT_A8R8G8B8);   // waves build/ping-pong
+		rt_ssfx_rain_ripples.create("$user$ssfx_rain_ripples", 512, 512, D3DFMT_A16B16G16R16F);    // rain ripples
+		rt_ssfx_hud.create("$user$hudtest", w, h, D3DFMT_R16F);                                    // HUD depth mask (scope reticles)
 
 		rt_ssfx_prevPos.create(r2_RT_ssfx_prevPos, w, h, D3DFMT_A16B16G16R16F, SampleCount);
 

@@ -406,6 +406,7 @@ int   ps_ssfx_upscaler_automipmap = 1; // auto texture mip bias from the render 
 // shadow path) is a pending port -- needs the binary render_sun/cascade dumps.
 Fvector4 ps_ssfx_cascades_resolution = { 0, 0, 0, 0 }; // < 128 = stock o.smapsize (SSS scripts set 1536/2048/2560)
 Fvector4 ps_ssfx_cascades_delay      = { 0, 0, 0, 0 }; // 0 = update every frame (SSS scripts set 0/1/2)
+Fvector4 ps_ssfx_flowmap_setup       = { 1, 1, 0, 0 }; // water flowmap scale/offset (per-level, ssfx_underground_check.script)
 
 // Live re-apply hooks, set by StreamlineWrapper.cpp (R4); stay null in render layers without Streamline.
 sl_console_hook_fn g_sl_on_upscaler_change = nullptr;
@@ -1440,6 +1441,7 @@ void xrRender_initconsole()
 	CMD4(CCC_Float,   "ssfx_upscaler_sharp",      &ps_ssfx_upscaler_sharp,         0.0f, 1.0f);
 	CMD4(CCC_Vector4, "ssfx_cascades_resolution", &ps_ssfx_cascades_resolution, Fvector4().set(0, 0, 0, 0), Fvector4().set(8192, 8192, 8192, 0));
 	CMD4(CCC_Vector4, "ssfx_cascades_delay",      &ps_ssfx_cascades_delay,      Fvector4().set(0, 0, 0, 0), Fvector4().set(10, 10, 10, 0));
+	CMD4(CCC_Vector4, "ssfx_flowmap_setup",       &ps_ssfx_flowmap_setup,       Fvector4().set(-100, -100, -100, -100), Fvector4().set(100, 100, 100, 100));
 	CMD4(CCC_Vector4, "ssfx_motionblur", &ps_ssfx_motionblur, Fvector4().set(1, 0, 0, 0), Fvector4().set(16, 2, 1, 100));
 	CMD4(CCC_Float, "ssfx_fog_scattering", &ps_ssfx_fog_scattering, 0, 1);
 	CMD4(CCC_Vector4, "ssfx_fog", &ps_ssfx_fog, Fvector4().set(0, 0, 0, 0), Fvector4().set(20, 5, 1, 100));

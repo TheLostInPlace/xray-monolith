@@ -16,6 +16,7 @@ extern ECORE_API int ps_r_dlsspreset_token;    // sl::DLSSPreset value (0 = defa
 extern ECORE_API int ps_ssfx_upscaler_automipmap; // 1 = auto texture mip bias from the render scale
 extern ECORE_API Fvector4 ps_ssfx_cascades_resolution; // SSS 24 per-cascade shadowmap resolution (r1,r2,r3,-)
 extern ECORE_API Fvector4 ps_ssfx_cascades_delay;      // SSS 24 per-cascade update stagger (d1,d2,d3,-)
+extern ECORE_API Fvector4 ps_ssfx_flowmap_setup;       // SSS 24 water flowmap: xy = texture scale, zw = UV pos (per-level script)
 extern ECORE_API xr_token ssfx_upscaler_token[];
 extern ECORE_API xr_token ssfx_upscaler_res_token[];
 extern ECORE_API xr_token ssfx_dlss_preset_token[];
