@@ -23,7 +23,12 @@ void CRenderTarget::phase_gasmask_dudv()
 	//////////////////////////////////////////////////////////////////////////
 	//Set MSAA/NonMSAA rendertarget
 #if defined(USE_DX10) || defined(USE_DX11)
+#if RENDER == R_R4
+	// SSS UPDATE 24 -- binary (0x800 path): render into rt_sceneFinal, then refresh rt_sceneAA from it.
+	ref_rt& dest_rt = rt_sceneFinal ? rt_sceneFinal : (RImplementation.o.dx10_msaa ? rt_Generic : rt_Color);
+#else
 	ref_rt& dest_rt = RImplementation.o.dx10_msaa ? rt_Generic : rt_Color;
+#endif
 	u_setrt(dest_rt, nullptr, nullptr, nullptr);
 #else
 	u_setrt(rt_Generic_0, nullptr, nullptr, nullptr);
@@ -51,6 +56,14 @@ void CRenderTarget::phase_gasmask_dudv()
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 	
 #if defined(USE_DX10) || defined(USE_DX11)
+#if RENDER == R_R4
+	// Binary: CopyResource(rt_sceneAA <- rt_sceneFinal) on the 0x800 path, generic0 <- dest otherwise.
+	if (rt_sceneFinal && rt_sceneAA && dest_rt._get() == rt_sceneFinal._get())
+		HW.pContext->CopyResource(rt_sceneAA->pTexture->surface_get(), rt_sceneFinal->pTexture->surface_get());
+	else
+		HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+#else
 	HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), dest_rt->pTexture->surface_get());
+#endif
 #endif
 };

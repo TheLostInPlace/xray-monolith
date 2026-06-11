@@ -527,6 +527,9 @@ void CRenderTarget::phase_combine()
 
 	phase_lut();
 
+	// SSS UPDATE 24 -- binary: temporal heat buffer is built every frame right after phase_lut.
+	phase_heatvision_build();
+
 #if HAS_STREAMLINE
 	// SSS UPDATE 24 -- feed rt_sceneAA, ALWAYS (binary Addendum D: on the upscaler-off path the binary does
 	// CopyResource(rt_sceneAA <- rt_Generic_0)). The SSS 24 gamedata shaders sample "$user$scene_aa" by name

@@ -565,6 +565,7 @@ CRenderTarget::CRenderTarget()
 
 		//--DSR-- HeatVision_start
 		rt_Heat.create(r2_RT_heat, w, h, D3DFMT_A8R8G8B8, SampleCount);
+		rt_Heat_prev.create("$user$heat_prev", w, h, D3DFMT_A8R8G8B8, SampleCount); // SSS UPDATE 24
 		//--DSR-- HeatVision_end
 
 		if (RImplementation.o.dx11_hdr10) {

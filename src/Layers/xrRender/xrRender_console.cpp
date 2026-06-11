@@ -281,6 +281,7 @@ float heat_vision_mode = 0.0f;		// heatvision mode - rgb/greyscale
 int heat_vision_cooldown = 1;		// heatvision corpse cooling down ON/OFF
 float heat_vision_cooldown_time = 20000.f;	// heatvision corpse cooling down time (in ms)
 int heat_vision_zombie_cold = 0;    // heatvision zombies are not shown as hot objects ON/OFF
+int heat_vision_hertz = 0;          // SSS UPDATE 24 -- heat buffer update rate (0 = every frame), binary range [0,60]
 Fvector4 heat_vision_steps = { 0.45f, 0.65f, 0.76f, .0f };
 Fvector4 heat_vision_blurring = { 15.f, 4.f, 60.f, .0f };
 Fvector4 heat_vision_args_1 = { .0f, .0f, .0f, .0f };
@@ -1546,6 +1547,7 @@ void xrRender_initconsole()
 
 	//--DSR-- HeatVision_start
 	CMD4(CCC_Integer, "heat_vision_cooldown",	&heat_vision_cooldown, 0, 1);
+	CMD4(CCC_Integer, "heat_vision_hertz",		&heat_vision_hertz, 0, 60); // SSS UPDATE 24 -- binary range
 	CMD4(CCC_Float, "heat_vision_cooldown_time", &heat_vision_cooldown_time, 0, 300000.f);
 	CMD4(CCC_Integer, "heat_vision_zombie_cold", &heat_vision_zombie_cold, 0, 1);
 	CMD2(CCC_Float,   "heat_vision_mode",		&heat_vision_mode);

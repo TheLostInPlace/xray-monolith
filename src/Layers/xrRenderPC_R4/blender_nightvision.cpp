@@ -142,6 +142,19 @@ void CBlender_heatvision::Compile(CBlender_Compile& C)
 		C.r_dx10Sampler("smp_rtlinear");
 		C.r_End();
 		break;
+	case 2: // SSS UPDATE 24 -- temporal heat-buffer build (phase_heatvision_build)
+		C.r_Pass("stub_screen_space", "heatvision_upscale", FALSE, FALSE, FALSE);
+		C.r_dx10Texture("s_position", r2_RT_P);
+		C.r_dx10Texture("s_blur_2", r2_RT_blur_2);
+		C.r_dx10Texture("s_heat", r2_RT_heat);
+		C.r_dx10Texture("s_heat_prev", "$user$heat_prev");
+
+		C.r_dx10Sampler("smp_base");
+		C.r_dx10Sampler("smp_nofilter");
+		C.r_dx10Sampler("smp_rtlinear");
+		C.r_dx10Sampler("smp_point");
+		C.r_End();
+		break;
 	}
 }
 //--DSR-- HeatVision_end

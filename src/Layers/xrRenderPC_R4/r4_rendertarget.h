@@ -112,6 +112,7 @@ public:
 
 	//--DSR-- HeatVision_start
 	ref_rt rt_Heat;
+	ref_rt rt_Heat_prev;            // SSS UPDATE 24 -- "$user$heat_prev" (phase_heatvision_build temporal buffer)
 	//--DSR-- HeatVision_end
 
 	//
@@ -434,6 +435,7 @@ public:
 	void phase_nightvision();
 	void phase_fakescope(); //crookr
 	void phase_heatvision(); //--DSR-- HeatVision
+	void phase_heatvision_build(); // SSS UPDATE 24 -- temporal heat buffer (called after phase_lut)
 	void phase_3DSSReticle(); // Redotix99: for 3D Shader Based Scopes
 	void phase_lut();
 	void phase_smaa();
