@@ -31,8 +31,9 @@
 // ENABLED: the post-upscale tail (reticle/blur/bloom/dof/gasmask/NV/heat -> combine) now runs at
 // Target_* on scene_aa/scene_final per the binary phase order, and the ctor allocates Real_* for the
 // scene chain / Target_* for scene_aa, scene_final, hudtest, dof, ui ("$user$ui" + rt_ui_pda).
-// PROVISIONAL: the per-token render ratios in UpdateRenderScale (0.66/0.58/0.50/0.33) are NVIDIA's
-// standard DLSS ratios, not yet binary-verified -- confirm via the Device.Real_Width write xref.
+// Per-token render ratios (0.66/0.58/0.50/0.33) are BINARY-VERIFIED: CCC_Upscaler_Qual::Status/Execute
+// print exactly '1.0 DLAA / 0.66 Quality / 0.58 Balanced / 0.5 Performance / 0.33 Ultra Performance',
+// and the resolution-token handler applies the change via vid_restart (same as our console hook).
 #ifndef SL_SUBNATIVE
 #define SL_SUBNATIVE 1
 #endif
