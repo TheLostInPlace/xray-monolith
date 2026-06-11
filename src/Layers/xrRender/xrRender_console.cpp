@@ -426,6 +426,14 @@ xr_token ssfx_dlss_preset_token[] = {
 	{ 0, 0 }
 };
 
+// Binary CCC_NvReflex prints OFF/ON/ON+BOOST; token names lowercase (console lowercases args).
+xr_token ssfx_reflex_token[] = {
+	{ "off",      0 },
+	{ "on",       1 },
+	{ "on+boost", 2 },
+	{ 0, 0 }
+};
+
 xr_token ssfx_upscaler_token[] = {
 	{ "off",  0 },
 	{ "fsr",  1 },
@@ -1436,7 +1444,7 @@ void xrRender_initconsole()
 	{ static CCC_SLToken   c("ssfx_upscaler",            (u32*)&ps_ssfx_upscaler,          ssfx_upscaler_token,     &g_sl_on_upscaler_change); Console->AddCommand(&c); }
 	{ static CCC_SLToken   c("ssfx_upscaler_resolution", (u32*)&ps_r_upscaler_qual_token,  ssfx_upscaler_res_token, &g_sl_on_upscaler_change); Console->AddCommand(&c); }
 	{ static CCC_SLToken   c("ssfx_dlss_preset",         (u32*)&ps_r_dlsspreset_token,     ssfx_dlss_preset_token,  &g_sl_on_preset_change);   Console->AddCommand(&c); }
-	{ static CCC_SLInteger c("ssfx_reflex",              &ps_ssfx_reflex,            0, 2, &g_sl_on_reflex_change);   Console->AddCommand(&c); }
+	{ static CCC_SLToken   c("ssfx_reflex",              (u32*)&ps_ssfx_reflex,            ssfx_reflex_token,       &g_sl_on_reflex_change);   Console->AddCommand(&c); }
 	{ static CCC_SLInteger c("ssfx_upscaler_automipmap", &ps_ssfx_upscaler_automipmap, 0, 1, &g_sl_on_upscaler_change); Console->AddCommand(&c); }
 	CMD4(CCC_Float,   "ssfx_upscaler_sharp",      &ps_ssfx_upscaler_sharp,         0.0f, 1.0f);
 	CMD4(CCC_Vector4, "ssfx_cascades_resolution", &ps_ssfx_cascades_resolution, Fvector4().set(0, 0, 0, 0), Fvector4().set(8192, 8192, 8192, 0));
