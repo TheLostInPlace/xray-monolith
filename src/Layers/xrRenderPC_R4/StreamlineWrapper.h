@@ -25,6 +25,15 @@
 #define HAS_STREAMLINE 1 // NV Streamline active (SDK 2.10.3 in src/3rd party/Streamline). Set 0 to disable.
 #endif
 
+// Sub-native rendering (Real_* < Target_*) is NOT wired yet: the SSS 24 engine allocates the scene render
+// targets at Real_* size (hence its vid_restart on resolution change), while this engine still allocates
+// them at Target_* -- rendering into a sub-rect corrupts every pass that samples full-texture UVs (LUM,
+// blur, combine). Until the RT-resize port lands, the render scale is clamped to 1.0 and DLSS runs as
+// DLAA (full-res AA) in every quality mode.
+#ifndef SL_SUBNATIVE
+#define SL_SUBNATIVE 0
+#endif
+
 class SLWrapper
 {
 public:

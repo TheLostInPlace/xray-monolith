@@ -75,6 +75,18 @@ SLWrapper g_SLWrapper;
 void SLWrapper::UpdateRenderScale()
 {
     // Render-scale ratios per quality token (plan Addendum C2). SDK-free -- only touches Device fields.
+#if !SL_SUBNATIVE
+    // Sub-native disabled until the RT-resize port (see StreamlineWrapper.h). DLSS runs as DLAA at 1:1.
+    if (ps_r_upscaler_qual_token > 1)
+    {
+        static bool warned = false;
+        if (!warned) { Msg("- UPSCALING : sub-native render scale not ported yet -- running DLAA (1.0)"); warned = true; }
+    }
+    Device.Current_RenderScale = 1.0f;
+    Device.Real_Width  = Device.Target_Width;
+    Device.Real_Height = Device.Target_Height;
+    return;
+#else
     float scale;
     switch (ps_r_upscaler_qual_token)
     {
@@ -87,6 +99,7 @@ void SLWrapper::UpdateRenderScale()
     Device.Current_RenderScale = scale;
     Device.Real_Width  = (u32)(Device.Target_Width  * scale + 0.5f);
     Device.Real_Height = (u32)(Device.Target_Height * scale + 0.5f);
+#endif // SL_SUBNATIVE
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -216,6 +229,10 @@ void SLWrapper::SL_DLSS_Init() // == binary SLWrapper::Update_DLSSOptions (plan 
         case 5:  opt.mode = sl::DLSSMode::eUltraPerformance; break;
         default: opt.mode = sl::DLSSMode::eDLAA;             break;
     }
+    // While the render scale is clamped to 1.0 (SL_SUBNATIVE == 0), input == output resolution, which is
+    // by definition DLAA -- report it as such or DLSS may reject the mode/extent combination.
+    if (Device.Real_Width == Device.Target_Width && Device.Real_Height == Device.Target_Height)
+        opt.mode = sl::DLSSMode::eDLAA;
     opt.outputWidth     = Device.Target_Width;
     opt.outputHeight    = Device.Target_Height;
     opt.colorBuffersHDR = ps_r4_hdr10_on ? sl::Boolean::eTrue : sl::Boolean::eFalse;
