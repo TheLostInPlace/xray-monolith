@@ -28,11 +28,13 @@
 // Sub-native rendering: scene render targets are ALLOCATED at Real_* size (the SSS 24 architecture,
 // confirmed from the binary CRenderTarget ctor: G-buffer/generic/blur/mvec/position at Real_*;
 // rt_sceneAA/rt_sceneFinal/rt_tempzb at Target_*). Resolution changes require vid_restart.
-// Currently 0 (DLAA only): the SSS 24 gamedata shader chain (scene_aa -> combine_2 -> scene_final ->
-// postprocess.s) is wired for equal sizes; sub-native additionally needs the post-upscale tail to run at
-// Target_* on the scene_aa/scene_final surfaces, which is the next milestone.
+// ENABLED: the post-upscale tail (reticle/blur/bloom/dof/gasmask/NV/heat -> combine) now runs at
+// Target_* on scene_aa/scene_final per the binary phase order, and the ctor allocates Real_* for the
+// scene chain / Target_* for scene_aa, scene_final, hudtest, dof, ui ("$user$ui" + rt_ui_pda).
+// PROVISIONAL: the per-token render ratios in UpdateRenderScale (0.66/0.58/0.50/0.33) are NVIDIA's
+// standard DLSS ratios, not yet binary-verified -- confirm via the Device.Real_Width write xref.
 #ifndef SL_SUBNATIVE
-#define SL_SUBNATIVE 0
+#define SL_SUBNATIVE 1
 #endif
 
 class SLWrapper

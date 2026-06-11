@@ -529,6 +529,11 @@ void CRender::create()
 
 	m_bMakeAsyncSS = false;
 
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- binary order: slInit + DLSS support check run BEFORE the RT ctor, so the
+	// sub-native render scale (m_bDlssInit-gated) is known when the scene RTs are allocated at Real_*.
+	g_SLWrapper.SL_Init(); // slInit + slSetD3DDevice + DLSS support + Reflex (plan Addendum A2)
+#endif
 	// SSS UPDATE 24 -- Target_*/Real_* must be set BEFORE CRenderTarget allocates the scene RTs at Real_*.
 	g_SLWrapper.SL_SetupResolution();
 
@@ -560,9 +565,6 @@ void CRender::create()
 		Device.HaltonJittering[i].set(x - 0.5f, y - 0.5f);
 	}
 
-#if HAS_STREAMLINE
-	g_SLWrapper.SL_Init(); // slInit + slSetD3DDevice + DLSS support + Reflex (plan Addendum A2)
-#endif
 }
 
 void CRender::destroy()

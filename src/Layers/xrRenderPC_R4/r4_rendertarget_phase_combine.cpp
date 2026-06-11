@@ -773,14 +773,19 @@ void CRenderTarget::phase_combine()
 #if HAS_STREAMLINE
 	// SSS UPDATE 24 -- combine_2 now writes rt_sceneFinal, but several legacy consumers still read
 	// rt_Color (rain refraction, scene copies, screenshots, hdr10 chain). Keep it synced or those passes
-	// operate on a stale frame (visible as lighting/effect flicker). Sizes are equal at SL_SUBNATIVE 0.
-	if (rt_sceneFinal && rt_Color)
+	// operate on a stale frame (visible as lighting/effect flicker). CopyResource requires equal sizes,
+	// so at sub-native (rt_Color is Real_*, scene_final is Target_*) the sync is skipped -- those legacy
+	// consumers then see the pre-combine_2 image, same as the binary (which has no such sync at all).
+	if (rt_sceneFinal && rt_Color && rt_sceneFinal->dwWidth == rt_Color->dwWidth && rt_sceneFinal->dwHeight == rt_Color->dwHeight)
 		HW.pContext->CopyResource(rt_Color->pSurface, rt_sceneFinal->pSurface);
 #endif
 
 	if (RImplementation.o.dx11_hdr10) {
 		// SSS UPDATE 24 -- combine_2 now writes rt_sceneFinal; keep the hdr10 chain on the same surface.
-		ref_rt& rt_final = rt_sceneFinal ? rt_sceneFinal : rt_Color;
+		// At sub-native, scene_final (Target_*) cannot feed rt_Generic_0 (Real_*): fall back to rt_Color,
+		// which is exactly what the binary does (its hdr10 copy reads rt_Color).
+		const bool final_fits = rt_sceneFinal && rt_sceneFinal->dwWidth == rt_Generic_0->dwWidth && rt_sceneFinal->dwHeight == rt_Generic_0->dwHeight;
+		ref_rt& rt_final = final_fits ? rt_sceneFinal : rt_Color;
 		// TODO: we should be able to avoid a copy if both are enabled
 		if (ps_r4_hdr10_bloom_on) {
 			HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), rt_final->pTexture->surface_get());
@@ -791,7 +796,9 @@ void CRenderTarget::phase_combine()
 			phase_hdr10_lens_flare(); // samples from rt_Generic_0, writes to rt_Color
 		}
 		// hdr10 phases write rt_Color internally -- propagate their result to scene_final for postprocess.s
-		if (rt_sceneFinal && (ps_r4_hdr10_bloom_on || ps_r4_hdr10_flare_on))
+		// (skipped at sub-native: sizes differ; hdr10 + sub-native is an untested combination)
+		if (rt_sceneFinal && (ps_r4_hdr10_bloom_on || ps_r4_hdr10_flare_on)
+			&& rt_sceneFinal->dwWidth == rt_Color->dwWidth && rt_sceneFinal->dwHeight == rt_Color->dwHeight)
 			HW.pContext->CopyResource(rt_sceneFinal->pSurface, rt_Color->pSurface);
 	}
 

@@ -103,7 +103,9 @@ void SLWrapper::UpdateRenderScale()
     // Render-scale ratios per quality token (plan Addendum C2). SDK-free -- only touches Device fields.
     float scale = 1.0f;
 #if SL_SUBNATIVE
-    if (ps_ssfx_upscaler == 2) // sub-native only for DLSS (FSR not ported); off/fsr render 1:1
+    // Sub-native only when DLSS is actually available -- a Real_* < Target_* scene with no upscaler
+    // to bridge it would never reach the screen. (SL_Init runs before SL_SetupResolution at create.)
+    if (ps_ssfx_upscaler == 2 && m_bDlssInit) // sub-native only for DLSS (FSR not ported); off/fsr render 1:1
     {
         switch (ps_r_upscaler_qual_token)
         {

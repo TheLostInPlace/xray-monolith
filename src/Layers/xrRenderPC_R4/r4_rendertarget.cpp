@@ -573,14 +573,16 @@ CRenderTarget::CRenderTarget()
 			rt_Generic_temp.create("$user$generic_temp", w, h, D3DFMT_A8R8G8B8, RImplementation.o.dx10_msaa ? SampleCount : 1);
 		}
 
-		rt_dof.create(r2_RT_dof, w, h, RImplementation.o.dx11_hdr10 ? D3DFMT_A16B16G16R16F : D3DFMT_A8R8G8B8);
+		// SSS UPDATE 24 -- binary: rt_dof and rt_ui_pda are Target_*-sized (post-upscale consumers);
+		// rt_secondVP stays at the render (Real_*) resolution.
+		rt_dof.create(r2_RT_dof, Device.dwWidth, Device.dwHeight, RImplementation.o.dx11_hdr10 ? D3DFMT_A16B16G16R16F : D3DFMT_A8R8G8B8);
 
 		if (RImplementation.o.dx11_hdr10) {
 			rt_secondVP.create(r2_RT_secondVP, w, h, D3DFMT_A2R10G10B10, 1); //--#SM+#-- +SecondVP+ // NOTE: this is a hack to use DXGI R10G10B10A2_UNORM
-			rt_ui_pda.create(r2_RT_ui, w, h, D3DFMT_A2R10G10B10); // NOTE: this is a hack to use DXGI R10G10B10A2_UNORM
+			rt_ui_pda.create(r2_RT_ui, Device.dwWidth, Device.dwHeight, D3DFMT_A2R10G10B10); // NOTE: this is a hack to use DXGI R10G10B10A2_UNORM
 		} else {
 			rt_secondVP.create(r2_RT_secondVP, w, h, D3DFMT_A8R8G8B8, 1); //--#SM+#-- +SecondVP+
-			rt_ui_pda.create(r2_RT_ui, w, h, D3DFMT_A8R8G8B8);
+			rt_ui_pda.create(r2_RT_ui, Device.dwWidth, Device.dwHeight, D3DFMT_A8R8G8B8);
 		}
 
 		// TODO: R11G11B10F? needs another horrible hack + cast + update to converter function
@@ -660,7 +662,7 @@ CRenderTarget::CRenderTarget()
 		// SSS UPDATE 24 -- specs binary-confirmed (CRenderTarget ctor dump)
 		rt_ssfx_water_waves_tmp.create("$user$ssfx_water_waves_tmp", 256, 256, D3DFMT_A8R8G8B8);   // waves build/ping-pong
 		rt_ssfx_rain_ripples.create("$user$ssfx_rain_ripples", 512, 512, D3DFMT_A16B16G16R16F);    // rain ripples
-		rt_ssfx_hud.create("$user$hudtest", w, h, D3DFMT_R16F);                                    // HUD depth mask (scope reticles)
+		rt_ssfx_hud.create("$user$hudtest", Device.dwWidth, Device.dwHeight, D3DFMT_R16F);         // HUD depth mask (scope reticles) -- binary: Target_*-sized
 
 		rt_ssfx_prevPos.create(r2_RT_ssfx_prevPos, w, h, D3DFMT_A16B16G16R16F, SampleCount);
 
