@@ -17,6 +17,21 @@ void CRender::render_menu()
 	RCache.set_Stencil(FALSE);
 	RCache.set_ColorWriteEnable();
 
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- with the DLSS upscaler active, rt_Generic_0/1 are Real_*-sized while the menu must
+	// render at display (Target_*) resolution: drawing Target-coordinate UI into the smaller RT (paired
+	// with the Target-sized pBaseZB) produced a black menu. Render the menu straight to the backbuffer at
+	// Target_* instead (the binary solves this with a dedicated Target-sized "$user$ui" RT; the only thing
+	// lost here is the subtle menu distortion effect while sub-native upscaling is active).
+	if (Device.Real_Width != Device.Target_Width || Device.Real_Height != Device.Target_Height)
+	{
+		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT, NULL, NULL, HW.pBaseZB);
+		Target->set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
+		g_pGamePersistent->OnRenderPPUI_main(); // PP-UI directly to the backbuffer
+		return;
+	}
+#endif
+
 	// Main Render
 	{
 		Target->u_setrt(Target->rt_Generic_0, 0, 0, HW.pBaseZB); // LDR RT
