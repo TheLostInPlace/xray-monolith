@@ -135,6 +135,14 @@ void SLWrapper::SL_SetupResolution()
     g_sl_built_resolution = ps_r_upscaler_qual_token;
     g_sl_built_automip    = ps_ssfx_upscaler_automipmap;
 #endif
+#if HAS_STREAMLINE
+    // Re-apply DLSS options with the freshly computed sizes. CRITICAL at sub-native: SL_Init runs
+    // before SL_SetupResolution at create (binary order), so the first slDLSSSetOptions call sees
+    // Target_Width == 0 -- without this re-apply every evaluate fails and the screen stays at the
+    // un-upscaled render resolution. Also covers vid_restart resolution changes.
+    if (m_bDlssInit)
+        SL_DLSS_Init();
+#endif
     // Always log the full state -- this is the ground truth for diagnosing render-path issues.
     Msg("- UPSCALING : setup [ upscaler=%d resolution_token=%d preset=%d ] render %ux%u -> output %ux%u [ %.0f%% ]",
         ps_ssfx_upscaler, ps_r_upscaler_qual_token, ps_r_dlsspreset_token,
