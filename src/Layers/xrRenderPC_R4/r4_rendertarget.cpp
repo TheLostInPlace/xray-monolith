@@ -742,6 +742,23 @@ CRenderTarget::CRenderTarget()
 		u32 size = RImplementation.o.smapsize;
 		rt_smap_depth.create(r2_RT_smap_depth, size, size, depth_format);
 
+		// SSS UPDATE 24 -- per-cascade sun shadowmaps (binary ctor: "$user$sun_smap_depth0..2",
+		// clamp(ps_ssfx_sun_resolution[i], 512, 4096), same depth format). Each cascade owns its map at its
+		// own resolution; a delayed (staggered) cascade keeps its content intact. Only created when the SSS
+		// scripts configured per-cascade resolutions (>= 512), otherwise the shared smap path is used.
+		{
+			const float cres[3] = { ps_ssfx_cascades_resolution.x, ps_ssfx_cascades_resolution.y, ps_ssfx_cascades_resolution.z };
+			static LPCSTR cnames[3] = { "$user$sun_smap_depth0", "$user$sun_smap_depth1", "$user$sun_smap_depth2" };
+			for (u32 i = 0; i < 3; ++i)
+			{
+				if (cres[i] >= 512.f)
+				{
+					u32 cr = (u32)_min(_max(cres[i], 512.f), 4096.f);
+					rt_sun_smap_depth[i].create(cnames[i], cr, cr, depth_format);
+				}
+			}
+		}
+
 		if (RImplementation.o.dx10_minmax_sm)
 		{
 			rt_smap_depth_minmax.create(r2_RT_smap_depth_minmax, size / 4, size / 4, D3DFMT_R32F);

@@ -76,6 +76,10 @@ void CRender::render_sun_cascades()
 
 	if (b_need_to_render_sunshafts)
 		m_sun_cascades[m_sun_cascades.size() - 1].reset_chain = last_cascade_chain_mode;
+
+	// SSS UPDATE 24 -- undo the per-cascade smap sampling alias for the rest of the frame
+	if (Target->rt_smap_depth && Target->rt_smap_depth->pTexture)
+		Target->rt_smap_depth->pTexture->surface_set(Target->rt_smap_depth->pSurface);
 }
 
 void CRender::render_sun_cascade(u32 cascade_ind)
@@ -87,13 +91,11 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 	// SSS UPDATE 24 -- per-cascade shadowmap resolution (ssfx_cascades_resolution, set by the SSS scripts;
 	// values < 128 mean "stock"). Clamped to the smap atlas size -- the render region is a sub-rect of the
 	// atlas via the light X.D extents, exactly like per-light shadow LODs.
-	s32 cascade_smap = (s32)o.smapsize;
-	{
-		const float res3[3] = { ps_ssfx_cascades_resolution.x, ps_ssfx_cascades_resolution.y, ps_ssfx_cascades_resolution.z };
-		const float r = res3[cascade_ind < 3 ? cascade_ind : 2];
-		if (r >= 128.f)
-			cascade_smap = _min((s32)r, (s32)o.smapsize);
-	}
+	// SSS UPDATE 24 -- per-cascade shadowmap: when the dedicated RT exists ("$user$sun_smap_depth<i>"),
+	// the cascade renders into and samples from its OWN map at its own resolution (binary architecture).
+	// Otherwise everything stays on the shared smap at o.smapsize.
+	CRT* cascade_rt = (cascade_ind < 3) ? Target->rt_sun_smap_depth[cascade_ind].p_ : nullptr;
+	s32 cascade_smap = cascade_rt ? (s32)cascade_rt->dwWidth : (s32)o.smapsize;
 	// Feed the m_SMAP_res shader constant (SSS shadow.h divides by it -- unbound = NaN shadow filtering).
 	extern float g_sun_smap_res_current;
 	g_sun_smap_res_current = (float)cascade_smap;
@@ -302,11 +304,9 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 	// shadow sampling stays consistent with the (stale) shadowmap content. The Accumulate section below
 	// always runs. All-zero delays (the default) = stock per-frame behavior.
 	bool smap_update = true;
-	// DISABLED until per-cascade shadowmaps are ported: the binary gives EACH cascade its own depth RT
-	// (rt_sun_smap_depth[i], "$user$sun_smap_depth0..2", clamp(res,512,4096) -- accum_direct_cascade dump),
-	// so a delayed cascade's map persists. With our single shared smap, skipping a re-render makes the
-	// cascade sample whatever the other cascades just rendered -> guaranteed shadow corruption.
-	if (false)
+	// Stagger requires per-cascade shadowmaps (a delayed cascade's map must persist); active only when the
+	// dedicated RT exists. With the shared smap, skipping a re-render would sample other cascades' content.
+	if (cascade_rt)
 	{
 		static u32     sun_frame[8] = {};
 		static Fmatrix sun_combine[8];
@@ -329,6 +329,7 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 		}
 	}
 
+	Target->sun_cascade_active = cascade_rt ? cascade_ind : u32(-1); // phase_smap_direct RT selection
 	if (smap_update)
 	{
 	// Begin SMAP-render
@@ -378,6 +379,9 @@ void CRender::render_sun_cascade(u32 cascade_ind)
         // End SMAP-render
     }
 	} // if (smap_update) -- SSS UPDATE 24 cascade staggering
+	Target->sun_cascade_active = u32(-1);
+	if (cascade_rt)
+		Target->rt_smap_depth->pTexture->surface_set(cascade_rt->pSurface); // accum samples this cascade's map
 
 	// Accumulate
 	PROF_EVENT("Render Cascade: Accumulate");

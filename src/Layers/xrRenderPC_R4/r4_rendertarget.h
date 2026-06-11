@@ -120,6 +120,8 @@ public:
 	ref_rt rt_sunshafts_0; // ss0
 	ref_rt rt_sunshafts_1; // ss1
 	ref_rt rt_Generic_0; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
+	ref_rt rt_sun_smap_depth[3]; // SSS UPDATE 24 -- per-cascade sun shadowmaps ("$user$sun_smap_depth0..2")
+	u32 sun_cascade_active = u32(-1); // cascade index for phase_smap_direct RT selection (-1 = none)
 	ref_rt rt_sceneAA;    // SSS UPDATE 24 -- post-AA/upscale image ("$user$scene_aa"); menu UI + distort.s sample it
 	ref_rt rt_sceneFinal; // SSS UPDATE 24 -- final composed image ("$user$scene_final"); postprocess.s samples it
 	ref_rt rt_ui;         // SSS UPDATE 24 -- "$user$ui" (binary rt_ui_pda; reserved, display resolution)
