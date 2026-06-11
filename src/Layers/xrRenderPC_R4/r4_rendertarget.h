@@ -120,8 +120,9 @@ public:
 	ref_rt rt_sunshafts_0; // ss0
 	ref_rt rt_sunshafts_1; // ss1
 	ref_rt rt_Generic_0; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
-	ref_rt rt_sceneAA;   // SSS UPDATE 24 -- DLSS/upscaler color output (display resolution)
-	ref_rt rt_ui;        // SSS UPDATE 24 -- menu/UI render target ("$user$ui", display resolution; binary rt_ui_pda)
+	ref_rt rt_sceneAA;    // SSS UPDATE 24 -- post-AA/upscale image ("$user$scene_aa"); menu UI + distort.s sample it
+	ref_rt rt_sceneFinal; // SSS UPDATE 24 -- final composed image ("$user$scene_final"); postprocess.s samples it
+	ref_rt rt_ui;         // SSS UPDATE 24 -- "$user$ui" (binary rt_ui_pda; reserved, display resolution)
 	ref_rt rt_Generic_1; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
 
 	resptr_core<CRT, resptrcode_crt> rt_Generic_temp;

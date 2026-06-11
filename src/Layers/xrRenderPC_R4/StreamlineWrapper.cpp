@@ -359,9 +359,10 @@ bool SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D ca
 
     slSetConstants(consts, *SL_Frame(), g_sl_viewport);
 
-    // Input = rt_Color (the fully composited Real_*-sized frame; the evaluate hook runs just before
-    // phase_pp). Output = rt_sceneAA at Target_*. Depth is Target_*-sized rt_tempzb read via Real extent.
-    sl::Resource colorIn { sl::ResourceType::eTex2d, RImplementation.Target->rt_Color->pSurface };
+    // Input = rt_Generic_0 (post-lut, pre-combine_2 -- the binary's Addendum D placement, also closer to
+    // the NVIDIA guide's "before post-processing"). Output = rt_sceneAA at Target_*. Depth = rt_tempzb
+    // (Target_*-sized) read via the Real extent.
+    sl::Resource colorIn { sl::ResourceType::eTex2d, RImplementation.Target->rt_Generic_0->pSurface };
     sl::Resource colorOut{ sl::ResourceType::eTex2d, RImplementation.Target->rt_sceneAA->pSurface };
     sl::Resource depth   { sl::ResourceType::eTex2d, RImplementation.Target->rt_tempzb->pSurface };
     sl::Resource mvec    { sl::ResourceType::eTex2d, RImplementation.Target->rt_ssfx_motion_vectors->pSurface };

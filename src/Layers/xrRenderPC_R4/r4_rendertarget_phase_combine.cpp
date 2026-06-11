@@ -554,9 +554,38 @@ void CRenderTarget::phase_combine()
 
 	phase_lut();	
 
-	// (SSS UPDATE 24 -- the DLSS upscale hook now runs at the end of this function, just before phase_pp,
-	//  on the fully composited rt_Color. The whole pipeline up to there operates at Real_* on Real_*-sized
-	//  RTs, so no mid-chain resolution juggling is needed.)
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- feed rt_sceneAA, ALWAYS (binary Addendum D: on the upscaler-off path the binary does
+	// CopyResource(rt_sceneAA <- rt_Generic_0)). The SSS 24 gamedata shaders sample "$user$scene_aa" by name
+	// (distort.s for the menu combine, ssfx_bloom, ...), so leaving it unwritten blacks them out even with
+	// DLSS off. With DLSS active, the upscaler output IS the feed; at DLAA (equal sizes) the result is
+	// copied back so the stock combine_2 chain displays the anti-aliased image.
+	if (rt_sceneAA)
+	{
+		if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit && rt_tempzb)
+		{
+			ID3D11Resource* zres = nullptr;
+			HW.pBaseZB->GetResource(&zres);
+			if (zres) { HW.pContext->CopyResource(rt_tempzb->pSurface, zres); zres->Release(); }
+
+			const bool upscaled = g_SLWrapper.SL_DLSS_Evaluate(); // rt_Generic_0 -> rt_sceneAA
+			RCache.Invalidate(); // SL clobbers context state (eDisableCLStateTracking is the SL default)
+
+			if (upscaled && Device.Real_Width == Device.Target_Width && Device.Real_Height == Device.Target_Height)
+				HW.pContext->CopyResource(rt_Generic_0->pSurface, rt_sceneAA->pSurface); // DLAA: show the AA result
+			else if (!upscaled)
+				HW.pContext->CopyResource(rt_sceneAA->pSurface, rt_Generic_0->pSurface); // keep scene_aa fed
+
+			g_SLWrapper.EndSceneResolution();
+			set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
+		}
+		else if (Device.Real_Width == Device.Target_Width && Device.Real_Height == Device.Target_Height)
+		{
+			// Upscaler off / FSR not ported: scene_aa = current image (sizes equal, plain copy).
+			HW.pContext->CopyResource(rt_sceneAA->pSurface, rt_Generic_0->pSurface);
+		}
+	}
+#endif
 
 	if(ps_r2_mask_control.x > 0)
 	{
@@ -612,7 +641,8 @@ void CRenderTarget::phase_combine()
 	}
 	else
 	{
-		if (PP_Complex) u_setrt(rt_Color, 0, 0, HW.pBaseZB); // LDR RT
+		// SSS UPDATE 24 -- the gamedata postprocess.s samples "$user$scene_final": combine_2 renders there.
+		if (PP_Complex) u_setrt(rt_sceneFinal ? rt_sceneFinal : rt_Color, 0, 0, HW.pBaseZB); // LDR RT
 		else u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
 	}
 	//. u_setrt				( Device.dwWidth,Device.dwHeight,HW.pBaseRT,NULL,NULL,HW.pBaseZB);
@@ -728,15 +758,20 @@ void CRenderTarget::phase_combine()
 	RCache.set_Stencil(FALSE);
 
 	if (RImplementation.o.dx11_hdr10) {
+		// SSS UPDATE 24 -- combine_2 now writes rt_sceneFinal; keep the hdr10 chain on the same surface.
+		ref_rt& rt_final = rt_sceneFinal ? rt_sceneFinal : rt_Color;
 		// TODO: we should be able to avoid a copy if both are enabled
 		if (ps_r4_hdr10_bloom_on) {
-			HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), rt_Color->pTexture->surface_get());
+			HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), rt_final->pTexture->surface_get());
 			phase_hdr10_bloom(); // samples from rt_Generic_0, writes to rt_Color
 		}
 		if (ps_r4_hdr10_flare_on) {
-			HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), rt_Color->pTexture->surface_get());
+			HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), rt_final->pTexture->surface_get());
 			phase_hdr10_lens_flare(); // samples from rt_Generic_0, writes to rt_Color
 		}
+		// hdr10 phases write rt_Color internally -- propagate their result to scene_final for postprocess.s
+		if (rt_sceneFinal && (ps_r4_hdr10_bloom_on || ps_r4_hdr10_flare_on))
+			HW.pContext->CopyResource(rt_sceneFinal->pSurface, rt_Color->pSurface);
 	}
 
 	//	if FP16-BLEND !not! supported - draw flares here, overwise they are already in the bloom target
@@ -744,44 +779,12 @@ void CRenderTarget::phase_combine()
 	if (ps_r2_anomaly_flags.test(R2_AN_FLAG_FLARES) && ps_r2_heatvision == 0) //--DSR-- HeatVision
 		g_pGamePersistent->Environment().RenderFlares(); // lens-flares
 
-#if HAS_STREAMLINE
-	// SSS UPDATE 24 -- DLSS upscale. Everything above ran at Real_* into Real_*-sized RTs; rt_Color now
-	// holds the fully composited frame. Upscale it into rt_sceneAA (Target_*), then alias the rt_Color
-	// texture to the upscaled surface so phase_pp (which samples it by name) blits the Target_* image.
-	bool sl_pp_alias = false;
-	if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit && rt_tempzb && rt_sceneAA && rt_Color)
-	{
-		ID3D11Resource* zres = nullptr;
-		HW.pBaseZB->GetResource(&zres);
-		if (zres) { HW.pContext->CopyResource(rt_tempzb->pSurface, zres); zres->Release(); }
-
-		const bool upscaled = g_SLWrapper.SL_DLSS_Evaluate();
-		RCache.Invalidate(); // SL clobbers the context state; resync the engine's state cache
-
-		if (upscaled)
-		{
-			rt_Color->pTexture->surface_set(rt_sceneAA->pSurface);
-			sl_pp_alias = true;
-		}
-		g_SLWrapper.EndSceneResolution(); // dwWidth/dwHeight -> Target_* for the final backbuffer blit
-		// CRITICAL: changing dwWidth alone does not touch the D3D viewport -- the frame is still running
-		// with the Real_* viewport, so without this the final blit lands in a Real_*-sized corner of the
-		// backbuffer. The binary does exactly this with its custom_viewport RSSetViewports calls.
-		set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
-	}
-#endif
-
 	//	PP-if required
 	if (PP_Complex)
 	{
 		PIX_EVENT(phase_pp);
 		phase_pp();
 	}
-
-#if HAS_STREAMLINE
-	if (sl_pp_alias)
-		rt_Color->pTexture->surface_set(rt_Color->pSurface); // undo the alias for the next frame
-#endif
 
 	//	Re-adapt luminance
 	RCache.set_Stencil(FALSE);

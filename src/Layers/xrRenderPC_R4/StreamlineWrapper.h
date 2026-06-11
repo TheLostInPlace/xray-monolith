@@ -27,10 +27,12 @@
 
 // Sub-native rendering: scene render targets are ALLOCATED at Real_* size (the SSS 24 architecture,
 // confirmed from the binary CRenderTarget ctor: G-buffer/generic/blur/mvec/position at Real_*;
-// rt_sceneAA/rt_tempzb at Target_*). Resolution changes therefore require vid_restart (RT recreation).
-// Set to 0 to clamp the render scale to 1.0 and run DLSS as DLAA only.
+// rt_sceneAA/rt_sceneFinal/rt_tempzb at Target_*). Resolution changes require vid_restart.
+// Currently 0 (DLAA only): the SSS 24 gamedata shader chain (scene_aa -> combine_2 -> scene_final ->
+// postprocess.s) is wired for equal sizes; sub-native additionally needs the post-upscale tail to run at
+// Target_* on the scene_aa/scene_final surfaces, which is the next milestone.
 #ifndef SL_SUBNATIVE
-#define SL_SUBNATIVE 1
+#define SL_SUBNATIVE 0
 #endif
 
 class SLWrapper

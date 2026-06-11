@@ -548,9 +548,14 @@ CRenderTarget::CRenderTarget()
 		else
 			rt_sceneAA.create("$user$scene_aa", Device.dwWidth, Device.dwHeight, D3DFMT_A8R8G8B8, 1, true); // UAV: DLSS/NGX writes the output
 
-		// SSS UPDATE 24 -- dedicated menu/UI render target at display resolution (binary: rt_ui_pda
-		// "$user$ui", Target_*-sized). render_menu draws the menu here when sub-native so DLSS and the
-		// Real_*-sized RTs never touch UI.
+		// SSS UPDATE 24 -- final composed image, sampled by the SSS 24 gamedata postprocess.s
+		// ("$user$scene_final"); combine_2 renders into it (binary ctor line 1284, Target_*-sized).
+		if (RImplementation.o.dx11_hdr10)
+			rt_sceneFinal.create("$user$scene_final", Device.dwWidth, Device.dwHeight, D3DFMT_A16B16G16R16F, 1);
+		else
+			rt_sceneFinal.create("$user$scene_final", Device.dwWidth, Device.dwHeight, D3DFMT_A8R8G8B8, 1);
+
+		// SSS UPDATE 24 -- dedicated UI render target (binary: rt_ui_pda "$user$ui", Target_*-sized).
 		if (RImplementation.o.dx11_hdr10)
 			rt_ui.create("$user$ui", Device.dwWidth, Device.dwHeight, D3DFMT_A16B16G16R16F, 1);
 		else
