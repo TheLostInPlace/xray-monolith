@@ -401,6 +401,11 @@ float ps_ssfx_upscaler_sharp   = 0.0f; // post-upscale sharpening amount
 int   ps_ssfx_reflex           = 0;    // 0 = off, 1 = low-latency, 2 = low-latency + boost
 int   ps_r_dlsspreset_token    = 0;    // sl::DLSSPreset value
 int   ps_ssfx_upscaler_automipmap = 1; // auto texture mip bias from the render scale
+// SSS 24 shadow-cascade controls (binary: CCC_ssfx_cascades). Storage registered so the SSS gamedata
+// scripts can set them; the engine-side consumer (per-cascade resolution + staggered updates in the sun
+// shadow path) is a pending port -- needs the binary render_sun/cascade dumps.
+Fvector4 ps_ssfx_cascades_resolution = { 2048, 2048, 2048, 0 };
+Fvector4 ps_ssfx_cascades_delay      = { 1, 1, 1, 0 };
 
 // Live re-apply hooks, set by StreamlineWrapper.cpp (R4); stay null in render layers without Streamline.
 sl_console_hook_fn g_sl_on_upscaler_change = nullptr;
@@ -1433,6 +1438,8 @@ void xrRender_initconsole()
 	{ static CCC_SLInteger c("ssfx_reflex",              &ps_ssfx_reflex,            0, 2, &g_sl_on_reflex_change);   Console->AddCommand(&c); }
 	{ static CCC_SLInteger c("ssfx_upscaler_automipmap", &ps_ssfx_upscaler_automipmap, 0, 1, &g_sl_on_upscaler_change); Console->AddCommand(&c); }
 	CMD4(CCC_Float,   "ssfx_upscaler_sharp",      &ps_ssfx_upscaler_sharp,         0.0f, 1.0f);
+	CMD4(CCC_Vector4, "ssfx_cascades_resolution", &ps_ssfx_cascades_resolution, Fvector4().set(0, 0, 0, 0), Fvector4().set(8192, 8192, 8192, 0));
+	CMD4(CCC_Vector4, "ssfx_cascades_delay",      &ps_ssfx_cascades_delay,      Fvector4().set(0, 0, 0, 0), Fvector4().set(10, 10, 10, 0));
 	CMD4(CCC_Vector4, "ssfx_motionblur", &ps_ssfx_motionblur, Fvector4().set(1, 0, 0, 0), Fvector4().set(16, 2, 1, 100));
 	CMD4(CCC_Float, "ssfx_fog_scattering", &ps_ssfx_fog_scattering, 0, 1);
 	CMD4(CCC_Vector4, "ssfx_fog", &ps_ssfx_fog, Fvector4().set(0, 0, 0, 0), Fvector4().set(20, 5, 1, 100));

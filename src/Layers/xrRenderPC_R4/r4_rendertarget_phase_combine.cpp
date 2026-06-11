@@ -757,6 +757,14 @@ void CRenderTarget::phase_combine()
 	}
 	RCache.set_Stencil(FALSE);
 
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- combine_2 now writes rt_sceneFinal, but several legacy consumers still read
+	// rt_Color (rain refraction, scene copies, screenshots, hdr10 chain). Keep it synced or those passes
+	// operate on a stale frame (visible as lighting/effect flicker). Sizes are equal at SL_SUBNATIVE 0.
+	if (rt_sceneFinal && rt_Color)
+		HW.pContext->CopyResource(rt_Color->pSurface, rt_sceneFinal->pSurface);
+#endif
+
 	if (RImplementation.o.dx11_hdr10) {
 		// SSS UPDATE 24 -- combine_2 now writes rt_sceneFinal; keep the hdr10 chain on the same surface.
 		ref_rt& rt_final = rt_sceneFinal ? rt_sceneFinal : rt_Color;

@@ -51,10 +51,9 @@ static void sl_hook_upscaler_change()
 
     if (ps_ssfx_upscaler == 2 && !g_SLWrapper.m_SLInit)
     {
-        // slInit/slSetD3DDevice mid-session (with command lists in flight) deadlocks the device. The
-        // binary has the same constraint -- its slInit lives in CRender::create, which never re-runs --
-        // so enabling DLSS requires a fresh launch there too. The cvar is saved; it activates next start.
-        Msg("- UPSCALING : DLSS will activate after the game is restarted.");
+        // Streamline failed to initialize at launch (it now always initializes in CRender::create, like
+        // the binary). Mid-session slInit deadlocks the device, so this is the unhappy-path fallback only.
+        Msg("! UPSCALING : Streamline is not initialized -- DLSS requires a game restart.");
         return;
     }
     if (ps_ssfx_upscaler == 0)
@@ -170,14 +169,10 @@ void SLWrapper::EndSceneResolution()
 void SLWrapper::SL_Init()
 {
 #if HAS_STREAMLINE
-    // Upscaler off -> render at native resolution, skip Streamline entirely (plan Addendum A2).
-    if (ps_ssfx_upscaler == 0)
-    {
-        Device.Real_Width  = Device.Target_Width;
-        Device.Real_Height = Device.Target_Height;
-        return;
-    }
-
+    // Initialize Streamline at launch UNCONDITIONALLY (binary model: its gate is the shader-support
+    // option bit, not the cvar -- slInit always runs when the SSS shaders are installed). This is what
+    // makes live off/dlss switching possible: by the time the user toggles, everything is already
+    // initialized and only the options need re-applying. Evaluate itself only runs when upscaler == 2.
     UpdateRenderScale();
 
     sl::Preferences pref{};
