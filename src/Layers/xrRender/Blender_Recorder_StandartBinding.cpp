@@ -616,6 +616,18 @@ static class cl_screen_res : public R_constant_setup
 	}
 } binder_screen_res;
 
+// SSS UPDATE 24 -- the real (scene/render) resolution, distinct from screen_res while DLSS-upscaling
+// (binary: cl_screen_res_real). Used by SSS 24 shaders (e.g. night_vision.h) for pixel-coord Loads.
+static class cl_screen_res_real : public R_constant_setup
+{
+	virtual void setup(R_constant* C)
+	{
+		const float w = (float)(RDEVICE.Real_Width  ? RDEVICE.Real_Width  : RDEVICE.dwWidth);
+		const float h = (float)(RDEVICE.Real_Height ? RDEVICE.Real_Height : RDEVICE.dwHeight);
+		RCache.set_c(C, w, h, 1.0f / w, 1.0f / h);
+	}
+} binder_screen_res_real;
+
 static class cl_screen_params : public R_constant_setup
 {
 	Fvector4 result;
@@ -1162,9 +1174,18 @@ static class ssfx_jitter : public R_constant_setup
 		float JitterY = 0;
 
 #if defined(USE_DX11)
-		if (ps_ssfx_taa.x > 0 && RImplementation.o.ssfx_taa)
+		// SSS UPDATE 24 -- when an upscaler is active, geometry jitter uses the 72-entry centered
+		// Halton(2,3) sequence over the REAL render resolution (binary ssfx_jitter::setup, Addendum C3).
+		// SL_DLSS_Evaluate reports the same offsets (in pixels) to DLSS -- they must stay in sync.
+		if (ps_ssfx_upscaler > 0)
 		{
-			static Fvector2 TAA_Offset[4] = 
+			const u32 i = Device.dwFrame % 72;
+			JitterX = 2.0f * Device.HaltonJittering[i].x / (Device.Real_Width  ? Device.Real_Width  : Device.dwWidth);
+			JitterY = 2.0f * Device.HaltonJittering[i].y / (Device.Real_Height ? Device.Real_Height : Device.dwHeight);
+		}
+		else if (ps_ssfx_taa.x > 0 && RImplementation.o.ssfx_taa)
+		{
+			static Fvector2 TAA_Offset[4] =
 			{
 				{  0.0f, -1.0f },
 				{ -1.0f,  0.0f },
@@ -1422,6 +1443,7 @@ void CBlender_Compile::SetMapping()
 #endif
 
 	r_Constant("screen_res", &binder_screen_res);
+	r_Constant("screen_res_real", &binder_screen_res_real); // SSS UPDATE 24
 	r_Constant("ogse_c_screen", &binder_screen_params);
 	r_Constant("near_far_plane", &binder_near_far_plane);
 	// misc

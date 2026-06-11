@@ -486,7 +486,11 @@ CRenderTarget::CRenderTarget()
 	}
 	//	NORMAL
 	{
-		u32 w = Device.dwWidth, h = Device.dwHeight;
+		// SSS UPDATE 24 -- scene RTs are allocated at the DLSS render resolution (Real_*); display-sized
+		// surfaces (rt_sceneAA, rt_tempzb which receives the swapchain depth copy) use Target_* explicitly.
+		// Binary-confirmed recipe: CRenderTarget ctor dump, Addendum B/D. Real_* == Target_* when off/DLAA.
+		u32 w = Device.Real_Width ? Device.Real_Width : Device.dwWidth;
+		u32 h = Device.Real_Height ? Device.Real_Height : Device.dwHeight;
 		rt_Position.create(r2_RT_P, w, h, D3DFMT_A16B16G16R16F, SampleCount);
 
 		if (RImplementation.o.dx10_msaa)
@@ -494,7 +498,7 @@ CRenderTarget::CRenderTarget()
 			rt_MSAADepth.create(r2_RT_MSAAdepth, w, h, D3DFMT_D24S8, SampleCount);
 		}
 
-		rt_tempzb.create("$user$temp_zb", w, h, D3DFMT_D24S8); // Redotix99: for 3D Shader Based Scopes
+		rt_tempzb.create("$user$temp_zb", Device.dwWidth, Device.dwHeight, D3DFMT_D24S8); // Target_*: copy of swapchain depth (scopes + DLSS depth input)
 
 		// select albedo & accum
 		if (RImplementation.o.mrtmixdepth)
@@ -538,11 +542,11 @@ CRenderTarget::CRenderTarget()
 			rt_Generic.create(r2_RT_generic, w, h, D3DFMT_A8R8G8B8, 1);
 		}
 
-		// SSS UPDATE 24 -- DLSS/upscaler color output target (display resolution). See StreamlineWrapper.
+		// SSS UPDATE 24 -- DLSS/upscaler color output target, ALWAYS display resolution (Target_*).
 		if (RImplementation.o.dx11_hdr10)
-			rt_sceneAA.create("$user$scene_aa", w, h, D3DFMT_A16B16G16R16F, 1, true); // UAV: DLSS/NGX writes the output
+			rt_sceneAA.create("$user$scene_aa", Device.dwWidth, Device.dwHeight, D3DFMT_A16B16G16R16F, 1, true); // UAV: DLSS/NGX writes the output
 		else
-			rt_sceneAA.create("$user$scene_aa", w, h, D3DFMT_A8R8G8B8, 1, true); // UAV: DLSS/NGX writes the output
+			rt_sceneAA.create("$user$scene_aa", Device.dwWidth, Device.dwHeight, D3DFMT_A8R8G8B8, 1, true); // UAV: DLSS/NGX writes the output
 
 		rt_fakescope.create(r2_RT_scopert, w, h, D3DFMT_A8R8G8B8, 1); //crookr fakescope
 
@@ -896,8 +900,8 @@ CRenderTarget::CRenderTarget()
 
 	//SMAA
 	{
-		u32 w = Device.dwWidth;
-		u32 h = Device.dwHeight;
+		u32 w = Device.Real_Width ? Device.Real_Width : Device.dwWidth;   // SSS: match the scene resolution
+		u32 h = Device.Real_Height ? Device.Real_Height : Device.dwHeight;
 
 		rt_smaa_edgetex.create(r2_RT_smaa_edgetex, w, h, D3DFMT_A8R8G8B8);
 		rt_smaa_blendtex.create(r2_RT_smaa_blendtex, w, h, D3DFMT_A8R8G8B8);
@@ -969,7 +973,8 @@ CRenderTarget::CRenderTarget()
 	// HDAO
 	if (RImplementation.o.ssao_hdao && RImplementation.o.ssao_ultra)
 	{
-		u32 w = Device.dwWidth, h = Device.dwHeight;
+		u32 w = Device.Real_Width ? Device.Real_Width : Device.dwWidth;   // SSS: match the scene resolution
+		u32 h = Device.Real_Height ? Device.Real_Height : Device.dwHeight;
 		rt_ssao_temp.create(r2_RT_ssao_temp, w, h, D3DFMT_R16F, 1, true);
 		s_hdao_cs.create(b_hdao_cs, "r2\\ssao");
 		if (RImplementation.o.dx10_msaa)

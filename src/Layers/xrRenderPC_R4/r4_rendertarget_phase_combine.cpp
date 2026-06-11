@@ -554,30 +554,9 @@ void CRenderTarget::phase_combine()
 
 	phase_lut();	
 
-#if HAS_STREAMLINE
-	// SSS UPDATE 24 -- DLSS upscale (plan Addendum D). Upscale rt_Generic_0 (+ depth + motion vectors)
-	// into rt_sceneAA, then copy back so the existing post/present path displays it. Entirely inert
-	// unless DLSS is the active upscaler -- the non-DLSS path must not touch GPU state here.
-	if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit && rt_tempzb && rt_sceneAA)
-	{
-		g_SLWrapper.EndSceneResolution(); // back to Target_* for the upscale output + post/UI
-
-		ID3D11Resource* zres = nullptr;
-		HW.pBaseZB->GetResource(&zres);
-		if (zres) { HW.pContext->CopyResource(rt_tempzb->pSurface, zres); zres->Release(); }
-
-		const bool upscaled = g_SLWrapper.SL_DLSS_Evaluate();
-
-		// DLSS evaluate runs compute on our immediate context and clobbers pipeline state; SL does not
-		// restore it (eDisableCLStateTracking is the default). Resync the engine's state cache so the
-		// passes below rebind everything instead of trusting stale cached state.
-		RCache.Invalidate();
-
-		// Only show the DLSS output if the evaluation actually succeeded -- otherwise keep rt_Generic_0.
-		if (upscaled)
-			HW.pContext->CopyResource(rt_Generic_0->pSurface, rt_sceneAA->pSurface);
-	}
-#endif
+	// (SSS UPDATE 24 -- the DLSS upscale hook now runs at the end of this function, just before phase_pp,
+	//  on the fully composited rt_Color. The whole pipeline up to there operates at Real_* on Real_*-sized
+	//  RTs, so no mid-chain resolution juggling is needed.)
 
 	if(ps_r2_mask_control.x > 0)
 	{
@@ -765,12 +744,40 @@ void CRenderTarget::phase_combine()
 	if (ps_r2_anomaly_flags.test(R2_AN_FLAG_FLARES) && ps_r2_heatvision == 0) //--DSR-- HeatVision
 		g_pGamePersistent->Environment().RenderFlares(); // lens-flares
 
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- DLSS upscale. Everything above ran at Real_* into Real_*-sized RTs; rt_Color now
+	// holds the fully composited frame. Upscale it into rt_sceneAA (Target_*), then alias the rt_Color
+	// texture to the upscaled surface so phase_pp (which samples it by name) blits the Target_* image.
+	bool sl_pp_alias = false;
+	if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit && rt_tempzb && rt_sceneAA && rt_Color)
+	{
+		ID3D11Resource* zres = nullptr;
+		HW.pBaseZB->GetResource(&zres);
+		if (zres) { HW.pContext->CopyResource(rt_tempzb->pSurface, zres); zres->Release(); }
+
+		const bool upscaled = g_SLWrapper.SL_DLSS_Evaluate();
+		RCache.Invalidate(); // SL clobbers the context state; resync the engine's state cache
+
+		if (upscaled)
+		{
+			rt_Color->pTexture->surface_set(rt_sceneAA->pSurface);
+			sl_pp_alias = true;
+		}
+		g_SLWrapper.EndSceneResolution(); // dwWidth/dwHeight -> Target_* for the final backbuffer blit
+	}
+#endif
+
 	//	PP-if required
 	if (PP_Complex)
 	{
 		PIX_EVENT(phase_pp);
 		phase_pp();
 	}
+
+#if HAS_STREAMLINE
+	if (sl_pp_alias)
+		rt_Color->pTexture->surface_set(rt_Color->pSurface); // undo the alias for the next frame
+#endif
 
 	//	Re-adapt luminance
 	RCache.set_Stencil(FALSE);

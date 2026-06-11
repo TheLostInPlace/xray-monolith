@@ -529,6 +529,9 @@ void CRender::create()
 
 	m_bMakeAsyncSS = false;
 
+	// SSS UPDATE 24 -- Target_*/Real_* must be set BEFORE CRenderTarget allocates the scene RTs at Real_*.
+	g_SLWrapper.SL_SetupResolution();
+
 	Target = xr_new<CRenderTarget>(); // Main target
 
 	Models = xr_new<CModelPool>();
@@ -545,15 +548,7 @@ void CRender::create()
 	Device.ModelDefferClear = xr_make_delegate(Models, &CModelPool::DeleteQueuedDeffer);
 
 	// SSS UPDATE 24 -- upscaler / DLSS setup ------------------------------------------------------------
-	// Output (display) resolution. Real_* defaults equal; true sub-native downscaling additionally requires
-	// rendering the scene/G-buffer/depth/mvec at Real_* (the RT + viewport rewire -- see
-	// docs/streamline_dlss_integration_plan.md). With DLAA (resolution token 1) Real_* == Target_* and DLSS
-	// runs 1:1 correctly without that rewire.
-	Device.Target_Width  = Device.dwWidth;
-	Device.Target_Height = Device.dwHeight;
-	Device.Real_Width    = Device.dwWidth;
-	Device.Real_Height   = Device.dwHeight;
-
+	// (Target_*/Real_* were computed by SL_SetupResolution before the CRenderTarget allocation above.)
 	// 72-entry centered Halton(2,3) temporal jitter table (plan Addendum B2): x = radInv2(i)-0.5,
 	// y = radInv3(i)-0.5. Index 0 -> (-0.5,-0.5). Consumed by ssfx_taa_jitter (shaders) and SL_DLSS_Evaluate.
 	for (u32 i = 0; i < 72; ++i)
@@ -602,6 +597,9 @@ void CRender::reset_begin()
 void CRender::reset_end()
 {
 	HWOCC.occq_create(occq_size);
+
+	// SSS UPDATE 24 -- recompute Real_* from the (possibly new) video mode before recreating the RTs.
+	g_SLWrapper.SL_SetupResolution();
 
 	Target = xr_new<CRenderTarget>();
 

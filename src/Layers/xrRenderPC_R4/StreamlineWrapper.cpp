@@ -47,6 +47,12 @@ static void sl_hook_upscaler_change()
     if (g_SLWrapper.m_bDlssInit)
         g_SLWrapper.SL_DLSS_Init(); // re-apply mode/output options
     g_SLWrapper.ApplyAutoMipBias();
+#if SL_SUBNATIVE
+    // Scene RTs are allocated at Real_*, so a resolution/upscaler change must recreate them --
+    // exactly what the SSS binary does (CCC_Upscaler_Qual::Execute -> "vid_restart").
+    if (Console)
+        Console->Execute("vid_restart");
+#endif
 }
 static void sl_hook_preset_change()
 {
@@ -75,31 +81,35 @@ SLWrapper g_SLWrapper;
 void SLWrapper::UpdateRenderScale()
 {
     // Render-scale ratios per quality token (plan Addendum C2). SDK-free -- only touches Device fields.
-#if !SL_SUBNATIVE
-    // Sub-native disabled until the RT-resize port (see StreamlineWrapper.h). DLSS runs as DLAA at 1:1.
-    if (ps_r_upscaler_qual_token > 1)
+    float scale = 1.0f;
+#if SL_SUBNATIVE
+    if (ps_ssfx_upscaler == 2) // sub-native only for DLSS (FSR not ported); off/fsr render 1:1
     {
-        static bool warned = false;
-        if (!warned) { Msg("- UPSCALING : sub-native render scale not ported yet -- running DLAA (1.0)"); warned = true; }
+        switch (ps_r_upscaler_qual_token)
+        {
+            case 2:  scale = 0.66f; break; // Quality
+            case 3:  scale = 0.58f; break; // Balanced
+            case 4:  scale = 0.50f; break; // Performance
+            case 5:  scale = 0.33f; break; // Ultra Performance
+            default: scale = 1.00f; break; // DLAA / NativeAA (token 1)
+        }
     }
-    Device.Current_RenderScale = 1.0f;
-    Device.Real_Width  = Device.Target_Width;
-    Device.Real_Height = Device.Target_Height;
-    return;
-#else
-    float scale;
-    switch (ps_r_upscaler_qual_token)
-    {
-        case 2:  scale = 0.66f; break; // Quality
-        case 3:  scale = 0.58f; break; // Balanced
-        case 4:  scale = 0.50f; break; // Performance
-        case 5:  scale = 0.33f; break; // Ultra Performance
-        default: scale = 1.00f; break; // DLAA / NativeAA (token 1)
-    }
+#endif
     Device.Current_RenderScale = scale;
     Device.Real_Width  = (u32)(Device.Target_Width  * scale + 0.5f);
     Device.Real_Height = (u32)(Device.Target_Height * scale + 0.5f);
-#endif // SL_SUBNATIVE
+}
+
+// ----------------------------------------------------------------------------------------------------
+void SLWrapper::SL_SetupResolution()
+{
+    Device.Target_Width  = Device.dwWidth;  // current video mode = output resolution
+    Device.Target_Height = Device.dwHeight;
+    UpdateRenderScale();
+    if (Device.Real_Width != Device.Target_Width)
+        Msg("- UPSCALING : render %ux%u -> output %ux%u [ %.0f%% ]",
+            Device.Real_Width, Device.Real_Height, Device.Target_Width, Device.Target_Height,
+            Device.Current_RenderScale * 100.0f);
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -310,9 +320,12 @@ bool SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D ca
     consts.cameraNear  = Device.ViewportNear;
     consts.cameraFar   = g_pGamePersistent->pEnvironment->CurrentEnv->far_plane; // verify field on activation
 
+    // Must equal the GEOMETRY jitter actually applied by the shaders (ssfx_jitter binder feeds
+    // 2*Halton/Real_* in clip space, scaled by ps_ssfx_taa.y -> in pixel units that is Halton * taa.y).
+    // Clip-space +y is up, pixel +y is down, hence the y negation.
     const u32 j = Device.dwFrame % 72;
-    consts.jitterOffset.x =  Device.HaltonJittering[j].x;
-    consts.jitterOffset.y = -Device.HaltonJittering[j].y;
+    consts.jitterOffset.x =  Device.HaltonJittering[j].x * ps_ssfx_taa.y;
+    consts.jitterOffset.y = -Device.HaltonJittering[j].y * ps_ssfx_taa.y;
 
     consts.cameraFOV         = Device.fFOV * (3.14159265f / 180.0f);          // CORRECTED: no * 0.5
     consts.cameraAspectRatio = (float)Device.Real_Width / (float)Device.Real_Height;
@@ -323,7 +336,9 @@ bool SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D ca
 
     slSetConstants(consts, *SL_Frame(), g_sl_viewport);
 
-    sl::Resource colorIn { sl::ResourceType::eTex2d, RImplementation.Target->rt_Generic_0->pSurface };
+    // Input = rt_Color (the fully composited Real_*-sized frame; the evaluate hook runs just before
+    // phase_pp). Output = rt_sceneAA at Target_*. Depth is Target_*-sized rt_tempzb read via Real extent.
+    sl::Resource colorIn { sl::ResourceType::eTex2d, RImplementation.Target->rt_Color->pSurface };
     sl::Resource colorOut{ sl::ResourceType::eTex2d, RImplementation.Target->rt_sceneAA->pSurface };
     sl::Resource depth   { sl::ResourceType::eTex2d, RImplementation.Target->rt_tempzb->pSurface };
     sl::Resource mvec    { sl::ResourceType::eTex2d, RImplementation.Target->rt_ssfx_motion_vectors->pSurface };

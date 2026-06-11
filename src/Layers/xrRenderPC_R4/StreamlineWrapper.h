@@ -25,13 +25,12 @@
 #define HAS_STREAMLINE 1 // NV Streamline active (SDK 2.10.3 in src/3rd party/Streamline). Set 0 to disable.
 #endif
 
-// Sub-native rendering (Real_* < Target_*) is NOT wired yet: the SSS 24 engine allocates the scene render
-// targets at Real_* size (hence its vid_restart on resolution change), while this engine still allocates
-// them at Target_* -- rendering into a sub-rect corrupts every pass that samples full-texture UVs (LUM,
-// blur, combine). Until the RT-resize port lands, the render scale is clamped to 1.0 and DLSS runs as
-// DLAA (full-res AA) in every quality mode.
+// Sub-native rendering: scene render targets are ALLOCATED at Real_* size (the SSS 24 architecture,
+// confirmed from the binary CRenderTarget ctor: G-buffer/generic/blur/mvec/position at Real_*;
+// rt_sceneAA/rt_tempzb at Target_*). Resolution changes therefore require vid_restart (RT recreation).
+// Set to 0 to clamp the render scale to 1.0 and run DLSS as DLAA only.
 #ifndef SL_SUBNATIVE
-#define SL_SUBNATIVE 0
+#define SL_SUBNATIVE 1
 #endif
 
 class SLWrapper
@@ -52,6 +51,10 @@ public:
     void SL_NewFrameToken(); // CRenderDevice::on_idle, top -- slGetNewFrameToken
     void SL_PCLMarker(int marker); // slPCLSetMarker(marker, Device.PCL_currentFrame); marker = sl::PCLMarker int
     void SL_ReflexSleep();   // CRenderDevice::on_idle -- slReflexSleep
+
+    // Capture Target_* from the current video mode and compute Real_* -- MUST run before CRenderTarget is
+    // constructed (CRender::create and reset_end), because the scene RTs are allocated at Real_* size.
+    void SL_SetupResolution();
 
     // Recompute Current_RenderScale + Real_* from ps_r_upscaler_qual_token (plan Addendum C2).
     // Safe to call without the SDK; only touches Device fields (which exist once HAS_STREAMLINE prerequisites
