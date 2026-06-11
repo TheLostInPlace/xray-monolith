@@ -80,6 +80,11 @@ void CRender::Render()
 {
 	PIX_EVENT(CRender_Render);
 
+	// SSS UPDATE 24 -- binary-confirmed architecture (CRender::Render dump, lines 80-81): Target_* is the
+	// DEFAULT resolution state every frame; Real_* is entered further below only once world-scene rendering
+	// is committed. Menus / no-level / skip-scene paths therefore always run at display resolution.
+	g_SLWrapper.EndSceneResolution();
+
 	rmNormal();
 
 	bool _menu_pp = g_pGamePersistent ? g_pGamePersistent->OnRenderPPUI_query() : false;
@@ -104,16 +109,20 @@ void CRender::Render()
 		|| bMenu)
 	{
 #if HAS_STREAMLINE
-		// SSS UPDATE 24 -- THIS is the real main-menu / ESC-menu path (not _menu_pp/render_menu). Begin set
-		// dwWidth to Real_*; binding the backbuffer with that size makes next frame's rmNormal() apply a
-		// Real_*-sized viewport, so the Target-coordinate menu UI lands off-screen -> black menu with a
-		// working cursor. Menus/UI always run at display resolution.
-		g_SLWrapper.EndSceneResolution();
+		// SSS UPDATE 24 -- main-menu / ESC-menu path: ensure the display-resolution viewport is applied
+		// (dwWidth is already Target_* via the default state set at the top of Render).
 		Target->set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
 #endif
 		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
 		return;
 	}
+
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- world-scene rendering is committed from here on: switch to the Real_* render
+	// resolution (binary: Device.dwWidth = Device.Real_Width right after the menu/no-level early-outs).
+	// phase_combine restores Target_* + viewport after the DLSS upscale.
+	g_SLWrapper.BeginSceneResolution();
+#endif
 
 	if (m_bFirstFrameAfterReset)
 	{
