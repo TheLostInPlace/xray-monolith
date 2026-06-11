@@ -94,6 +94,9 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 		if (r >= 128.f)
 			cascade_smap = _min((s32)r, (s32)o.smapsize);
 	}
+	// Feed the m_SMAP_res shader constant (SSS shadow.h divides by it -- unbound = NaN shadow filtering).
+	extern float g_sun_smap_res_current;
+	g_sun_smap_res_current = (float)cascade_smap;
 
 	CFrustum& cull_frustum = cascade.cull_frustum;
 	xr_vector<Fplane> cull_planes;
@@ -299,6 +302,11 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 	// shadow sampling stays consistent with the (stale) shadowmap content. The Accumulate section below
 	// always runs. All-zero delays (the default) = stock per-frame behavior.
 	bool smap_update = true;
+	// DISABLED until per-cascade shadowmaps are ported: the binary gives EACH cascade its own depth RT
+	// (rt_sun_smap_depth[i], "$user$sun_smap_depth0..2", clamp(res,512,4096) -- accum_direct_cascade dump),
+	// so a delayed cascade's map persists. With our single shared smap, skipping a re-render makes the
+	// cascade sample whatever the other cascades just rendered -> guaranteed shadow corruption.
+	if (false)
 	{
 		static u32     sun_frame[8] = {};
 		static Fmatrix sun_combine[8];

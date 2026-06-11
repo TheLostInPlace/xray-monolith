@@ -616,6 +616,19 @@ static class cl_screen_res : public R_constant_setup
 	}
 } binder_screen_res;
 
+// SSS UPDATE 24 -- current sun-cascade shadowmap resolution. The SSS shadow.h DIVIDES by m_SMAP_res.x
+// (PCF kernel / PCSS scaling), so leaving it unbound produces NaN in every sun-shadow filter tap
+// (visible as shadow flicker/garbage). Set per cascade by render_sun_cascade; defaults to o.smapsize.
+float g_sun_smap_res_current = 0.f; // 0 -> binder falls back to o.smapsize
+static class cl_smap_res : public R_constant_setup
+{
+	virtual void setup(R_constant* C)
+	{
+		const float r = (g_sun_smap_res_current > 0.f) ? g_sun_smap_res_current : (float)RImplementation.o.smapsize;
+		RCache.set_c(C, r, 1.f / r, 0.f, 0.f);
+	}
+} binder_smap_res;
+
 // SSS UPDATE 24 -- water flowmap setup (per-level values from ssfx_underground_check.script; the shader
 // documents the layout: xy = flow texture scale, zw = UV pos).
 static class cl_ssfx_flowmap_setup : public R_constant_setup
@@ -1455,6 +1468,7 @@ void CBlender_Compile::SetMapping()
 	r_Constant("screen_res", &binder_screen_res);
 	r_Constant("screen_res_real", &binder_screen_res_real); // SSS UPDATE 24
 	r_Constant("ssfx_flowmap_setup", &binder_ssfx_flowmap_setup); // SSS UPDATE 24 (water flowmap)
+	r_Constant("m_SMAP_res", &binder_smap_res); // SSS UPDATE 24 (per-cascade shadowmap resolution; shadow.h divides by it)
 	r_Constant("ogse_c_screen", &binder_screen_params);
 	r_Constant("near_far_plane", &binder_near_far_plane);
 	// misc

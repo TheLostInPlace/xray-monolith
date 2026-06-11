@@ -571,9 +571,8 @@ void CRenderTarget::phase_combine()
 			const bool upscaled = g_SLWrapper.SL_DLSS_Evaluate(); // rt_Generic_0 -> rt_sceneAA
 			RCache.Invalidate(); // SL clobbers context state (eDisableCLStateTracking is the SL default)
 
-			if (upscaled && Device.Real_Width == Device.Target_Width && Device.Real_Height == Device.Target_Height)
-				HW.pContext->CopyResource(rt_Generic_0->pSurface, rt_sceneAA->pSurface); // DLAA: show the AA result
-			else if (!upscaled)
+			// combine_2 samples "$user$scene_aa" directly (binary blender binding) -- no copy-back needed.
+			if (!upscaled)
 				HW.pContext->CopyResource(rt_sceneAA->pSurface, rt_Generic_0->pSurface); // keep scene_aa fed
 
 			g_SLWrapper.EndSceneResolution();

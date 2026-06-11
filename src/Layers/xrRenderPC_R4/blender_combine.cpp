@@ -68,7 +68,8 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1);
@@ -99,7 +100,8 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1);
@@ -129,7 +131,8 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1);
@@ -160,7 +163,8 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1);
@@ -266,7 +270,8 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1_r);
@@ -297,7 +302,8 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1_r);
@@ -327,7 +333,8 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1_r);
@@ -358,7 +365,8 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
 		//C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
 
 		C.r_dx10Texture("s_position", r2_RT_P);
-		C.r_dx10Texture("s_image", r2_RT_generic0);
+		C.r_dx10Texture("s_image", "$user$scene_aa"); // SSS UPDATE 24 -- combine reads the post-AA/upscale image (binary: o&0x800 switch)
+		C.r_dx10Texture("s_debug", "$user$hudtest"); // SSS UPDATE 24
 		C.r_dx10Texture("s_bloom", r2_RT_bloom1);
 		C.r_dx10Texture("s_bloom_new", r2_RT_pp_bloom);
 		C.r_dx10Texture("s_distort", r2_RT_generic1_r);
