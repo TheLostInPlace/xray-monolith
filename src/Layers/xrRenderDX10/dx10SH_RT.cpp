@@ -109,15 +109,23 @@ void CRT::create(LPCSTR Name, u32 w, u32 h, D3DFORMAT f, u32 SampleCount)
 	//_hr = HW.pDevice->CreateTexture		(w, h, 1, usage, f, D3DPOOL_DEFAULT, &pSurface,NULL);
 	//if (FAILED(_hr) || (0==pSurface))	return;
 	// Create the render target texture
+	// SSS UPDATE 24 -- binary convention: SampleCount == 0xFFFFFFFF requests a full mip chain with
+	// runtime mip generation (used by rt_ssfx_water_waves + GenerateMips in phase_ssfx_water_waves).
+	const bool bFullMipChain = (SampleCount == u32(-1));
+	if (bFullMipChain)
+		SampleCount = 1;
+
 	D3D_TEXTURE2D_DESC desc;
 	ZeroMemory(&desc, sizeof(desc));
 	desc.Width = dwWidth;
 	desc.Height = dwHeight;
-	desc.MipLevels = 1;
+	desc.MipLevels = bFullMipChain ? 0 : 1;
 	desc.ArraySize = 1;
 	desc.Format = dx10FMT;
 	desc.SampleDesc.Count = SampleCount;
 	desc.Usage = D3D_USAGE_DEFAULT;
+	if (bFullMipChain)
+		desc.MiscFlags |= D3D_RESOURCE_MISC_GENERATE_MIPS;
 	if (SampleCount <= 1)
 		desc.BindFlags = D3D_BIND_SHADER_RESOURCE | (bUseAsDepth ? D3D_BIND_DEPTH_STENCIL : D3D_BIND_RENDER_TARGET);
 	else
