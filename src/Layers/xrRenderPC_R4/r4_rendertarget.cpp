@@ -548,6 +548,14 @@ CRenderTarget::CRenderTarget()
 		else
 			rt_sceneAA.create("$user$scene_aa", Device.dwWidth, Device.dwHeight, D3DFMT_A8R8G8B8, 1, true); // UAV: DLSS/NGX writes the output
 
+		// SSS UPDATE 24 -- dedicated menu/UI render target at display resolution (binary: rt_ui_pda
+		// "$user$ui", Target_*-sized). render_menu draws the menu here when sub-native so DLSS and the
+		// Real_*-sized RTs never touch UI.
+		if (RImplementation.o.dx11_hdr10)
+			rt_ui.create("$user$ui", Device.dwWidth, Device.dwHeight, D3DFMT_A16B16G16R16F, 1);
+		else
+			rt_ui.create("$user$ui", Device.dwWidth, Device.dwHeight, D3DFMT_A8R8G8B8, 1);
+
 		rt_fakescope.create(r2_RT_scopert, w, h, D3DFMT_A8R8G8B8, 1); //crookr fakescope
 
 		//--DSR-- HeatVision_start

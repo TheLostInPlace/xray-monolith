@@ -18,22 +18,23 @@ void CRender::render_menu()
 	RCache.set_ColorWriteEnable();
 
 #if HAS_STREAMLINE
-	// SSS UPDATE 24 -- with the DLSS upscaler active, rt_Generic_0/1 are Real_*-sized while the menu must
-	// render at display (Target_*) resolution: drawing Target-coordinate UI into the smaller RT (paired
-	// with the Target-sized pBaseZB) produced a black menu. Render the menu straight to the backbuffer at
-	// Target_* instead (the binary solves this with a dedicated Target-sized "$user$ui" RT; the only thing
-	// lost here is the subtle menu distortion effect while sub-native upscaling is active).
-	if (Device.Real_Width != Device.Target_Width || Device.Real_Height != Device.Target_Height)
-	{
-		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT, NULL, NULL, HW.pBaseZB);
+	// SSS UPDATE 24 -- binary-faithful menu path (render_menu dump: with the upscaler bit set, the menu UI
+	// renders into a dedicated Target_*-sized RT -- "$user$ui", offset 1424 -- instead of the Real_*-sized
+	// rt_Generic_0). DLSS never touches menus. The s_menu combine samples generic0 by texture NAME, so the
+	// UI RT is aliased over it for the final draw and restored afterwards (t_LUM-style surface swap).
+	const bool sl_menu_ui = (Device.Real_Width != Device.Target_Width ||
+	                         Device.Real_Height != Device.Target_Height) && Target->rt_ui;
+	if (sl_menu_ui)
 		Target->set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
-		g_pGamePersistent->OnRenderPPUI_main(); // PP-UI directly to the backbuffer
-		return;
-	}
 #endif
 
 	// Main Render
 	{
+#if HAS_STREAMLINE
+		if (sl_menu_ui)
+			Target->u_setrt(Target->rt_ui, 0, 0, HW.pBaseZB); // Target_*-sized UI RT
+		else
+#endif
 		Target->u_setrt(Target->rt_Generic_0, 0, 0, HW.pBaseZB); // LDR RT
 		g_pGamePersistent->OnRenderPPUI_main(); // PP-UI
 	}
@@ -43,8 +44,18 @@ void CRender::render_menu()
 		FLOAT ColorRGBA[4] = {127.0f / 255.0f, 127.0f / 255.0f, 0.0f, 127.0f / 255.0f};
 		Target->u_setrt(Target->rt_Generic_1, 0, 0, HW.pBaseZB); // Now RT is a distortion mask
 		HW.pContext->ClearRenderTargetView(Target->rt_Generic_1->pRT, ColorRGBA);
+#if HAS_STREAMLINE
+		// At sub-native the distortion mask RT is Real_*-sized while the UI draws in Target_* coordinates;
+		// keep the mask neutral (the clear above) instead of rendering a mismatched-resolution mask.
+		if (!sl_menu_ui)
+#endif
 		g_pGamePersistent->OnRenderPPUI_PP(); // PP-UI
 	}
+
+#if HAS_STREAMLINE
+	if (sl_menu_ui)
+		Target->rt_Generic_0->pTexture->surface_set(Target->rt_ui->pSurface); // s_menu reads "generic0" by name
+#endif
 
 	// Actual Display
 	Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
@@ -72,6 +83,11 @@ void CRender::render_menu()
 	pv++;
 	RCache.Vertex.Unlock(4, Target->g_menu->vb_stride);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+
+#if HAS_STREAMLINE
+	if (sl_menu_ui)
+		Target->rt_Generic_0->pTexture->surface_set(Target->rt_Generic_0->pSurface); // undo the alias
+#endif
 }
 
 extern u32 g_r;
