@@ -50,7 +50,13 @@ static void sl_hook_upscaler_change()
         return;
 
     if (ps_ssfx_upscaler == 2 && !g_SLWrapper.m_SLInit)
-        g_SLWrapper.SL_Init(); // upscaler enabled at runtime -> full bring-up
+    {
+        // slInit/slSetD3DDevice mid-session (with command lists in flight) deadlocks the device. The
+        // binary has the same constraint -- its slInit lives in CRender::create, which never re-runs --
+        // so enabling DLSS requires a fresh launch there too. The cvar is saved; it activates next start.
+        Msg("- UPSCALING : DLSS will activate after the game is restarted.");
+        return;
+    }
     if (ps_ssfx_upscaler == 0)
     {
         Device.Real_Width  = Device.Target_Width;
@@ -272,7 +278,11 @@ void SLWrapper::SL_DLSS_Init() // == binary SLWrapper::Update_DLSSOptions (plan 
     opt.sharpness       = 0.0f;
     opt.preExposure     = 1.0f;
     opt.exposureScale   = 1.0f;
-    opt.useAutoExposure = sl::Boolean::eTrue;
+    // Our DLSS input (rt_Generic_0 post-lut) is already tonemapped/graded LDR; auto-exposure on such an
+    // image re-darkens it (observed: "very dark with smudged light sources"). The binary passes eTrue, but
+    // its input sits in the SSS 24 chain with different exposure characteristics -- for our chain eFalse
+    // with preExposure 1.0 is the correct post-tonemap configuration (NVIDIA DLSS programming guide).
+    opt.useAutoExposure = sl::Boolean::eFalse;
 
     sl::Result r = slDLSSSetOptions(g_sl_viewport, opt);
     if (r != sl::Result::eOk)
