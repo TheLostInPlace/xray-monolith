@@ -270,12 +270,17 @@ void CRenderTarget::phase_3DSSReticle()
 #if RENDER == R_R4
 	// SSS UPDATE 24 -- binary: s_position feed (generic2 <- position), then scene_final <- scene_aa
 	// (the reticle shader samples s_prev_frame = "$user$scene_final" for the behind-glass image),
-	// and the reticle geometry is drawn into rt_sceneAA alone with NO depth buffer bound.
+	// and the reticle geometry is drawn into rt_sceneAA. The binary binds NO depth buffer here, which
+	// makes the gamedata zb() state in models_scope_reticle.s inert -- the lens then draws over the
+	// hands during reload animations (known SSS24 bug; the manual hudtest occlusion misses animated
+	// hands). DELIBERATE DEVIATION: we bind pBaseZB read-compatible so that a gamedata fix of
+	// zb(true, false) in the reticle .s gets real engine depth occlusion. With the stock SSS24
+	// zb(false, false) shaders a bound DSV changes nothing (depth ops disabled by state) = parity.
 	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
 
 	HW.pContext->CopyResource(rt_sceneFinal->pTexture->surface_get(), rt_sceneAA->pTexture->surface_get());
 
-	u_setrt(rt_sceneAA, 0, 0, 0);
+	u_setrt(rt_sceneAA, 0, 0, HW.pBaseZB);
 #else
 	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
 
