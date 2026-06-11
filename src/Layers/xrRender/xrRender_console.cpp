@@ -404,8 +404,8 @@ int   ps_ssfx_upscaler_automipmap = 1; // auto texture mip bias from the render 
 // SSS 24 shadow-cascade controls (binary: CCC_ssfx_cascades). Storage registered so the SSS gamedata
 // scripts can set them; the engine-side consumer (per-cascade resolution + staggered updates in the sun
 // shadow path) is a pending port -- needs the binary render_sun/cascade dumps.
-Fvector4 ps_ssfx_cascades_resolution = { 2048, 2048, 2048, 0 };
-Fvector4 ps_ssfx_cascades_delay      = { 1, 1, 1, 0 };
+Fvector4 ps_ssfx_cascades_resolution = { 0, 0, 0, 0 }; // < 128 = stock o.smapsize (SSS scripts set 1536/2048/2560)
+Fvector4 ps_ssfx_cascades_delay      = { 0, 0, 0, 0 }; // 0 = update every frame (SSS scripts set 0/1/2)
 
 // Live re-apply hooks, set by StreamlineWrapper.cpp (R4); stay null in render layers without Streamline.
 sl_console_hook_fn g_sl_on_upscaler_change = nullptr;

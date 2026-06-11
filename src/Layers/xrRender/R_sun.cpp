@@ -84,6 +84,17 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 	light* fuckingsun = (light*)Lights.sun_adapted._get();
 	sun::cascade& cascade = m_sun_cascades[cascade_ind];
 
+	// SSS UPDATE 24 -- per-cascade shadowmap resolution (ssfx_cascades_resolution, set by the SSS scripts;
+	// values < 128 mean "stock"). Clamped to the smap atlas size -- the render region is a sub-rect of the
+	// atlas via the light X.D extents, exactly like per-light shadow LODs.
+	s32 cascade_smap = (s32)o.smapsize;
+	{
+		const float res3[3] = { ps_ssfx_cascades_resolution.x, ps_ssfx_cascades_resolution.y, ps_ssfx_cascades_resolution.z };
+		const float r = res3[cascade_ind < 3 ? cascade_ind : 2];
+		if (r >= 128.f)
+			cascade_smap = _min((s32)r, (s32)o.smapsize);
+	}
+
 	CFrustum& cull_frustum = cascade.cull_frustum;
 	xr_vector<Fplane> cull_planes;
 	Fvector3& cull_COP = cascade.cull_COP;
@@ -172,7 +183,7 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 																map_size * 0.5f, 0.1, dist + map_size);
 
 			// build viewport xform
-			float view_dim = float(o.smapsize);
+			float view_dim = float(cascade_smap); // SSS UPDATE 24 -- per-cascade resolution
 			Fmatrix m_viewport = {
 				view_dim / 2.f, 0.0f, 0.0f, 0.0f,
 				0.0f, -view_dim / 2.f, 0.0f, 0.0f,
@@ -272,7 +283,7 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 
 			cascade.xform = cull_xform;
 
-			s32 limit = o.smapsize - 1;
+			s32 limit = cascade_smap - 1; // SSS UPDATE 24 -- per-cascade resolution
 			fuckingsun->X.D.minX = 0;
 			fuckingsun->X.D.maxX = limit;
 			fuckingsun->X.D.minY = 0;
@@ -283,6 +294,35 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 		}
 	}
 
+	// SSS UPDATE 24 -- per-cascade update staggering (ported from the binary render_sun_cascade): a cascade
+	// whose delay has not elapsed skips its SMAP re-render this frame and reuses the cached transform, so
+	// shadow sampling stays consistent with the (stale) shadowmap content. The Accumulate section below
+	// always runs. All-zero delays (the default) = stock per-frame behavior.
+	bool smap_update = true;
+	{
+		static u32     sun_frame[8] = {};
+		static Fmatrix sun_combine[8];
+		if (cascade_ind < 8 &&
+		    (ps_ssfx_cascades_delay.x + ps_ssfx_cascades_delay.y + ps_ssfx_cascades_delay.z) > 0.f)
+		{
+			const float dly3[3] = { ps_ssfx_cascades_delay.x, ps_ssfx_cascades_delay.y, ps_ssfx_cascades_delay.z };
+			const u32 delay = (u32)dly3[cascade_ind < 3 ? cascade_ind : 2];
+			if (Device.dwFrame > sun_frame[cascade_ind])
+			{
+				sun_frame[cascade_ind]   = Device.dwFrame + delay;
+				sun_combine[cascade_ind] = cull_xform;
+			}
+			else
+			{
+				smap_update = false;
+				cascade.xform = sun_combine[cascade_ind];
+				fuckingsun->X.D.combine = sun_combine[cascade_ind];
+			}
+		}
+	}
+
+	if (smap_update)
+	{
 	// Begin SMAP-render
     {
         PROF_EVENT("Render Cascade: SMAP traverse");
@@ -328,7 +368,8 @@ void CRender::render_sun_cascade(u32 cascade_ind)
         }
 
         // End SMAP-render
-    }	
+    }
+	} // if (smap_update) -- SSS UPDATE 24 cascade staggering
 
 	// Accumulate
 	PROF_EVENT("Render Cascade: Accumulate");
