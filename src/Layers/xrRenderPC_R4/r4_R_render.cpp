@@ -170,6 +170,30 @@ void CRender::Render()
     GMBase.r_dsgraph_capture_static();
     GMBase.r_dsgraph_capture_dynamic();
 
+#if HAS_STREAMLINE
+	// SSS UPDATE 24 -- 3DSS reticle support: write the HUD depth mask "$user$hudtest" early so the
+	// gamedata reticle shader (models_scope_reticle.s, s_posfullres) can sample it in phase_3DSSReticle.
+	// Binary (CRender::Render): gated on the SSS support bit (0x800, always on here) + scope_3D_fake_enabled;
+	// capture_hud, then if mapScopeHUDSorted is non-empty: clear hudtest to (1,1,1,1), setrt(hudtest + pBaseZB),
+	// r_dsgraph_render_hudfull (== our r_dsgraph_render_ScopeSorted), then clear depth.
+	// The map is re-captured by the normal PART-1 capture_hud below, exactly as the binary does (it also
+	// calls capture_hud twice).
+	if (scope_3D_fake_enabled)
+	{
+		GMBase.r_dsgraph_capture_hud();
+		if (!GMBase.RGraph.mapScopeHUDSorted.empty())
+		{
+			FLOAT ColorRGBA_hud[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+			HW.pContext->ClearRenderTargetView(Target->rt_ssfx_hud->pRT, ColorRGBA_hud);
+
+			Target->u_setrt(Target->rt_ssfx_hud, NULL, NULL, HW.pBaseZB);
+			GMBase.r_dsgraph_render_ScopeSorted();
+
+			HW.pContext->ClearDepthStencilView(HW.pBaseZB, D3D_CLEAR_DEPTH, 1.0f, 0);
+		}
+	}
+#endif
+
     if (RImplementation.o.ssfx_motionvectors)
     {
         Target->u_setrt(Device.dwWidth, Device.dwHeight, 0, 0, Target->rt_ssfx_motion_vectors->pRT, 0);
