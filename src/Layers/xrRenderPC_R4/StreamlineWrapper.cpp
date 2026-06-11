@@ -31,9 +31,24 @@ static sl::ViewportHandle g_sl_viewport{ 0 };
 static inline sl::FrameToken* SL_Frame() { return reinterpret_cast<sl::FrameToken*>(Device.PCL_currentFrame); }
 
 // ---- console live re-apply hooks (g_sl_on_* in xrRender_console) -------------------------------------
+// Values the current render targets were built with; seeded by SL_SetupResolution (create + reset_end).
+// The hook only reacts when a console execute actually CHANGES them -- the SSS MCM script re-executes the
+// upscaler commands on every game start, and an unconditional vid_restart caused gratuitous double device
+// resets mid-load. (Binary: CCC_Upscaler_Qual::Execute restarts only when the token changed.)
+int g_sl_built_upscaler   = -1;
+int g_sl_built_resolution = -1;
+int g_sl_built_automip    = -1;
+
 static void sl_hook_upscaler_change()
 {
     if (!HW.pDevice) return; // before device creation CRender::create handles everything
+
+    const bool changed = (ps_ssfx_upscaler != g_sl_built_upscaler) ||
+                         (ps_r_upscaler_qual_token != g_sl_built_resolution) ||
+                         (ps_ssfx_upscaler_automipmap != g_sl_built_automip);
+    if (!changed)
+        return;
+
     if (ps_ssfx_upscaler == 2 && !g_SLWrapper.m_SLInit)
         g_SLWrapper.SL_Init(); // upscaler enabled at runtime -> full bring-up
     if (ps_ssfx_upscaler == 0)
@@ -48,8 +63,8 @@ static void sl_hook_upscaler_change()
         g_SLWrapper.SL_DLSS_Init(); // re-apply mode/output options
     g_SLWrapper.ApplyAutoMipBias();
 #if SL_SUBNATIVE
-    // Scene RTs are allocated at Real_*, so a resolution/upscaler change must recreate them --
-    // exactly what the SSS binary does (CCC_Upscaler_Qual::Execute -> "vid_restart").
+    // Scene RTs are allocated at Real_*, so a real change must recreate them (binary behavior).
+    // reset_end re-runs SL_SetupResolution, which re-seeds g_sl_built_* and stops restart loops.
     if (Console)
         Console->Execute("vid_restart");
 #endif
@@ -106,6 +121,13 @@ void SLWrapper::SL_SetupResolution()
     Device.Target_Width  = Device.dwWidth;  // current video mode = output resolution
     Device.Target_Height = Device.dwHeight;
     UpdateRenderScale();
+#if HAS_STREAMLINE
+    // Seed the change-detection baseline: the RTs about to be (re)built use these values.
+    extern int g_sl_built_upscaler, g_sl_built_resolution, g_sl_built_automip;
+    g_sl_built_upscaler   = ps_ssfx_upscaler;
+    g_sl_built_resolution = ps_r_upscaler_qual_token;
+    g_sl_built_automip    = ps_ssfx_upscaler_automipmap;
+#endif
     // Always log the full state -- this is the ground truth for diagnosing render-path issues.
     Msg("- UPSCALING : setup [ upscaler=%d resolution_token=%d preset=%d ] render %ux%u -> output %ux%u [ %.0f%% ]",
         ps_ssfx_upscaler, ps_r_upscaler_qual_token, ps_r_dlsspreset_token,
