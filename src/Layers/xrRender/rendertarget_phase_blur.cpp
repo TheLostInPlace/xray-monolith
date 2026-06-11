@@ -517,6 +517,55 @@ void CRenderTarget::phase_ssfx_water_waves()
 	p0.set(0.0f, 0.0f);
 	p1.set(1.0f, 1.0f);
 
+#if RENDER == R_R4
+	// SSS UPDATE 24 -- two-pass ping-pong (binary phase_ssfx_water_waves):
+	// pass 1: E[5] "ssfx_water_waves" (procedural heightfield) -> rt_ssfx_water_waves_tmp (256x256)
+	// pass 2: E[4] "ssfx_water_waves_build" (normals from the heightfield) -> rt_ssfx_water_waves
+	// then GenerateMips on the waves SRV (RT is created with a full mip chain).
+	if (rt_ssfx_water_waves_tmp)
+	{
+		const u32 ww = rt_ssfx_water_waves_tmp->dwWidth;
+		const u32 wh = rt_ssfx_water_waves_tmp->dwHeight;
+		set_viewport_size(HW.pContext, (float)ww, (float)wh);
+
+		// Pass 1: heightfield into the tmp buffer
+		u_setrt(rt_ssfx_water_waves_tmp, 0, 0, NULL);
+		RCache.set_CullMode(CULL_NONE);
+		RCache.set_Stencil(FALSE);
+
+		FVF::TL* pv = (FVF::TL*)RCache.Vertex.Lock(4, g_combine->vb_stride, Offset);
+		pv->set(0, h, d_Z, d_W, C, p0.x, p1.y); pv++;
+		pv->set(0, 0, d_Z, d_W, C, p0.x, p0.y); pv++;
+		pv->set(w, h, d_Z, d_W, C, p1.x, p1.y); pv++;
+		pv->set(w, 0, d_Z, d_W, C, p1.x, p0.y); pv++;
+		RCache.Vertex.Unlock(4, g_combine->vb_stride);
+
+		RCache.set_Element(s_ssfx_water_blur->E[5]);
+		RCache.set_c("wind_setup", g_pGamePersistent->Environment().wind_anim.w, g_pGamePersistent->Environment().CurrentEnv->wind_velocity, 0, 0);
+		RCache.set_Geometry(g_combine);
+		RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+
+		// Pass 2: build normals into the waves buffer (binary sets wind_setup for this pass too)
+		u_setrt(rt_ssfx_water_waves, 0, 0, NULL);
+		RCache.set_CullMode(CULL_NONE);
+		RCache.set_Stencil(FALSE);
+
+		pv = (FVF::TL*)RCache.Vertex.Lock(4, g_combine->vb_stride, Offset);
+		pv->set(0, h, d_Z, d_W, C, p0.x, p1.y); pv++;
+		pv->set(0, 0, d_Z, d_W, C, p0.x, p0.y); pv++;
+		pv->set(w, h, d_Z, d_W, C, p1.x, p1.y); pv++;
+		pv->set(w, 0, d_Z, d_W, C, p1.x, p0.y); pv++;
+		RCache.Vertex.Unlock(4, g_combine->vb_stride);
+
+		RCache.set_Element(s_ssfx_water_blur->E[4]);
+		RCache.set_c("wind_setup", g_pGamePersistent->Environment().wind_anim.w, g_pGamePersistent->Environment().CurrentEnv->wind_velocity, 0, 0);
+		RCache.set_Geometry(g_combine);
+		RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+
+		if (rt_ssfx_water_waves->pTexture->get_SRView())
+			HW.pContext->GenerateMips(rt_ssfx_water_waves->pTexture->get_SRView());
+	}
+#else
 	set_viewport_size(HW.pContext, 512, 512);
 
 	u_setrt(rt_ssfx_water_waves, 0, 0, NULL);
@@ -536,6 +585,7 @@ void CRenderTarget::phase_ssfx_water_waves()
 	RCache.set_c("wind_setup", g_pGamePersistent->Environment().wind_anim.w, g_pGamePersistent->Environment().CurrentEnv->wind_velocity, 0, 0);
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+#endif
 
 	set_viewport_size(HW.pContext, w, h);
 };

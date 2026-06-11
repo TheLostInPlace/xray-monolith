@@ -552,10 +552,22 @@ void CBlender_ssfx_water_blur::Compile(CBlender_Compile& C)
 		C.r_End();
 		break;
 
+	case 4:	// SSS UPDATE 24 -- Water Waves build (normals from the tmp heightfield; binary E[4])
+		C.r_Pass("stub_screen_space", "ssfx_water_waves_build", FALSE, FALSE, FALSE);
+
+		C.r_dx10Texture("water_waves", "$user$ssfx_water_waves_tmp");
+		C.r_dx10Texture("water_n0", "fx\\water_normal");
+		C.r_dx10Texture("water_n1", "water\\water_normal");
+
+		C.r_dx10Sampler("smp_linear");
+		C.r_End();
+		break;
+
 	case 5:	// Water Waves
 		C.r_Pass("stub_screen_space", "ssfx_water_waves", FALSE, FALSE, FALSE);
 
 		C.r_dx10Texture("water_waves", "fx\\water_height");
+		C.r_dx10Texture("water_n0", "fx\\water_normal"); // SSS UPDATE 24
 
 		C.r_dx10Sampler("smp_linear");
 		C.r_End();

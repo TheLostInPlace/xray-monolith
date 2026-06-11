@@ -659,7 +659,7 @@ CRenderTarget::CRenderTarget()
 		rt_ssfx_volumetric.create(r2_RT_ssfx_volumetric, w / 8.0f, h / 8.0f, D3DFMT_A16B16G16R16F); // Volumetric
 		rt_ssfx_volumetric_tmp.create(r2_RT_ssfx_volumetric_tmp, w / 8.0f, h / 8.0f, D3DFMT_A16B16G16R16F); // Volumetric
 		rt_ssfx_rain.create(r2_RT_ssfx_rain, w / 8.0f, h / 8.0f, D3DFMT_A8R8G8B8); // Rain refraction buffer
-		rt_ssfx_water_waves.create(r2_RT_ssfx_water_waves, 512, 512, D3DFMT_A8R8G8B8); // Water Waves
+		rt_ssfx_water_waves.create(r2_RT_ssfx_water_waves, 256, 256, D3DFMT_A8R8G8B8, u32(-1)); // SSS UPDATE 24 -- 256x256 + full mip chain (GenerateMips in phase_ssfx_water_waves)
 		// SSS UPDATE 24 -- specs binary-confirmed (CRenderTarget ctor dump)
 		rt_ssfx_water_waves_tmp.create("$user$ssfx_water_waves_tmp", 256, 256, D3DFMT_A8R8G8B8);   // waves build/ping-pong
 		rt_ssfx_rain_ripples.create("$user$ssfx_rain_ripples", 512, 512, D3DFMT_A16B16G16R16F);    // rain ripples
