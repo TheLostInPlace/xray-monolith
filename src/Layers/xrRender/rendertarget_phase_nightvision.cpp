@@ -212,11 +212,22 @@ void CRenderTarget::phase_heatvision()
 #if defined(USE_DX11)	//  Redotix99: for 3D Shader Based Scopes 		(sorry for using the nightvision phase file)
 void CRenderTarget::phase_3DSSReticle()
 {
+#if RENDER == R_R4
+	// SSS UPDATE 24 -- binary: s_position feed (generic2 <- position), then scene_final <- scene_aa
+	// (the reticle shader samples s_prev_frame = "$user$scene_final" for the behind-glass image),
+	// and the reticle geometry is drawn into rt_sceneAA alone with NO depth buffer bound.
+	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
+
+	HW.pContext->CopyResource(rt_sceneFinal->pTexture->surface_get(), rt_sceneAA->pTexture->surface_get());
+
+	u_setrt(rt_sceneAA, 0, 0, 0);
+#else
 	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
 
 	HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0->pTexture->surface_get());
 
 	u_setrt(RImplementation.Target->rt_Generic_0, RImplementation.Target->rt_Position, 0, HW.pBaseZB);
+#endif
 
 	RCache.set_CullMode(CULL_CCW);
 	RCache.set_Stencil(FALSE);
