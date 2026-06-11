@@ -49,3 +49,14 @@ REMAINING "LAST MILE" (for true sub-native upscaling; DLAA works without it)
   - When ps_ssfx_upscaler == 2, skip the SMAA/TAA passes in phase_combine.
   - Confirm rt_sceneAA gets a UAV (DLSS writes it via compute).
   See docs/streamline_dlss_integration_plan.md "last mile" notes.
+
+=== STATUS 2026-06-11 (commit 6d45ca80) ===
+WORKING: menus + world via the scene_aa/scene_final gamedata shader contract; DLSS DLAA
+(binary-exact consts); live off/dlss toggle; cascade per-cascade resolution; m_SMAP_res
+binder (fixes NaN sun-shadow filtering); combine_2 samples $user$scene_aa directly.
+PENDING PORTS (specs in claude memory + IDA dumps):
+ 1. Per-cascade sun shadowmaps rt_sun_smap_depth[3] ("$user$sun_smap_depth0..2",
+    clamp(res,512,4096)) -> then re-enable the cascade stagger in R_sun.cpp (if(false)).
+ 2. phase_ssfx_rain_ripples / SSS24 phase_ssfx_water_waves (RTs+blender specs known).
+ 3. ssfx_upscaler_sharp pass (ssfx_taa_sharp, s_current=scene_aa).
+ 4. SL_SUBNATIVE=1: scene at Real_*, post at Target_* via scene_aa (combine binding done).
