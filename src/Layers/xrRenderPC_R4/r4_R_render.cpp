@@ -344,7 +344,11 @@ void CRender::Render()
 		FLOAT ColorRGBA[4] = { 0,0,0,0 };
 		HW.pContext->ClearRenderTargetView(Target->rt_ssfx_bloom_emissive->pRT, ColorRGBA);
 		Target->u_setrt(Target->rt_ssfx_bloom_emissive, NULL, NULL, !RImplementation.o.dx10_msaa ? HW.pBaseZB : Target->rt_MSAADepth->pZRT);
-		GMBase.r_dsgraph_render_emissive(true, true);
+		// SSS UPDATE 24 bloom fix: HUD emissives (collimator dots, PDA screen) must NOT be rendered into
+		// the bloom emissive buffer -- the bloom build handles HUD via its s_hud_mask (mvec HUD channel)
+		// instead. Rendering them here double-counts them unmasked -> the SSS23-era HUD bloom blowout.
+		// (Binary: r_dsgraph_render_emissive(1, v271) -- second arg pending exact verification.)
+		GMBase.r_dsgraph_render_emissive(true, false);
 	}
 
 	// Lighting, non dependant on OCCQ
