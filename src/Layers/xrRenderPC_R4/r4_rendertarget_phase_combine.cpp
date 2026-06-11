@@ -555,18 +555,27 @@ void CRenderTarget::phase_combine()
 	phase_lut();	
 
 #if HAS_STREAMLINE
-	// SSS UPDATE 24 -- DLSS upscale (plan Addendum D). When DLSS is the active upscaler, upscale rt_Generic_0
-	// (+ depth + motion vectors) into rt_sceneAA, then copy back so the existing post/present path displays it.
-	// NOTE on activation: skip the SMAA/TAA passes below when ps_ssfx_upscaler == 2, and for true sub-native
-	// upscaling render the scene at Real_* with rt_sceneAA sampled downstream (the "last mile", see plan doc).
-	if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit)
+	// SSS UPDATE 24 -- DLSS upscale (plan Addendum D). Upscale rt_Generic_0 (+ depth + motion vectors)
+	// into rt_sceneAA, then copy back so the existing post/present path displays it. Entirely inert
+	// unless DLSS is the active upscaler -- the non-DLSS path must not touch GPU state here.
+	if (ps_ssfx_upscaler == 2 && g_SLWrapper.m_bDlssInit && rt_tempzb && rt_sceneAA)
 	{
 		g_SLWrapper.EndSceneResolution(); // back to Target_* for the upscale output + post/UI
+
 		ID3D11Resource* zres = nullptr;
 		HW.pBaseZB->GetResource(&zres);
 		if (zres) { HW.pContext->CopyResource(rt_tempzb->pSurface, zres); zres->Release(); }
-		g_SLWrapper.SL_DLSS_Evaluate();
-		HW.pContext->CopyResource(rt_Generic_0->pSurface, rt_sceneAA->pSurface);
+
+		const bool upscaled = g_SLWrapper.SL_DLSS_Evaluate();
+
+		// DLSS evaluate runs compute on our immediate context and clobbers pipeline state; SL does not
+		// restore it (eDisableCLStateTracking is the default). Resync the engine's state cache so the
+		// passes below rebind everything instead of trusting stale cached state.
+		RCache.Invalidate();
+
+		// Only show the DLSS output if the evaluation actually succeeded -- otherwise keep rt_Generic_0.
+		if (upscaled)
+			HW.pContext->CopyResource(rt_Generic_0->pSurface, rt_sceneAA->pSurface);
 	}
 #endif
 

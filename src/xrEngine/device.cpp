@@ -98,6 +98,10 @@ BOOL CRenderDevice::Begin()
 
 	FPU::m24r();
 	g_bRendering = true;
+
+    // --- NVIDIA STREAMLINE HOOK ---
+    // Drop the engine's internal math down to the DLSS sub-native render scale
+    g_SLWrapper.BeginSceneResolution();
 #endif
 	return TRUE;
 }

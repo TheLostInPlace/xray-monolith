@@ -32,11 +32,30 @@ public:
 		return (RImplementation.o.dx10_msaa_alphatest == CRender::MSAA_ATEST_DX10_0_ATOC);
 	}
 
-	LPCSTR _get_level()
-	{
-		const shared_str level_name = g_pGameLevel->name();
-		return level_name.c_str();
-	}
+	//LPCSTR _get_level()
+	//{
+		//const shared_str level_name = g_pGameLevel->name();
+		//return level_name.c_str();
+	//}
+
+    LPCSTR _get_level()
+    {
+        // 1. Safely verify the level object exists in memory
+        if (g_pGameLevel)
+        {
+            // 2. Extract the X-Ray string object
+            const shared_str level_name = g_pGameLevel->name();
+
+            // 3. Verify it has content before returning
+            if (level_name.size() > 0)
+            {
+                return level_name.c_str();
+            }
+        }
+
+        // 4. Safe fallback for when SSS evaluates shaders before the level loads
+        return "";
+    }
 };
 
 // wrapper

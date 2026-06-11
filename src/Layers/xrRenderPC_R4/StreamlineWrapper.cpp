@@ -95,6 +95,9 @@ void SLWrapper::SL_Init()
     pref.numFeaturesToLoad = _countof(feats);
     pref.applicationId     = 231313132; // binary-confirmed
     pref.renderAPI         = sl::RenderAPI::eD3D11;
+    // REQUIRED for slSetTagForFrame (without it DLSS gets no resources -> eErrorMissingInputParameter).
+    // Matches the binary: Preferences flags field == 128 == 1<<7.
+    pref.flags             = sl::PreferenceFlags::eUseFrameBasedResourceTagging;
 
     sl::Result r = slInit(pref, sl::kSDKVersion); // SDK 2.10
     if (r != sl::Result::eOk)
@@ -132,6 +135,7 @@ void SLWrapper::SL_Init()
     }
 
     SL_Reflex_Init();
+    Device.slDoPCL = m_SLInit; // enable PCL latency markers once Streamline is live
     // FSR3Wrapper::InitFSR3();  // separate AMD path, intentionally not ported here.
 #endif
 }
@@ -221,11 +225,11 @@ void SLWrapper::SL_Reflex_Init() // plan Section 3 (corrected)
 }
 
 // ----------------------------------------------------------------------------------------------------
-void SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D call site
+bool SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D call site
 {
 #if HAS_STREAMLINE
     if (!m_bDlssInit)
-        return;
+        return false;
 
     sl::Constants consts{};
     consts.mvecScale.x = -1.0f;
@@ -265,7 +269,19 @@ void SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D ca
     const sl::BaseStructure* evalInputs[1] = { &g_sl_viewport };
     sl::Result r = slEvaluateFeature(sl::kFeatureDLSS, *SL_Frame(), evalInputs, 1, HW.pContext);
     if (r != sl::Result::eOk)
-        Msg("! NV Streamline : Failed the DLSS evaluation [ %s ]", sl::getResultAsStr(r));
+    {
+        // Log once -- this runs every frame; per-frame Msg() tanks the framerate via log I/O.
+        static sl::Result last_logged = sl::Result::eOk;
+        if (r != last_logged)
+        {
+            Msg("! NV Streamline : Failed the DLSS evaluation [ %s ]", sl::getResultAsStr(r));
+            last_logged = r;
+        }
+        return false;
+    }
+    return true;
+#else
+    return false;
 #endif
 }
 

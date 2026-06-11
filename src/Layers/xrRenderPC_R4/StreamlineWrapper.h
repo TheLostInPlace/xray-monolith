@@ -36,7 +36,7 @@ public:
     void SL_Init();          // CRender::create   -- slInit, slSetD3DDevice, DLSS support, then Reflex
     void SL_DLSS_Init();     // CRender::create / on preset change -- slDLSSSetOptions (Update_DLSSOptions)
     void SL_Reflex_Init();   // CRender::create / on ssfx_reflex change -- Reflex support + slReflexSetOptions
-    void SL_DLSS_Evaluate(); // CRenderTarget::phase_combine (ps_ssfx_upscaler == 2) -- the upscale pass
+    bool SL_DLSS_Evaluate(); // CRenderTarget::phase_combine (ps_ssfx_upscaler == 2); true if the upscale ran
     void SL_Shutdown();      // CRenderDevice::Destroy -- slShutdown
 
     // Per-frame helpers so xrEngine hook sites stay SDK-free (plan Addendum A4):
