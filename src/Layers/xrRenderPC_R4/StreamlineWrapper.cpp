@@ -273,11 +273,9 @@ void SLWrapper::SL_DLSS_Init() // == binary SLWrapper::Update_DLSSOptions (plan 
     opt.sharpness       = 0.0f;
     opt.preExposure     = 1.0f;
     opt.exposureScale   = 1.0f;
-    // Our DLSS input (rt_Generic_0 post-lut) is already tonemapped/graded LDR; auto-exposure on such an
-    // image re-darkens it (observed: "very dark with smudged light sources"). The binary passes eTrue, but
-    // its input sits in the SSS 24 chain with different exposure characteristics -- for our chain eFalse
-    // with preExposure 1.0 is the correct post-tonemap configuration (NVIDIA DLSS programming guide).
-    opt.useAutoExposure = sl::Boolean::eFalse;
+    // BINARY-EXACT (Update_DLSSOptions dump): useAutoExposure = true. Our input is the same post-lut
+    // rt_Generic_0 the binary feeds; match it.
+    opt.useAutoExposure = sl::Boolean::eTrue;
 
     sl::Result r = slDLSSSetOptions(g_sl_viewport, opt);
     if (r != sl::Result::eOk)
@@ -348,12 +346,12 @@ bool SLWrapper::SL_DLSS_Evaluate() // plan Section 4 (corrected) + Addendum D ca
     consts.cameraNear  = Device.ViewportNear;
     consts.cameraFar   = g_pGamePersistent->pEnvironment->CurrentEnv->far_plane; // verify field on activation
 
-    // Must equal the GEOMETRY jitter actually applied by the shaders (ssfx_jitter binder feeds
-    // 2*Halton/Real_* in clip space, scaled by ps_ssfx_taa.y -> in pixel units that is Halton * taa.y).
-    // Clip-space +y is up, pixel +y is down, hence the y negation.
+    // BINARY-EXACT (SL_DLSS_Evaluate dump): raw Halton, +x / -y, no extra scaling. The binary runs the
+    // same gamedata shaders (ssfx_taa_jitter applies the binder constant directly) and works with these
+    // values -- ground truth beats derivation.
     const u32 j = Device.dwFrame % 72;
-    consts.jitterOffset.x =  Device.HaltonJittering[j].x * ps_ssfx_taa.y;
-    consts.jitterOffset.y = -Device.HaltonJittering[j].y * ps_ssfx_taa.y;
+    consts.jitterOffset.x =  Device.HaltonJittering[j].x;
+    consts.jitterOffset.y = -Device.HaltonJittering[j].y;
 
     consts.cameraFOV         = Device.fFOV * (3.14159265f / 180.0f);          // CORRECTED: no * 0.5
     consts.cameraAspectRatio = (float)Device.Real_Width / (float)Device.Real_Height;
