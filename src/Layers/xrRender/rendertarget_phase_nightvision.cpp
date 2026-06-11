@@ -276,11 +276,16 @@ void CRenderTarget::phase_3DSSReticle()
 	// hands). DELIBERATE DEVIATION: we bind pBaseZB read-compatible so that a gamedata fix of
 	// zb(true, false) in the reticle .s gets real engine depth occlusion. With the stock SSS24
 	// zb(false, false) shaders a bound DSV changes nothing (depth ops disabled by state) = parity.
+	// SAFEGUARD: only at Real == Target (DLAA/native). At sub-native the scene/hands depth occupies
+	// the Real_* subrect of pBaseZB while the lens draws at the Target_* viewport -- a bound DSV
+	// would test against the wrong pixels and could clip the lens. Sub-native falls back to the
+	// binary behavior (no DSV; manual hudtest occlusion only).
 	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
 
 	HW.pContext->CopyResource(rt_sceneFinal->pTexture->surface_get(), rt_sceneAA->pTexture->surface_get());
 
-	u_setrt(rt_sceneAA, 0, 0, HW.pBaseZB);
+	const bool depth_matches_output = (Device.Real_Width == Device.Target_Width && Device.Real_Height == Device.Target_Height);
+	u_setrt(rt_sceneAA, 0, 0, depth_matches_output ? HW.pBaseZB : nullptr);
 #else
 	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
 
