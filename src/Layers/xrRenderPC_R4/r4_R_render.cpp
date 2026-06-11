@@ -70,6 +70,10 @@ void CRender::Render()
 	bool _menu_pp = g_pGamePersistent ? g_pGamePersistent->OnRenderPPUI_query() : false;
 	if (_menu_pp)
 	{
+		// SSS UPDATE 24 -- the menu path never reaches phase_combine (where EndSceneResolution lives), so
+		// without this the menu UI renders with dwWidth/dwHeight stuck at Real_* -> black/garbage menu
+		// while the 3D world is fine.
+		g_SLWrapper.EndSceneResolution();
 		render_menu();
 		return;
 	};

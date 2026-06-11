@@ -399,7 +399,41 @@ int   ps_ssfx_upscaler         = 0;    // 0 = off, 1 = FSR, 2 = DLSS
 int   ps_r_upscaler_qual_token = 1;    // 1 = DLAA/NativeAA, 2 = Quality, 3 = Balanced, 4 = Performance, 5 = Ultra Performance
 float ps_ssfx_upscaler_sharp   = 0.0f; // post-upscale sharpening amount
 int   ps_ssfx_reflex           = 0;    // 0 = off, 1 = low-latency, 2 = low-latency + boost
-int   ps_r_dlsspreset_token    = 0;    // DLSS preset (0 = default)
+int   ps_r_dlsspreset_token    = 0;    // sl::DLSSPreset value
+int   ps_ssfx_upscaler_automipmap = 1; // auto texture mip bias from the render scale
+
+// Live re-apply hooks, set by StreamlineWrapper.cpp (R4); stay null in render layers without Streamline.
+sl_console_hook_fn g_sl_on_upscaler_change = nullptr;
+sl_console_hook_fn g_sl_on_preset_change   = nullptr;
+sl_console_hook_fn g_sl_on_reflex_change   = nullptr;
+
+// Token / integer commands that re-apply Streamline options when changed at runtime (the binary's
+// CCC_Upscaling_Mode / CCC_DlssPreset_Mode / CCC_NvReflex behave the same way).
+class CCC_SLToken : public CCC_Token
+{
+	sl_console_hook_fn* hook;
+public:
+	CCC_SLToken(LPCSTR N, u32* V, xr_token* T, sl_console_hook_fn* h) : CCC_Token(N, V, T), hook(h) {}
+	virtual void Execute(LPCSTR args) { CCC_Token::Execute(args); if (*hook) (*hook)(); }
+};
+class CCC_SLInteger : public CCC_Integer
+{
+	sl_console_hook_fn* hook;
+public:
+	CCC_SLInteger(LPCSTR N, int* V, int _min, int _max, sl_console_hook_fn* h) : CCC_Integer(N, V, _min, _max), hook(h) {}
+	virtual void Execute(LPCSTR args) { CCC_Integer::Execute(args); if (*hook) (*hook)(); }
+};
+
+// Names confirmed from the SSS 24 binary strings; ids are sl::DLSSPreset values.
+xr_token ssfx_dlss_preset_token[] = {
+	{ "default",  0 },
+	{ "preset_f", 6 },
+	{ "preset_j", 10 },
+	{ "preset_k", 11 },
+	{ "preset_l", 12 },
+	{ "preset_m", 13 },
+	{ 0, 0 }
+};
 
 xr_token ssfx_upscaler_token[] = {
 	{ "off",  0 },
@@ -1388,12 +1422,14 @@ void xrRender_initconsole()
 	CMD4(CCC_Vector4, "ssfx_floravariation", &ps_ssfx_floravariation, Fvector4().set(0, 0, 0, 0), Fvector4().set(10, 1, 10, 1));
 	CMD4(CCC_Vector4, "ssfx_taa", &ps_ssfx_taa, Fvector4().set(0, 0, 0, 0), Fvector4().set(1, 1, 2, 1));
 
-	// SSS UPDATE 24 -- upscalers (DLSS / FSR3) + NVIDIA Reflex
-	CMD3(CCC_Token,   "ssfx_upscaler",            (u32*)&ps_ssfx_upscaler,         ssfx_upscaler_token);
-	CMD3(CCC_Token,   "ssfx_upscaler_resolution", (u32*)&ps_r_upscaler_qual_token, ssfx_upscaler_res_token);
+	// SSS UPDATE 24 -- upscalers (DLSS / FSR3) + NVIDIA Reflex. Changing these at runtime re-applies the
+	// Streamline options live through the g_sl_on_* hooks.
+	{ static CCC_SLToken   c("ssfx_upscaler",            (u32*)&ps_ssfx_upscaler,          ssfx_upscaler_token,     &g_sl_on_upscaler_change); Console->AddCommand(&c); }
+	{ static CCC_SLToken   c("ssfx_upscaler_resolution", (u32*)&ps_r_upscaler_qual_token,  ssfx_upscaler_res_token, &g_sl_on_upscaler_change); Console->AddCommand(&c); }
+	{ static CCC_SLToken   c("ssfx_dlss_preset",         (u32*)&ps_r_dlsspreset_token,     ssfx_dlss_preset_token,  &g_sl_on_preset_change);   Console->AddCommand(&c); }
+	{ static CCC_SLInteger c("ssfx_reflex",              &ps_ssfx_reflex,            0, 2, &g_sl_on_reflex_change);   Console->AddCommand(&c); }
+	{ static CCC_SLInteger c("ssfx_upscaler_automipmap", &ps_ssfx_upscaler_automipmap, 0, 1, &g_sl_on_upscaler_change); Console->AddCommand(&c); }
 	CMD4(CCC_Float,   "ssfx_upscaler_sharp",      &ps_ssfx_upscaler_sharp,         0.0f, 1.0f);
-	CMD4(CCC_Integer, "ssfx_reflex",              &ps_ssfx_reflex,                 0,    2);
-	CMD4(CCC_Integer, "ssfx_dlss_preset",         &ps_r_dlsspreset_token,          0,    7);
 	CMD4(CCC_Vector4, "ssfx_motionblur", &ps_ssfx_motionblur, Fvector4().set(1, 0, 0, 0), Fvector4().set(16, 2, 1, 100));
 	CMD4(CCC_Float, "ssfx_fog_scattering", &ps_ssfx_fog_scattering, 0, 1);
 	CMD4(CCC_Vector4, "ssfx_fog", &ps_ssfx_fog, Fvector4().set(0, 0, 0, 0), Fvector4().set(20, 5, 1, 100));

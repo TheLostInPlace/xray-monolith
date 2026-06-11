@@ -12,9 +12,17 @@ extern ECORE_API int ps_ssfx_upscaler;         // 0 = off, 1 = FSR, 2 = DLSS
 extern ECORE_API int ps_r_upscaler_qual_token; // 1 = DLAA/NativeAA .. 5 = Ultra Performance
 extern ECORE_API float ps_ssfx_upscaler_sharp; // post-upscale sharpening amount
 extern ECORE_API int ps_ssfx_reflex;           // 0 = off, 1 = low-latency, 2 = low-latency + boost
-extern ECORE_API int ps_r_dlsspreset_token;    // DLSS preset (0 = default)
+extern ECORE_API int ps_r_dlsspreset_token;    // sl::DLSSPreset value (0 = default, 6 = F, 10..13 = J..M)
+extern ECORE_API int ps_ssfx_upscaler_automipmap; // 1 = auto texture mip bias from the render scale
 extern ECORE_API xr_token ssfx_upscaler_token[];
 extern ECORE_API xr_token ssfx_upscaler_res_token[];
+extern ECORE_API xr_token ssfx_dlss_preset_token[];
+
+// Streamline live re-apply hooks; assigned by the R4 render layer (StreamlineWrapper.cpp), null elsewhere.
+typedef void (*sl_console_hook_fn)();
+extern sl_console_hook_fn g_sl_on_upscaler_change;
+extern sl_console_hook_fn g_sl_on_preset_change;
+extern sl_console_hook_fn g_sl_on_reflex_change;
 
 extern ECORE_API Fvector4 ps_ssfx_rain_drops_setup;
 extern ECORE_API int ps_ssfx_terrain_grass_align;

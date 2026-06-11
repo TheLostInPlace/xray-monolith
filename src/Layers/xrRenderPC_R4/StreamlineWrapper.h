@@ -53,6 +53,10 @@ public:
     // No-op unless HAS_STREAMLINE and ps_ssfx_upscaler == 2 (DLSS). See r4_R_render.cpp / phase_combine.
     void BeginSceneResolution();
     void EndSceneResolution();
+
+    // Texture mip LOD bias = log2(Real/Target) when upscaling (ssfx_upscaler_automipmap); routed through
+    // the engine's existing r__tf_mipbias command so samplers update live.
+    void ApplyAutoMipBias();
 };
 
 extern SLWrapper g_SLWrapper;

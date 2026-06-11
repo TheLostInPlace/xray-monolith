@@ -22,12 +22,51 @@
 #include "r4_rendertarget.h"
 #include "../../xrEngine/igame_persistent.h"
 #include "../../xrEngine/environment.h"
+#include "../../xrEngine/xr_ioconsole.h" // Console->Execute for r__tf_mipbias
 
 // File-scope viewport handle (in the original binary this is a global, not a member).
 static sl::ViewportHandle g_sl_viewport{ 0 };
 
 // Device.PCL_currentFrame is stored as void* (so xrEngine stays free of the SL SDK); cast it back here.
 static inline sl::FrameToken* SL_Frame() { return reinterpret_cast<sl::FrameToken*>(Device.PCL_currentFrame); }
+
+// ---- console live re-apply hooks (g_sl_on_* in xrRender_console) -------------------------------------
+static void sl_hook_upscaler_change()
+{
+    if (!HW.pDevice) return; // before device creation CRender::create handles everything
+    if (ps_ssfx_upscaler == 2 && !g_SLWrapper.m_SLInit)
+        g_SLWrapper.SL_Init(); // upscaler enabled at runtime -> full bring-up
+    if (ps_ssfx_upscaler == 0)
+    {
+        Device.Real_Width  = Device.Target_Width;
+        Device.Real_Height = Device.Target_Height;
+        Device.Current_RenderScale = 1.0f;
+    }
+    else
+        g_SLWrapper.UpdateRenderScale();
+    if (g_SLWrapper.m_bDlssInit)
+        g_SLWrapper.SL_DLSS_Init(); // re-apply mode/output options
+    g_SLWrapper.ApplyAutoMipBias();
+}
+static void sl_hook_preset_change()
+{
+    if (g_SLWrapper.m_bDlssInit)
+        g_SLWrapper.SL_DLSS_Init(); // binary: CCC_DlssPreset_Mode -> Update_DLSSOptions
+}
+static void sl_hook_reflex_change()
+{
+    if (g_SLWrapper.m_SLInit)
+        g_SLWrapper.SL_Reflex_Init(); // binary: CCC_NvReflex -> slReflexSetOptions live
+}
+static struct SLConsoleHookInit
+{
+    SLConsoleHookInit()
+    {
+        g_sl_on_upscaler_change = sl_hook_upscaler_change;
+        g_sl_on_preset_change   = sl_hook_preset_change;
+        g_sl_on_reflex_change   = sl_hook_reflex_change;
+    }
+} s_sl_console_hook_init;
 #endif // HAS_STREAMLINE
 
 SLWrapper g_SLWrapper;
@@ -136,7 +175,24 @@ void SLWrapper::SL_Init()
 
     SL_Reflex_Init();
     Device.slDoPCL = m_SLInit; // enable PCL latency markers once Streamline is live
+    ApplyAutoMipBias();
     // FSR3Wrapper::InitFSR3();  // separate AMD path, intentionally not ported here.
+#endif
+}
+
+// ----------------------------------------------------------------------------------------------------
+void SLWrapper::ApplyAutoMipBias()
+{
+#if HAS_STREAMLINE
+    if (!ps_ssfx_upscaler_automipmap || !Console)
+        return;
+    float bias = 0.0f;
+    if (ps_ssfx_upscaler && Device.Target_Width && Device.Real_Width < Device.Target_Width)
+        bias = log2f((float)Device.Real_Width / (float)Device.Target_Width); // negative when sub-native
+    string128 cmd;
+    xr_sprintf(cmd, "r__tf_mipbias %.2f", bias);
+    Console->Execute(cmd); // CCC_tf_MipBias applies it to the samplers live
+    Msg("- UPSCALING : Auto Mip-Map Bias [ %f ]", bias);
 #endif
 }
 
