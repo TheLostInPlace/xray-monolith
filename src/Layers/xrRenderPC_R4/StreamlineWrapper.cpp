@@ -106,10 +106,11 @@ void SLWrapper::SL_SetupResolution()
     Device.Target_Width  = Device.dwWidth;  // current video mode = output resolution
     Device.Target_Height = Device.dwHeight;
     UpdateRenderScale();
-    if (Device.Real_Width != Device.Target_Width)
-        Msg("- UPSCALING : render %ux%u -> output %ux%u [ %.0f%% ]",
-            Device.Real_Width, Device.Real_Height, Device.Target_Width, Device.Target_Height,
-            Device.Current_RenderScale * 100.0f);
+    // Always log the full state -- this is the ground truth for diagnosing render-path issues.
+    Msg("- UPSCALING : setup [ upscaler=%d resolution_token=%d preset=%d ] render %ux%u -> output %ux%u [ %.0f%% ]",
+        ps_ssfx_upscaler, ps_r_upscaler_qual_token, ps_r_dlsspreset_token,
+        Device.Real_Width, Device.Real_Height, Device.Target_Width, Device.Target_Height,
+        Device.Current_RenderScale * 100.0f);
 }
 
 // ----------------------------------------------------------------------------------------------------
