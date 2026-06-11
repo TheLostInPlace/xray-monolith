@@ -764,6 +764,10 @@ void CRenderTarget::phase_combine()
 			sl_pp_alias = true;
 		}
 		g_SLWrapper.EndSceneResolution(); // dwWidth/dwHeight -> Target_* for the final backbuffer blit
+		// CRITICAL: changing dwWidth alone does not touch the D3D viewport -- the frame is still running
+		// with the Real_* viewport, so without this the final blit lands in a Real_*-sized corner of the
+		// backbuffer. The binary does exactly this with its custom_viewport RSSetViewports calls.
+		set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
 	}
 #endif
 

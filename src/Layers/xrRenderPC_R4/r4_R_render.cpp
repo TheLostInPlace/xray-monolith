@@ -71,9 +71,10 @@ void CRender::Render()
 	if (_menu_pp)
 	{
 		// SSS UPDATE 24 -- the menu path never reaches phase_combine (where EndSceneResolution lives), so
-		// without this the menu UI renders with dwWidth/dwHeight stuck at Real_* -> black/garbage menu
-		// while the 3D world is fine.
+		// without this the menu UI renders with dwWidth/dwHeight stuck at Real_* and, critically, with the
+		// Real_* D3D viewport still applied (changing dwWidth alone does not update it) -> black menu.
 		g_SLWrapper.EndSceneResolution();
+		Target->set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
 		render_menu();
 		return;
 	};
