@@ -293,8 +293,10 @@ void CDSGraphManager::r_dsgraph_render_ScopeSorted()  //  Redotix99: for 3D Shad
 // skips visuals with iScopeLense == 1 (the lens glass itself, flags & 0x600 == 0x200) and hand
 // visuals, overrides each element with Target->s_ssfx_hud[skinning]->E[0], and does NOT clear the
 // map (it is rendered normally later in PART-1). Viewport depth range 0..0.02 (rmNear), restored after.
-// NOTE: binary reads skinning from the SSS24-added SVS::skinning and skips pVisual->ishand (member
-// we do not have); we use the visual's own skinning stream count, hands are not skipped.
+// NOTE: binary reads skinning from the SSS24-added SVS::skinning; we use the visual's own skinning
+// stream count (same value). The binary also checks pVisual->ishand -- but that member has NO writes
+// anywhere in the binary (verified via member xref), so it is always false and hands are never
+// skipped there either. Not porting the check is exact parity.
 void CDSGraphManager::r_dsgraph_render_hudfull()
 {
 #if RENDER == R_R4
