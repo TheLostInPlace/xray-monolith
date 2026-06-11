@@ -1185,7 +1185,7 @@ void xrRender_initconsole()
 
 	Fvector tw_min, tw_max;
 
-	CMD4(CCC_Float, "r__geometry_lod", &ps_r__LOD, 0.1f, 1.5f);
+	CMD4(CCC_Float, "r__geometry_lod", &ps_r__LOD, 0.1f, 2.5f); // SSS UPDATE 24 -- binary range
 	//.	CMD4(CCC_Float,		"r__geometry_lod_pow",	&ps_r__LOD_Power,			0,		2		);
 
 	//.	CMD4(CCC_Float,		"r__detail_density",	&ps_r__Detail_density,		.05f,	0.99f	);
@@ -1447,10 +1447,10 @@ void xrRender_initconsole()
 	{ static CCC_SLToken   c("ssfx_dlss_preset",         (u32*)&ps_r_dlsspreset_token,     ssfx_dlss_preset_token,  &g_sl_on_preset_change);   Console->AddCommand(&c); }
 	{ static CCC_SLToken   c("ssfx_reflex",              (u32*)&ps_ssfx_reflex,            ssfx_reflex_token,       &g_sl_on_reflex_change);   Console->AddCommand(&c); }
 	{ static CCC_SLInteger c("ssfx_upscaler_automipmap", &ps_ssfx_upscaler_automipmap, 0, 1, &g_sl_on_upscaler_change); Console->AddCommand(&c); }
-	CMD4(CCC_Float,   "ssfx_upscaler_sharp",      &ps_ssfx_upscaler_sharp,         0.0f, 1.0f);
-	CMD4(CCC_Vector4, "ssfx_cascades_resolution", &ps_ssfx_cascades_resolution, Fvector4().set(0, 0, 0, 0), Fvector4().set(8192, 8192, 8192, 0));
-	CMD4(CCC_Vector4, "ssfx_cascades_delay",      &ps_ssfx_cascades_delay,      Fvector4().set(0, 0, 0, 0), Fvector4().set(10, 10, 10, 0));
-	CMD4(CCC_Vector4, "ssfx_flowmap_setup",       &ps_ssfx_flowmap_setup,       Fvector4().set(-100, -100, -100, -100), Fvector4().set(100, 100, 100, 100));
+	CMD4(CCC_Float,   "ssfx_upscaler_sharp",      &ps_ssfx_upscaler_sharp,         0.0f, 2.0f); // SSS UPDATE 24 -- binary range
+	CMD4(CCC_Vector4, "ssfx_cascades_resolution", &ps_ssfx_cascades_resolution, Fvector4().set(0, 0, 0, 0), Fvector4().set(4096, 4096, 4096, 0)); // SSS UPDATE 24 -- binary range
+	CMD4(CCC_Vector4, "ssfx_cascades_delay",      &ps_ssfx_cascades_delay,      Fvector4().set(0, 0, 0, 0), Fvector4().set(5, 5, 5, 0)); // SSS UPDATE 24 -- binary range
+	CMD4(CCC_Vector4, "ssfx_flowmap_setup",       &ps_ssfx_flowmap_setup,       Fvector4().set(-1, -1, -1, -1), Fvector4().set(1, 1, 1, 1)); // SSS UPDATE 24 -- binary range
 	CMD4(CCC_Vector4, "ssfx_motionblur", &ps_ssfx_motionblur, Fvector4().set(1, 0, 0, 0), Fvector4().set(16, 2, 1, 100));
 	CMD4(CCC_Float, "ssfx_fog_scattering", &ps_ssfx_fog_scattering, 0, 1);
 	CMD4(CCC_Vector4, "ssfx_fog", &ps_ssfx_fog, Fvector4().set(0, 0, 0, 0), Fvector4().set(20, 5, 1, 100));
@@ -1467,7 +1467,7 @@ void xrRender_initconsole()
 	CMD4(CCC_Vector4, "ssfx_bloom_1", &ps_ssfx_bloom_1, Fvector4().set(1, 1, 0, 0), Fvector4().set(10, 100, 100, 10));
 	CMD4(CCC_Vector4, "ssfx_bloom_2", &ps_ssfx_bloom_2, Fvector4().set(1, 0, 0, 0), Fvector4().set(5, 10, 10, 10));
 	CMD4(CCC_Vector4, "ssfx_sss_quality", &ps_ssfx_sss_quality, Fvector4().set(1, 1, 0, 0), Fvector4().set(24, 12, 1, 1));
-	CMD4(CCC_Vector4, "ssfx_sss", &ps_ssfx_sss, Fvector4().set(0, 0, 0, 0), Fvector4().set(3, 3, 1, 1));
+	CMD4(CCC_Vector4, "ssfx_sss", &ps_ssfx_sss, Fvector4().set(0, 0, 0, 0), Fvector4().set(3, 3, 1, 2)); // SSS UPDATE 24 -- binary range (w max 2)
 
 	CMD4(CCC_Float, "ssfx_hud_hemi", &ps_ssfx_hud_hemi, 0.0f, 1.0f);
 
@@ -1479,9 +1479,9 @@ void xrRender_initconsole()
 	CMD4(CCC_Vector4, "ssfx_ao", &ps_ssfx_ao, Fvector4().set(0, 0, 0, 0), Fvector4().set(8, 10, 1, 10));
 	CMD4(CCC_Vector4, "ssfx_ao_setup1", &ps_ssfx_ao_setup1, Fvector4().set(0, 0, 0, 0), Fvector4().set(300, 1, 1, 1));
 
-	CMD4(CCC_Vector4, "ssfx_water", &ps_ssfx_water, Fvector4().set(1, 0, 0, 0), Fvector4().set(8, 1, 1, 0));
+	CMD4(CCC_Vector4, "ssfx_water", &ps_ssfx_water, Fvector4().set(1, 0, 0, 0.1f), Fvector4().set(8, 1, 1, 2)); // SSS UPDATE 24 -- binary range (w 0.1..2)
 	CMD4(CCC_Vector3, "ssfx_water_quality", &ps_ssfx_water_quality, Fvector3().set(0, 0, 0), Fvector3().set(4, 3, 0));
-	CMD4(CCC_Vector4, "ssfx_water_setup1", &ps_ssfx_water_setup1, Fvector4().set(0, 0, 0, 0), Fvector4().set(2, 10, 1, 0.1));
+	CMD4(CCC_Vector4, "ssfx_water_setup1", &ps_ssfx_water_setup1, Fvector4().set(0, 0, 0, 0), Fvector4().set(2, 10, 3, 0.1)); // SSS UPDATE 24 -- binary range (z max 3)
 	CMD4(CCC_Vector4, "ssfx_water_setup2", &ps_ssfx_water_setup2, Fvector4().set(0, 0, 0, 0), Fvector4().set(1, 10, 1, 1));
 
 	CMD4(CCC_Integer, "ssfx_ssr_quality", &ps_ssfx_ssr_quality, 0, 5);
@@ -1519,7 +1519,7 @@ void xrRender_initconsole()
 
 	CMD4(CCC_Vector4, "ssfx_blood_decals", &ps_ssfx_blood_decals, Fvector4().set(0, 0, 0, 0), Fvector4().set(5, 5, 0, 0));
 
-	CMD4(CCC_Vector4, "ssfx_rain_drops_setup", &ps_ssfx_rain_drops_setup, Fvector4().set(1000, 10, 0, 0), Fvector4().set(5000, 30, 0, 0));
+	CMD4(CCC_Vector4, "ssfx_rain_drops_setup", &ps_ssfx_rain_drops_setup, Fvector4().set(1000, 10, 0, 0), Fvector4().set(5000, 50, 0, 0)); // SSS UPDATE 24 -- binary range (y max 50)
 	CMD4(CCC_Vector4, "ssfx_rain_1", &ps_ssfx_rain_1, Fvector4().set(0, 0, 0, 0), Fvector4().set(10, 5, 5, 2));
 	CMD4(CCC_Vector4, "ssfx_rain_2", &ps_ssfx_rain_2, Fvector4().set(0, 0, 0, 0), Fvector4().set(1, 10, 10, 10));
 	CMD4(CCC_Vector4, "ssfx_rain_3", &ps_ssfx_rain_3, Fvector4().set(0, 0, 0, 0), Fvector4().set(1, 10, 10, 10));
