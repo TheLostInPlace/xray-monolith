@@ -94,7 +94,7 @@ void CRender::render_sun_cascade(u32 cascade_ind)
 	// SSS UPDATE 24 -- per-cascade shadowmap: when the dedicated RT exists ("$user$sun_smap_depth<i>"),
 	// the cascade renders into and samples from its OWN map at its own resolution (binary architecture).
 	// Otherwise everything stays on the shared smap at o.smapsize.
-	CRT* cascade_rt = (cascade_ind < 3) ? Target->rt_sun_smap_depth[cascade_ind].p_ : nullptr;
+	CRT* cascade_rt = (cascade_ind < 3) ? Target->rt_sun_smap_depth[cascade_ind]._get() : nullptr;
 	s32 cascade_smap = cascade_rt ? (s32)cascade_rt->dwWidth : (s32)o.smapsize;
 	// Feed the m_SMAP_res shader constant (SSS shadow.h divides by it -- unbound = NaN shadow filtering).
 	extern float g_sun_smap_res_current;

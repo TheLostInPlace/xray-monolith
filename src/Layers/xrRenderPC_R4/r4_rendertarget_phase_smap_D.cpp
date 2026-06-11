@@ -8,7 +8,7 @@ void CRenderTarget::phase_smap_direct(light* L, u32 sub_phase)
 	// repurposing the sub_phase enum. Depth-only bind + full-RT viewport at the cascade resolution.
 	if (sun_cascade_active < 3 && rt_sun_smap_depth[sun_cascade_active])
 	{
-		CRT* csm = rt_sun_smap_depth[sun_cascade_active].p_;
+		CRT* csm = rt_sun_smap_depth[sun_cascade_active]._get();
 		u_setrt(csm->dwWidth, csm->dwHeight, NULL, NULL, NULL, csm->pZRT);
 		HW.pContext->ClearDepthStencilView(csm->pZRT, D3D_CLEAR_DEPTH, 1.0f, 0L);
 		D3D_VIEWPORT VP = { 0, 0, (float)csm->dwWidth, (float)csm->dwHeight, 0, 1 };

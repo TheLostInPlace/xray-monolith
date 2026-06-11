@@ -624,7 +624,9 @@ static class cl_smap_res : public R_constant_setup
 {
 	virtual void setup(R_constant* C)
 	{
-		const float r = (g_sun_smap_res_current > 0.f) ? g_sun_smap_res_current : (float)RImplementation.o.smapsize;
+		// fallback 2048: this file is shared across renderers and not all CRender::_options have smapsize;
+		// R_sun.cpp sets the real per-cascade value every sun pass on renderers that matter.
+		const float r = (g_sun_smap_res_current > 0.f) ? g_sun_smap_res_current : 2048.f;
 		RCache.set_c(C, r, 1.f / r, 0.f, 0.f);
 	}
 } binder_smap_res;
