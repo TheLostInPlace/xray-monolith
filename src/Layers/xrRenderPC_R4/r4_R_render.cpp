@@ -103,6 +103,14 @@ void CRender::Render()
 	if (!(g_pGameLevel && g_hud)
 		|| bMenu)
 	{
+#if HAS_STREAMLINE
+		// SSS UPDATE 24 -- THIS is the real main-menu / ESC-menu path (not _menu_pp/render_menu). Begin set
+		// dwWidth to Real_*; binding the backbuffer with that size makes next frame's rmNormal() apply a
+		// Real_*-sized viewport, so the Target-coordinate menu UI lands off-screen -> black menu with a
+		// working cursor. Menus/UI always run at display resolution.
+		g_SLWrapper.EndSceneResolution();
+		Target->set_viewport_size(HW.pContext, (float)Device.dwWidth, (float)Device.dwHeight);
+#endif
 		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
 		return;
 	}
