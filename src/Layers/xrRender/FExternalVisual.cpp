@@ -39,12 +39,14 @@
 #define EXTERNAL_FLIP_Z 1
 #define EXTERNAL_FLIP_WINDING 1
 
-// Auto-scale comically-large imported models down to roughly player size. Many authored glTF
-// assets use arbitrary unit scales (a "rubber duck" can be tens of metres). If the loaded model's
-// largest bounding-box dimension exceeds EXTERNAL_AUTOSCALE_MAX_SIZE (metres / engine units), the
-// geometry is uniformly scaled down (about the local origin) so it fits; models already at or below
-// the target are left untouched (never scaled UP). Set EXTERNAL_AUTOSCALE 0 to disable.
+// Auto-scale imported models into a sane size band. Authored glTF assets use arbitrary unit scales:
+// some are tens of units across (a "rubber duck"), others are fractions of a unit (a ~0.1u avocado),
+// so they spawn comically large OR comically tiny. If the loaded model's largest bounding-box
+// dimension is above EXTERNAL_AUTOSCALE_MAX_SIZE it's uniformly scaled down; if it's below
+// EXTERNAL_AUTOSCALE_MIN_SIZE it's scaled up; models already in [MIN,MAX] are left untouched. Scale
+// is about the local origin so the bbox / physics box stay consistent. Set EXTERNAL_AUTOSCALE 0 to off.
 #define EXTERNAL_AUTOSCALE 1
+#define EXTERNAL_AUTOSCALE_MIN_SIZE 0.5f
 #define EXTERNAL_AUTOSCALE_MAX_SIZE 2.0f
 
 // Phase 1 shader (gamedata/shaders/r3/external_static.s). It reuses the stock deferred
@@ -465,9 +467,15 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		const float dz = bb.max.z - bb.min.z;
 		if (dy > maxdim) maxdim = dy;
 		if (dz > maxdim) maxdim = dz;
+
+		float s = 1.0f;
 		if (maxdim > EXTERNAL_AUTOSCALE_MAX_SIZE)
+			s = EXTERNAL_AUTOSCALE_MAX_SIZE / maxdim;                    // too big -> shrink to player-ish
+		else if (maxdim > 1e-4f && maxdim < EXTERNAL_AUTOSCALE_MIN_SIZE)
+			s = EXTERNAL_AUTOSCALE_MIN_SIZE / maxdim;                    // too small -> grow to visible size
+
+		if (s != 1.0f)
 		{
-			const float s = EXTERNAL_AUTOSCALE_MAX_SIZE / maxdim;
 			for (u32 vi = 0; vi < verts.size(); ++vi)
 			{
 				verts[vi].P[0] *= s;
@@ -476,8 +484,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			}
 			bb.min.mul(s);
 			bb.max.mul(s);
-			Msg("~ [gltf] '%s' auto-scaled x%.4f (largest dim %.2f -> %.2f units)", full_path, s, maxdim,
-			    EXTERNAL_AUTOSCALE_MAX_SIZE);
+			Msg("~ [gltf] '%s' auto-scaled x%.4f (largest dim %.2f -> %.2f units)", full_path, s, maxdim, maxdim * s);
 		}
 	}
 #endif
