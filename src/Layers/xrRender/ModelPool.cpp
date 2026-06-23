@@ -142,19 +142,42 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 	// Load data from MESHES or LEVEL
 	if (!FS.exist(N))
 	{
-		if (!FS.exist(fn, "$level$", name))
-			if (!FS.exist(fn, "$game_meshes$", name))
+		if (!FS.exist(fn, "$level$", name) && !FS.exist(fn, "$game_meshes$", name))
+		{
+			// Not found as OGF. Several places in the visual pipeline strip the extension off a
+			// visual name (CSE_Visual, the CGameObject spawn, ModelPool cache keys), so an external
+			// model referenced as "foo.glb" can arrive here as bare "foo" + ".ogf". When the caller
+			// gave no extension and no .ogf exists, probe for external formats with the same base
+			// before failing. Existing OGF content is unaffected (it resolves above).
+			bool ext_found = false;
+			if (0 == strext(N))
+			{
+				const char* try_exts[] = {".glb", ".gltf"};
+				for (const char* ee : try_exts)
+				{
+					string_path alt;
+					strconcat(sizeof(alt), alt, N, ee);
+					if (FS.exist(fn, "$game_meshes$", alt) || FS.exist(fn, "$level$", alt))
+					{
+						xr_strcpy(name, sizeof(name), alt);
+						ext_found = true;
+						break;
+					}
+				}
+			}
+			if (!ext_found)
 			{
 #ifdef _EDITOR
 				Msg("!Can't find model file '%s'.",name);
                 return 0;
 #else
-				if (assert)	
+				if (assert)
 					Debug.fatal(DEBUG_INFO, "Can't find model file '%s'.", name);
 				else
 					return nullptr;
 #endif
 			}
+		}
 	}
 	else
 	{
@@ -167,7 +190,7 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 	// OGF path below is untouched for all existing content.
 	if (is_external_format(name))
 	{
-		V = Instance_Create_External(N, fn, assert);
+		V = Instance_Create_External(name, fn, assert);
 		if (!V)
 			return nullptr;
 		g_pGamePersistent->RegisterModel(V); // no-op for MT_EXTERNAL_STATIC; keeps parity with OGF path
