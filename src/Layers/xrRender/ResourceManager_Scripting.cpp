@@ -567,11 +567,14 @@ ShaderElement* CBlender_Compile::_lua_Compile(LPCSTR namesp, LPCSTR name)
 	// 3rd texture-list entry, forwarded as a 5th Lua arg (Lua discards it for stock .s functions that
 	// declare only 4 params). Keeps DX9 in sync with the DX10/11 bridge; no change for OGF/stock.
 	LPCSTR t_2 = (L_textures.size() > 2) ? *L_textures[2] : "null";
+	// 4th texture-list entry (e.g. a glTF separate occlusion/AO map), forwarded as a 6th Lua arg. Lua
+	// discards it for stock .s functions that declare fewer params; no change for OGF/stock.
+	LPCSTR t_3 = (L_textures.size() > 3) ? *L_textures[3] : "null";
 	lua_State* LSVM = dxRenderDeviceRender::Instance().Resources->LSVM;
 	object shader = get_globals(LSVM)[namesp];
 	functor<void> element = object_cast<functor<void>>(shader[name]);
 	adopt_compiler ac = adopt_compiler(this);
-	element(ac, t_0, t_1, t_d, t_2);
+	element(ac, t_0, t_1, t_d, t_2, t_3);
 	r_End();
 	ShaderElement* _r = dxRenderDeviceRender::Instance().Resources->_CreateElement(E);
 	return _r;
