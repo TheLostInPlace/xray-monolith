@@ -14,6 +14,12 @@
 #include <d3dx9.h>
 #pragma warning(default:4995)
 
+// D3DX10/11 image-decode-from-memory (PNG/JPG/BMP/TGA/DDS + mip generation). Same library and
+// include that dx10Texture.cpp uses for CRender::texture_load; only meaningful on DX10/DX11.
+#if defined(USE_DX11) || defined(USE_DX10)
+#include <D3DX10Tex.h>
+#endif
+
 #include "../../xrEngine/fmesh.h"
 #include "FExternalVisual.h"
 
@@ -122,6 +128,100 @@ static bool ext_texture_exists(const char* name)
 }
 
 //////////////////////////////////////////////////////////////////////
+// Embedded / external base-color texture decoding
+//
+// glTF carries its base-color image one of three ways: (1) a GLB binary chunk referenced by an
+// image bufferView (the usual case for .glb), (2) an external image file referenced by URI, or
+// (3) a base64 "data:" URI. We reuse the D3DX11 image decoder the engine already links (see
+// dx10Texture.cpp) -- it loads PNG/JPG/BMP/TGA/DDS from memory and builds a full mip chain. The
+// decoded texture is registered under a synthetic "$user$..." name; CTexture::Load() short-circuits
+// for "$user$" names (no disk I/O, see dx10SH_Texture.cpp), so the surface we set is what binds.
+//////////////////////////////////////////////////////////////////////
+
+// Decode an in-memory image into a GPU texture (with mips). Caller releases the returned surface.
+// Returns NULL on DX9 (no D3DX10/11) or on decode failure, so the caller falls back to a .dds /
+// the placeholder.
+static ID3DBaseTexture* ext_create_texture_from_memory(const void* data, size_t size, const char* dbg)
+{
+	if (!data || !size)
+		return NULL;
+#if defined(USE_DX11)
+	D3DX11_IMAGE_LOAD_INFO li; // default ctor: full mip chain, format from file, BIND_SHADER_RESOURCE
+	ID3DBaseTexture* tex = NULL;
+	HRESULT hr = D3DX11CreateTextureFromMemory(HW.pDevice, data, (SIZE_T)size, &li, NULL, &tex, NULL);
+	if (FAILED(hr) || !tex) { Msg("! [gltf] image decode failed (0x%08x): %s", hr, dbg ? dbg : ""); return NULL; }
+	return tex;
+#elif defined(USE_DX10)
+	D3DX10_IMAGE_LOAD_INFO li;
+	ID3DBaseTexture* tex = NULL;
+	HRESULT hr = D3DX10CreateTextureFromMemory(HW.pDevice, data, (SIZE_T)size, &li, NULL, &tex, NULL);
+	if (FAILED(hr) || !tex) { Msg("! [gltf] image decode failed (0x%08x): %s", hr, dbg ? dbg : ""); return NULL; }
+	return tex;
+#else
+	(void)dbg;
+	return NULL; // DX9 path: embedded-texture decode unsupported; caller uses .dds / placeholder
+#endif
+}
+
+// Synthetic resource name for a model's decoded base texture (unique per model -> no collisions).
+static void ext_make_user_name(string_path out, const char* short_name)
+{
+	strconcat(sizeof(string_path), out, "$user$gltf\\", short_name ? short_name : "unnamed");
+}
+
+// Fetch the bytes for a glTF image and decode them. Handles GLB/.bin bufferView images and external
+// image files (resolved relative to the glTF). base64 "data:" URIs are not decoded yet.
+static ID3DBaseTexture* ext_decode_gltf_image(const cgltf_image* image, const char* gltf_full_path)
+{
+	if (!image)
+		return NULL;
+
+	// (1) image embedded in a buffer view (GLB binary chunk, or .gltf + .bin)
+	if (image->buffer_view)
+	{
+		const cgltf_buffer_view* bv = image->buffer_view;
+		const uint8_t* p = cgltf_buffer_view_data(bv);
+		if (!p || !bv->size)
+			return NULL;
+		return ext_create_texture_from_memory(p, (size_t)bv->size, gltf_full_path);
+	}
+
+	// (2) external image file referenced by URI (skip base64 data: URIs)
+	if (image->uri && image->uri[0] && 0 != strncmp(image->uri, "data:", 5))
+	{
+		// directory the glTF lives in
+		string_path dir;
+		xr_strcpy(dir, gltf_full_path);
+		char* slash = strrchr(dir, '\\');
+		char* slash2 = strrchr(dir, '/');
+		if (slash2 > slash) slash = slash2;
+		if (slash) slash[1] = 0; else dir[0] = 0;
+
+		// percent-decode the URI in a local copy, normalize separators
+		string_path uri;
+		xr_strcpy(uri, image->uri);
+		cgltf_decode_uri(uri);
+		for (char* c = uri; *c; ++c) if (*c == '/') *c = '\\';
+
+		string_path path;
+		strconcat(sizeof(path), path, dir, uri);
+
+		IReader* rd = FS.r_open(path);
+		if (!rd) { Msg("~ [gltf] external image '%s' not found", path); return NULL; }
+		const size_t sz = (size_t)rd->length();
+		void* buf = xr_malloc(sz);
+		CopyMemory(buf, rd->pointer(), sz);
+		FS.r_close(rd);
+		ID3DBaseTexture* tex = ext_create_texture_from_memory(buf, sz, path);
+		xr_free(buf);
+		return tex;
+	}
+
+	// (3) base64 data: URI image -- not handled yet (falls back to .dds / placeholder)
+	return NULL;
+}
+
+//////////////////////////////////////////////////////////////////////
 // Construction / Destruction
 //////////////////////////////////////////////////////////////////////
 
@@ -196,6 +296,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	Fbox bb;
 	bb.invalidate();
 	const char* base_tex_uri = NULL;
+	const cgltf_image* base_img = NULL;
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
@@ -307,19 +408,24 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				}
 			}
 
-			// remember a base-color texture name from the first material we see
-			if (!base_tex_uri && prim.material && prim.material->has_pbr_metallic_roughness)
+			// remember the first textured material's base-color image (for embedded/external decode)
+			if (!base_img && prim.material && prim.material->has_pbr_metallic_roughness)
 			{
 				const cgltf_texture* t = prim.material->pbr_metallic_roughness.base_color_texture.texture;
-				if (t && t->image && t->image->uri)
-					base_tex_uri = t->image->uri;
+				if (t && t->image)
+				{
+					base_img = t->image;
+					if (t->image->uri) base_tex_uri = t->image->uri; // also usable as a pre-converted .dds name
+				}
 			}
 		}
 	}
 
-	// copy texture uri out before freeing gltf (it points into gltf-owned memory)
+	// Resolve the base-color image into a GPU texture BEFORE freeing gltf -- the image bytes live in
+	// gltf-owned buffer memory. Also copy the URI-derived name for the pre-converted-.dds fallback.
 	string_path tex_name;
 	bool have_tex = ext_texture_name_from_uri(base_tex_uri, tex_name);
+	ID3DBaseTexture* decoded_tex = base_img ? ext_decode_gltf_image(base_img, full_path) : NULL;
 
 	cgltf_free(gltf);
 	xr_free(blob);
@@ -384,14 +490,35 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	vis.sphere.set(c, half.magnitude());
 
 	// --- material / shader ----------------------------------------------------------
-	// X-Ray fatals on a missing texture, so the bound name must resolve to a real file: use the
-	// glTF base-color image only if it exists on disk, otherwise the engine placeholder.
-	if (!have_tex || !ext_texture_exists(tex_name))
+	// Preferred: the runtime texture decoded from the glTF's embedded/external base-color image,
+	// registered under a "$user$" name so the engine binds it without touching disk. Fallbacks, in
+	// order: a pre-converted .dds already in $game_textures$, then the engine missing-texture
+	// placeholder (X-Ray FATALS on a missing texture, so the bound name must always resolve).
+	ref_texture user_tex; // must outlive SetShaderTexture so the shader can take its own ref
+	bool resolved = false;
+
+	if (decoded_tex)
+	{
+		ext_make_user_name(tex_name, short_name);
+		user_tex.create(tex_name);
+		if (user_tex._get())
+		{
+			user_tex->surface_set(decoded_tex);
+			resolved = true;
+		}
+		_RELEASE(decoded_tex);
+	}
+
+	if (!resolved && have_tex && ext_texture_exists(tex_name))
+		resolved = true;
+
+	if (!resolved)
 	{
 		if (have_tex)
 			Msg("~ [gltf] base texture '%s' not found; using placeholder for '%s'", tex_name, full_path);
 		xr_strcpy(tex_name, sizeof(tex_name), EXTERNAL_FALLBACK_TEXTURE);
 	}
+
 	SetShaderTexture(EXTERNAL_DEFAULT_SHADER, tex_name);
 
 	Type = MT_EXTERNAL_STATIC;
