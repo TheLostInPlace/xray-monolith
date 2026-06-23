@@ -53,6 +53,10 @@
 // scene lighting -- ideal for confirming geometry/UVs. Phase 2 swaps in a lit pbr_external.
 #define EXTERNAL_DEFAULT_SHADER "external_static"
 
+// Lit + normal-mapped variant, used instead of EXTERNAL_DEFAULT_SHADER when the glTF material has a
+// normal texture. Receives a "albedo,normal" texture list (t_base = albedo, t_second = normal map).
+#define EXTERNAL_BUMP_SHADER "external_bump"
+
 // Engine missing-texture placeholder (ships with the base game, always present). Bound when the
 // glTF has no usable base-color texture, or the named texture isn't on disk -- X-Ray FATALS on a
 // missing texture ("Can't find texture ..."), so we must never bind a name that does not resolve.
@@ -175,6 +179,12 @@ static ID3DBaseTexture* ext_create_texture_from_memory(const void* data, size_t 
 static void ext_make_user_name(string_path out, const char* short_name)
 {
 	strconcat(sizeof(string_path), out, "$user$gltf\\", short_name ? short_name : "unnamed");
+}
+
+// Synthetic resource name for a model's decoded normal map (distinct namespace from the albedo).
+static void ext_make_user_name_n(string_path out, const char* short_name)
+{
+	strconcat(sizeof(string_path), out, "$user$gltf_n\\", short_name ? short_name : "unnamed");
 }
 
 // Fetch the bytes for a glTF image and decode them. Handles GLB/.bin bufferView images and external
@@ -305,6 +315,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	bb.invalidate();
 	const char* base_tex_uri = NULL;
 	const cgltf_image* base_img = NULL;
+	const cgltf_image* normal_img = NULL;
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
@@ -417,6 +428,13 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 					if (t->image->uri) base_tex_uri = t->image->uri; // also usable as a pre-converted .dds name
 				}
 			}
+
+			// remember the first material's normal map (selects the bump shader when present)
+			if (!normal_img && prim.material && prim.material->normal_texture.texture)
+			{
+				const cgltf_texture* nt = prim.material->normal_texture.texture;
+				if (nt->image) normal_img = nt->image;
+			}
 		}
 	}
 
@@ -425,6 +443,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	string_path tex_name;
 	bool have_tex = ext_texture_name_from_uri(base_tex_uri, tex_name);
 	ID3DBaseTexture* decoded_tex = base_img ? ext_decode_gltf_image(base_img, full_path) : NULL;
+	ID3DBaseTexture* decoded_nrm = normal_img ? ext_decode_gltf_image(normal_img, full_path) : NULL;
 
 	cgltf_free(gltf);
 	xr_free(blob);
@@ -552,6 +571,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	// order: a pre-converted .dds already in $game_textures$, then the engine missing-texture
 	// placeholder (X-Ray FATALS on a missing texture, so the bound name must always resolve).
 	ref_texture user_tex; // must outlive SetShaderTexture so the shader can take its own ref
+	ref_texture user_nrm; // ditto, for the normal map
 	bool resolved = false;
 
 	if (decoded_tex)
@@ -576,7 +596,33 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		xr_strcpy(tex_name, sizeof(tex_name), EXTERNAL_FALLBACK_TEXTURE);
 	}
 
-	SetShaderTexture(EXTERNAL_DEFAULT_SHADER, tex_name);
+	// Decode the normal map into its own $user$ texture. When present, switch to the bump shader and
+	// hand it a "albedo,normal" texture list (-> t_base / t_second). glTF normal maps are linear, so
+	// the default (non-sRGB) decode is correct here.
+	string_path normal_name;
+	bool have_normal = false;
+	if (decoded_nrm)
+	{
+		ext_make_user_name_n(normal_name, short_name);
+		user_nrm.create(normal_name);
+		if (user_nrm._get())
+		{
+			user_nrm->surface_set(decoded_nrm);
+			have_normal = true;
+		}
+		_RELEASE(decoded_nrm);
+	}
+
+	if (have_normal)
+	{
+		string_path tlist;
+		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name);
+		SetShaderTexture(EXTERNAL_BUMP_SHADER, tlist);
+	}
+	else
+	{
+		SetShaderTexture(EXTERNAL_DEFAULT_SHADER, tex_name);
+	}
 
 	Type = MT_EXTERNAL_STATIC;
 	return true;

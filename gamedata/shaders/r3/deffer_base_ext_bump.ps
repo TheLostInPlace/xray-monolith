@@ -1,0 +1,46 @@
+// deffer_base_ext_bump.ps : deferred G-buffer pixel shader for external (GLTF/GLB) models that
+// carry a STANDARD tangent-space normal map.
+//
+// X-Ray's stock bump path (sload.h) expects its own two-texture split-precision encoding
+// (s_bump = gloss + normal-high, s_bumpX = normal-low + height). glTF ships plain tangent-space
+// normal maps (rgb = xyz*0.5+0.5 in one texture), so instead of converting them we sample the
+// normal map directly here. Everything else (eye-space transform via the VS's TBN matrix, G-buffer
+// packing, hemi/material) mirrors deffer_base_bump.ps so lighting/shadows behave identically.
+//
+// Paired with the stock vertex shader deffer_model_bump.vs (consumes v_model, emits p_bumped with
+// M1..M3 = 2*TBN in eye space; the 2x is removed by the normalize below). Bind:
+//   s_base = albedo (t_base),  s_bump = glTF normal map (t_second),  sampler smp_base.
+
+#include "common.h"
+
+f_deffer main( p_bumped I )
+{
+	f_deffer O;
+
+	// albedo
+	float4 base = s_base.Sample( smp_base, I.tcdh.xy );
+
+	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1]
+	// (glTF uses +Y/OpenGL convention; if bumps read as dents, negate n_ts.y here)
+	float3 n_ts = s_bump.Sample( smp_base, I.tcdh.xy ).xyz * 2.0h - 1.0h;
+
+	// tangent space -> eye space (M1..M3 carry 2*TBN; normalize cancels the scale)
+	float3 Ne = normalize( mul( float3x3(I.M1, I.M2, I.M3), n_ts ) );
+
+	// hemi + material id (mirror deffer_base_bump.ps)
+	float ms = xmaterial;
+	float h  = I.position.w;
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	ms = I.tcdh.w;
+#endif
+
+	// gloss: constant for now; Phase 2b will derive it from the glTF metallic-roughness map
+	float gloss = 0.5h;
+
+	O = pack_gbuffer(
+			float4( Ne,                 h     ),
+			float4( I.position.xyz,     ms    ),
+			float4( base.xyz,           gloss ) );
+
+	return O;
+}

@@ -1,0 +1,32 @@
+-- external_bump.s : lit + textured + NORMAL-MAPPED shader for external (GLTF/GLB) meshes.
+--
+-- Same deferred MODEL path as external_static.s, but the G-buffer pass uses the stock model bump
+-- vertex shader (deffer_model_bump -> emits the eye-space TBN) paired with a custom pixel shader
+-- (deffer_base_ext_bump) that samples a STANDARD glTF tangent-space normal map. Selected by the C++
+-- loader (FExternalVisual) only when the glTF material actually has a normal texture; models without
+-- one keep using external_static. Textures arrive as a comma list "albedo,normal" -> t_base/t_second.
+
+function normal		(shader, t_base, t_second, t_detail)
+	shader:begin	("deffer_model_bump","deffer_base_ext_bump")
+			: fog		(false)
+	shader:dx10texture	("s_base",	t_base)		-- albedo
+	shader:dx10texture	("s_bump",	t_second)	-- glTF tangent-space normal map
+	shader:dx10sampler	("smp_base")
+	-- Mark pixels as lit scene geometry (same as external_static / the stock model blender), else the
+	-- sky/combine pass composites the skybox over the model where nothing else is behind it.
+	shader:dx10stencil	(true, 8, 255, 127, 1, 3, 1)  -- enable, ALWAYS, rmask 0xff, wmask 0x7f, KEEP, REPLACE, KEEP
+	shader:dx10stencil_ref	(1)
+end
+
+function l_special	(shader, t_base, t_second, t_detail)
+	-- Sun shadow-map caster (identical to external_static): z-write on, colour off, cast from BACK
+	-- faces (D3DCULL_CW=2) to avoid self-shadow acne. The shadow map only needs depth, so the normal
+	-- map is irrelevant here.
+	shader:begin	("shadow_direct_model",	"dumb")
+			: zb		(true,true)
+			: fog		(false)
+			: dx10cullmode	(2)
+	shader:dx10texture	("s_base",	t_base)
+	shader:dx10sampler	("smp_base")
+	shader:dx10color_write_enable	(false, false, false, false)
+end
