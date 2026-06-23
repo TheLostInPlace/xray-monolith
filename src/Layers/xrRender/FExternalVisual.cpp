@@ -197,9 +197,21 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	bb.invalidate();
 	const char* base_tex_uri = NULL;
 
-	for (cgltf_size mi = 0; mi < gltf->meshes_count; ++mi)
+	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
+	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
+	// the mesh. (A glTF with meshes but no node referencing them is unusual and emits nothing.)
+	for (cgltf_size ni = 0; ni < gltf->nodes_count; ++ni)
 	{
-		const cgltf_mesh& mesh = gltf->meshes[mi];
+		const cgltf_node& node = gltf->nodes[ni];
+		if (!node.mesh)
+			continue;
+		cgltf_float _world[16];
+		cgltf_node_transform_world(&node, _world);
+		Fmatrix Mw;
+		// glTF (column-major, column-vector) vs X-Ray (row-major, row-vector): the two transposes
+		// cancel, so the 16 floats map directly onto the row-major Fmatrix.
+		memcpy(&Mw, _world, sizeof(_world));
+		const cgltf_mesh& mesh = *node.mesh;
 		for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
 		{
 			const cgltf_primitive& prim = mesh.primitives[pi];
@@ -256,6 +268,11 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 					cgltf_accessor_read_float(a_tan, i, tan4, 4);
 					T.set(tan4[0], tan4[1], tan4[2]);
 				}
+
+				// bake the node world transform (glTF space): position full, normal/tangent as dirs
+				{ Fvector t; Mw.transform_tiny(t, P); P = t; }
+				{ Fvector t; Mw.transform_dir(t, N); N = t; }
+				{ Fvector t; Mw.transform_dir(t, T); T = t; }
 
 #if EXTERNAL_FLIP_Z
 				P.z = -P.z;
