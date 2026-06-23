@@ -7,18 +7,17 @@
 -- occluded by closer geometry), z-write off, no shadow element (emissive does not cast shadows).
 
 function normal		(shader, t_base, t_second, t_detail)
-	shader:begin	("model_distort","deffer_base_ext_emissive")
+	shader:begin	("deffer_model_flat","deffer_base_ext_emissive")
 			: sorting	(2, true)							-- strict-B2F -> the forward 'Sorted' list,
 														--   rendered in render_forward() AFTER the
-														--   deferred combine (priority 2 required for
-														--   strict). :sorting(N,false) goes to a
-														--   priority bucket the main render never flushes.
+														--   deferred combine. :sorting(N,false) would
+														--   land in a priority bucket the main render
+														--   never flushes (priority must be 2/3 for strict).
 			: blend		(true, blend.one, blend.one)		-- additive: scene += emissive
 			: zb		(true, false)						-- test against scene depth, don't write
-			: dx10zfunc	(cmp_func.lessequal)				-- this overlay is the SAME geometry/depth as
-														--   the lit mesh, so LESS would reject it; LEQUAL
-														--   lets it draw exactly at the surface (still
-														--   occluded by anything strictly closer).
+			: dx10zfunc	(cmp_func.lessequal)				-- overlay shares the lit mesh's exact depth, so
+														--   LESS would reject it; LEQUAL draws at the
+														--   surface, still occluded by closer geometry.
 			: fog		(false)
 	shader:dx10texture	("s_base",	t_base)					-- glTF emissive map
 	shader:dx10sampler	("smp_base")

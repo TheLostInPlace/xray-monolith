@@ -2,28 +2,20 @@
 //
 // glTF emissive is added ON TOP of the normally-lit surface (a screen glows even in shadow, only
 // the glowing texels). X-Ray's deferred has no emissive G-buffer channel and its stock "emissive"
-// (models_selflight) is whole-surface fullbright -- neither fits. So instead this renders the
-// emissive map in a FORWARD, additive (blend one,one) pass AFTER the deferred lighting/combine
-// (routed by :sorting in external_emissive.s), exactly like a translucent/particle material. It
-// never writes the G-buffer, so it can't conflict with the lit pass -- it simply adds light.
+// (models_selflight) is whole-surface fullbright. So this renders the emissive map in a FORWARD,
+// additive (blend one,one) pass AFTER the deferred lighting/combine (routed by :sorting in
+// external_emissive.s), like a translucent/particle material. It never writes the G-buffer.
 //
-// Paired with the stock forward model VS model_distort.vs (its output struct is mirrored below).
-// Bind: s_base = glTF emissive map.
+// Paired with the stock deferred model VS deffer_model_flat.vs (same VS the lit external_static pass
+// uses, so our custom v_model UVs come through correctly -- the forward VS model_distort.vs did NOT
+// feed UVs with our vertex format). The VS's extra eye-space pos/normal varyings are just unused
+// here. Bind: s_base = glTF emissive map.
 
 #include "common.h"
 
-// must match model_distort.vs output 'vf'
-struct vf
+float4 main( p_flat I ) : SV_Target
 {
-	float2 tc0  : TEXCOORD0;
-	float4 c0   : COLOR0;
-	float4 hpos : SV_Position;
-	float  fog  : FOG;
-};
-
-float4 main( vf I ) : SV_Target
-{
-	float3 e = s_base.Sample( smp_base, I.tc0 ).rgb;	// glTF emissive map (sRGB-ish colour)
+	float3 e = s_base.Sample( smp_base, I.tcdh.xy ).rgb;	// glTF emissive map
 	// additive blend (one,one) adds this straight onto the lit scene colour
 	return float4( e, 1.0h );
 }
