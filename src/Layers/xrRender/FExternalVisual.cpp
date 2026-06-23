@@ -282,15 +282,70 @@ void FExternalVisual::Load(LPCSTR N, IReader* /*data*/, u32 /*dwFlags*/)
 }
 
 //////////////////////////////////////////////////////////////////////
-// External loader (Phase 1: single merged static mesh)
+// External loader
 //////////////////////////////////////////////////////////////////////
 
-bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path)
+bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<int>& out)
+{
+	out.clear();
+
+	IReader* rd = FS.r_open(full_path);
+	if (!rd)
+		return false;
+	const size_t blob_size = (size_t)rd->length();
+	void* blob = xr_malloc(blob_size);
+	CopyMemory(blob, rd->pointer(), blob_size);
+	FS.r_close(rd);
+
+	// material assignments live in the JSON, so no cgltf_load_buffers() needed here
+	cgltf_options options = {};
+	cgltf_data* gltf = NULL;
+	cgltf_result res = cgltf_parse(&options, blob, blob_size, &gltf);
+	if (res != cgltf_result_success)
+	{
+		xr_free(blob);
+		return false;
+	}
+
+	// distinct material indices used by triangle primitives, in first-seen order (mirrors the node
+	// iteration in LoadExternal so the set matches what actually emits geometry)
+	for (cgltf_size ni = 0; ni < gltf->nodes_count; ++ni)
+	{
+		const cgltf_node& node = gltf->nodes[ni];
+		if (!node.mesh)
+			continue;
+		const cgltf_mesh& mesh = *node.mesh;
+		for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
+		{
+			const cgltf_primitive& prim = mesh.primitives[pi];
+			if (prim.type != cgltf_primitive_type_triangles)
+				continue;
+			const int idx = prim.material ? (int)(prim.material - gltf->materials) : -1;
+			bool seen = false;
+			for (int v : out) if (v == idx) { seen = true; break; }
+			if (!seen) out.push_back(idx);
+		}
+	}
+
+	cgltf_free(gltf);
+	xr_free(blob);
+	return true;
+}
+
+bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter)
 {
 	dbg_name = short_name;
 	dbg_id = 1;
 	skinning = -1; // SKIN_NONE: m_skinning < 0 selects the static v_model VS path (r4.cpp:1487)
 	hud = false;
+
+	// Per-material key so each material child's decoded textures get a unique $user$ name (no
+	// collisions between submeshes of the same model). -1 (merge-all) keeps the bare name.
+	string_path tex_key;
+	if (material_filter != -1)
+		xr_sprintf(tex_key, "%s_m%d", short_name, material_filter);
+	else
+		xr_strcpy(tex_key, sizeof(tex_key), short_name);
 
 	// --- read the whole file through the engine VFS (works for loose and packed) -----
 	IReader* rd = FS.r_open(full_path);
@@ -354,6 +409,19 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			const cgltf_primitive& prim = mesh.primitives[pi];
 			if (prim.type != cgltf_primitive_type_triangles)
 				continue;
+
+			// multi-material filter. material_filter: -1 = take all primitives; >=0 = only that
+			// material index; -2 = only primitives with NO material (so a mixed model's no-material
+			// group is a distinct child rather than re-merging everything).
+			const int prim_mat = prim.material ? (int)(prim.material - gltf->materials) : -1;
+			if (material_filter == -2)
+			{
+				if (prim_mat != -1) continue;
+			}
+			else if (material_filter >= 0)
+			{
+				if (prim_mat != material_filter) continue;
+			}
 
 			// locate attributes
 			const cgltf_accessor* a_pos = NULL;
@@ -607,7 +675,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 
 	if (decoded_tex)
 	{
-		ext_make_user_name(tex_name, short_name);
+		ext_make_user_name(tex_name, tex_key);
 		user_tex.create(tex_name);
 		if (user_tex._get())
 		{
@@ -634,7 +702,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	bool have_normal = false;
 	if (decoded_nrm)
 	{
-		ext_make_user_name_n(normal_name, short_name);
+		ext_make_user_name_n(normal_name, tex_key);
 		user_nrm.create(normal_name);
 		if (user_nrm._get())
 		{
@@ -651,7 +719,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	string_path mr_name;
 	if (decoded_mr)
 	{
-		ext_make_user_name_mr(mr_name, short_name);
+		ext_make_user_name_mr(mr_name, tex_key);
 		user_mr.create(mr_name);
 		if (user_mr._get())
 		{

@@ -28,8 +28,16 @@ public:
 	// Parse the GLTF/GLB at OS path `full_path` (already resolved by the model pool)
 	// and build GPU buffers, bounding volumes and the shader. `short_name` is the
 	// logical visual name (extension preserved), used for shader/texture resolution
-	// and diagnostics. Returns true on success.
-	bool LoadExternal(const char* short_name, const char* full_path);
+	// and diagnostics. `material_filter` selects which material's primitives to load:
+	// -1 (default) merges every primitive (single-material models); >=0 loads only the
+	// primitives assigned to that glTF material index (one child per material, see
+	// FExternalKinematics). Returns true on success (false if the filter selects no geometry).
+	bool LoadExternal(const char* short_name, const char* full_path, int material_filter = -1);
+
+	// Lightweight parse: collect the distinct glTF material indices used by triangle primitives
+	// (in first-seen order; a primitive with no material contributes index -1). Used by
+	// FExternalKinematics to decide how many per-material child visuals to build.
+	static bool GetMaterialIndices(const char* full_path, xr_vector<int>& out);
 
 	FExternalVisual();
 	virtual ~FExternalVisual();

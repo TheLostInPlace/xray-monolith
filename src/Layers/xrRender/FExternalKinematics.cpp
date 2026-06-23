@@ -41,18 +41,56 @@ bool FExternalKinematics::LoadExternal(const char* short_name, const char* full_
 	skinning = -1;
 	hud = false;
 
-	// --- geometry child: the actual mesh (renders as MT_EXTERNAL_STATIC) -------------
-	FExternalVisual* geom = xr_new<FExternalVisual>();
-	geom->Type = MT_EXTERNAL_STATIC;
-	if (!geom->LoadExternal(short_name, full_path))
-	{
-		xr_delete(geom); // FExternalVisual dtor releases any GPU buffers it created
-		return false;    // bones not yet allocated -> object is dtor-safe for the caller
-	}
-	children.push_back(geom);
+	// --- geometry children: one FExternalVisual per glTF material (multi-material) -----
+	// Several materials need several render batches (one shader each), so build one child visual per
+	// material, each loading only its material's primitives. The skeleton below stays a single rigid
+	// root and all children render under it. A single-material model makes exactly one child
+	// (filter -1 = merge everything), identical to the original behaviour.
+	xr_vector<int> mats;
+	FExternalVisual::GetMaterialIndices(full_path, mats);
 
-	// bounds for this (parent) visual = the geometry's bounds
-	vis = geom->getVisData();
+	Fbox total;
+	total.invalidate();
+
+	auto add_child = [&](int material_filter) -> bool
+	{
+		FExternalVisual* geom = xr_new<FExternalVisual>();
+		geom->Type = MT_EXTERNAL_STATIC;
+		if (!geom->LoadExternal(short_name, full_path, material_filter))
+		{
+			xr_delete(geom); // selected no geometry (or failed) -> skip
+			return false;
+		}
+		children.push_back(geom);
+		const Fbox& gb = geom->getVisData().box;
+		total.modify(gb.min);
+		total.modify(gb.max);
+		return true;
+	};
+
+	if (mats.size() <= 1)
+	{
+		if (!add_child(-1))
+			return false; // bones not yet allocated -> object is dtor-safe for the caller
+	}
+	else
+	{
+		// one child per material; map the "no material" group (-1) to the -2 filter so it loads only
+		// its own primitives instead of re-merging everything (which -1 means inside LoadExternal).
+		for (int mi : mats)
+			add_child(mi < 0 ? -2 : mi);
+		if (children.empty())
+			return false;
+	}
+
+	// bounds for this (parent) visual = union of all material children
+	vis.box.set(total.min, total.max);
+	{
+		Fvector c, half;
+		c.add(total.min, total.max).mul(0.5f);
+		half.sub(total.max, total.min).mul(0.5f);
+		vis.sphere.set(c, half.magnitude());
+	}
 
 	// --- 1-bone skeleton ------------------------------------------------------------
 	bone_map_N = xr_new<accel>();
