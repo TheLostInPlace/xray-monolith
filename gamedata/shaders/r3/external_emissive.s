@@ -8,7 +8,11 @@
 
 function normal		(shader, t_base, t_second, t_detail)
 	shader:begin	("model_distort","deffer_base_ext_emissive")
-			: sorting	(3, false)							-- post-deferred back-to-front (forward) phase
+			: sorting	(2, true)							-- strict-B2F -> the forward 'Sorted' list,
+														--   rendered in render_forward() AFTER the
+														--   deferred combine (priority 2 required for
+														--   strict). :sorting(N,false) goes to a
+														--   priority bucket the main render never flushes.
 			: blend		(true, blend.one, blend.one)		-- additive: scene += emissive
 			: zb		(true, false)						-- test against scene depth, don't write
 			: fog		(false)
