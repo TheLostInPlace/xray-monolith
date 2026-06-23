@@ -15,6 +15,10 @@ function normal		(shader, t_base, t_second, t_detail)
 														--   priority bucket the main render never flushes.
 			: blend		(true, blend.one, blend.one)		-- additive: scene += emissive
 			: zb		(true, false)						-- test against scene depth, don't write
+			: dx10zfunc	(cmp_func.lessequal)				-- this overlay is the SAME geometry/depth as
+														--   the lit mesh, so LESS would reject it; LEQUAL
+														--   lets it draw exactly at the surface (still
+														--   occluded by anything strictly closer).
 			: fog		(false)
 	shader:dx10texture	("s_base",	t_base)					-- glTF emissive map
 	shader:dx10sampler	("smp_base")
