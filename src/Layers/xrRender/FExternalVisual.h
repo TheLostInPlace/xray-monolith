@@ -33,6 +33,11 @@ public:
 
 	FExternalVisual();
 	virtual ~FExternalVisual();
+
+	// Index buffer is 32-bit (R32_UINT) instead of the engine-default 16-bit. Set when the merged
+	// mesh exceeds 65535 vertices. Render() rebinds the IB format accordingly (the backend's
+	// set_Indices() hardcodes R16_UINT). Copied by Copy() for instancing.
+	bool m_index32 = false;
 };
 
 #endif // FExternalVisualH

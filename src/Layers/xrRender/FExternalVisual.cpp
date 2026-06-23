@@ -292,7 +292,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 
 	// --- accumulate all triangle primitives into one VB/IB --------------------------
 	xr_vector<vertExternal> verts;
-	xr_vector<u16> indices;
+	xr_vector<u32> indices; // 32-bit accumulator; packed down to 16-bit at buffer-creation if it fits
 	Fbox bb;
 	bb.invalidate();
 	const char* base_tex_uri = NULL;
@@ -342,15 +342,6 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			const u32 v_base = (u32)verts.size();
 			const cgltf_size v_count = a_pos->count;
 
-			// overflow guard: Phase 1 uses 16-bit indices like the OGF model path
-			if (v_base + v_count > 65535)
-			{
-				Msg("! [gltf] '%s' exceeds 65535 vertices (16-bit index limit); Phase 1 cannot load it", full_path);
-				cgltf_free(gltf);
-				xr_free(blob);
-				return false;
-			}
-
 			verts.reserve(verts.size() + v_count);
 			for (cgltf_size i = 0; i < v_count; ++i)
 			{
@@ -397,9 +388,9 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				indices.reserve(indices.size() + n);
 				for (cgltf_size i = 0; i + 3 <= n; i += 3)
 				{
-					const u16 a = (u16)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0));
-					const u16 b = (u16)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1));
-					const u16 c = (u16)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2));
+					const u32 a = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0));
+					const u32 b = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1));
+					const u32 c = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2));
 #if EXTERNAL_FLIP_WINDING
 					indices.push_back(a); indices.push_back(c); indices.push_back(b);
 #else
@@ -443,6 +434,9 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	iCount = (u32)indices.size();
 	dwPrimitives = iCount / 3;
 
+	// >65535 vertices can't be addressed by 16-bit indices, so keep the index buffer 32-bit.
+	m_index32 = (vCount > 65535);
+
 	const u32 vStride = sizeof(vertExternal);
 	VERIFY(vStride == (u32)D3DXGetDeclVertexSize(dwDecl_External, 0));
 
@@ -452,7 +446,19 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	HW.stats_manager.increment_stats_vb(p_rm_Vertices);
 
 	VERIFY(NULL == p_rm_Indices);
-	R_CHK(dx10BufferUtils::CreateIndexBuffer(&p_rm_Indices, indices.data(), iCount * 2));
+	if (m_index32)
+	{
+		// keep 32-bit indices; Render() rebinds the IB as R32_UINT (set_Indices defaults to R16)
+		R_CHK(dx10BufferUtils::CreateIndexBuffer(&p_rm_Indices, indices.data(), iCount * 4));
+	}
+	else
+	{
+		// pack down to the engine-default 16-bit so the standard R16_UINT bind is correct
+		xr_vector<u16> i16;
+		i16.resize(iCount);
+		for (u32 k = 0; k < iCount; ++k) i16[k] = (u16)indices[k];
+		R_CHK(dx10BufferUtils::CreateIndexBuffer(&p_rm_Indices, i16.data(), iCount * 2));
+	}
 	HW.stats_manager.increment_stats_ib(p_rm_Indices);
 #else // DX9
 	{
@@ -471,11 +477,26 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		u32 dwUsage = (bSoft ? D3DUSAGE_SOFTWAREPROCESSING : 0);
 		BYTE* bytes = 0;
 		VERIFY(NULL == p_rm_Indices);
-		R_CHK(HW.pDevice->CreateIndexBuffer(iCount * 2, dwUsage, D3DFMT_INDEX16, D3DPOOL_MANAGED, &p_rm_Indices, 0));
-		HW.stats_manager.increment_stats_ib(p_rm_Indices);
-		R_CHK(p_rm_Indices->Lock(0, 0, (void**)&bytes, 0));
-		CopyMemory(bytes, indices.data(), iCount * 2);
-		p_rm_Indices->Unlock();
+		if (m_index32)
+		{
+			// DX9 bakes the index format into the buffer, so no per-draw rebind is needed here.
+			R_CHK(HW.pDevice->CreateIndexBuffer(iCount * 4, dwUsage, D3DFMT_INDEX32, D3DPOOL_MANAGED, &p_rm_Indices, 0));
+			HW.stats_manager.increment_stats_ib(p_rm_Indices);
+			R_CHK(p_rm_Indices->Lock(0, 0, (void**)&bytes, 0));
+			CopyMemory(bytes, indices.data(), iCount * 4);
+			p_rm_Indices->Unlock();
+		}
+		else
+		{
+			xr_vector<u16> i16;
+			i16.resize(iCount);
+			for (u32 k = 0; k < iCount; ++k) i16[k] = (u16)indices[k];
+			R_CHK(HW.pDevice->CreateIndexBuffer(iCount * 2, dwUsage, D3DFMT_INDEX16, D3DPOOL_MANAGED, &p_rm_Indices, 0));
+			HW.stats_manager.increment_stats_ib(p_rm_Indices);
+			R_CHK(p_rm_Indices->Lock(0, 0, (void**)&bytes, 0));
+			CopyMemory(bytes, i16.data(), iCount * 2);
+			p_rm_Indices->Unlock();
+		}
 	}
 #endif
 
@@ -533,6 +554,13 @@ void FExternalVisual::Render(float)
 {
 	PROF_EVENT("FExternalVisual::Render");
 	RCache.set_Geometry(rm_geom);
+#if defined(USE_DX11) || defined(USE_DX10)
+	// set_Geometry() just bound the IB as R16_UINT (the backend hardcodes that format). For a 32-bit
+	// mesh rebind it as R32_UINT before the draw; CBackend::Render() issues DrawIndexed without
+	// re-touching the IB, so this override sticks. (DX9 bakes the format into the IB at creation.)
+	if (m_index32)
+		HW.pContext->IASetIndexBuffer(p_rm_Indices, DXGI_FORMAT_R32_UINT, 0);
+#endif
 	RCache.Render(D3DPT_TRIANGLELIST, vBase, 0, vCount, iBase, dwPrimitives);
 	RCache.stat.r.s_static.add(vCount);
 }
@@ -562,4 +590,5 @@ void FExternalVisual::Copy(dxRender_Visual* pSrc)
 	PCOPY(iBase);
 	PCOPY(iCount);
 	PCOPY(dwPrimitives);
+	PCOPY(m_index32);
 }
