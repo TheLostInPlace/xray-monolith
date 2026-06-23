@@ -537,3 +537,41 @@ The biggest Phase-1 unknown (the model VS/PS aren't in source) was resolved by r
 2. **`v_model` is all-float** — `shaders/r3/common_iostructs.h` struct `v_model` (the `SKIN_NONE` input of `deffer_model_flat.vs`) is `POSITION float4, NORMAL/TANGENT/BINORMAL float3 (real −1..+1), TEXCOORD float2`. The static VS reads `I.N` directly (no D3DCOLOR unpack — that swizzle/`unpack_normal` only exists in `skin.h`'s skinned path). The initial D3DCOLOR-packed layout (copied from the *skinned* `dwDecl_01W`) was therefore wrong; `dwDecl_External` is now five `FLOAT*` elements (stride 56) matching `v_model` exactly.
 
 Also confirmed present in the deployed set: `deffer_model_flat.vs`, `deffer_base_flat.ps`, `shadow_direct_model.vs`, `accum_emissive_det.ps` (the four passes `external_static.s` binds), and that `deffer_base_flat.ps` guards `s_detail` under `USE_TDETAIL` and `s_hemi` under `USE_LM_HEMI` — so binding only `s_base` (+`smp_base`) is correct for a plain textured model (exactly how the shipped `models_selflight_det.s` works). The corrected `FExternalVisual.cpp` compiles + links clean (R4). Remaining to confirm purely visually in-game: texture **V** orientation and the `EXTERNAL_FLIP_Z` winding choice (the only two things that can't be settled from the shader source alone).
+
+---
+
+# SECTION 11 — The Visual-Name Spawn Pipeline (post-implementation findings)
+
+## Why this section exists — a scope gap in §1-10
+Sections 1-10 traced the load **from `model_Create` / `cNameVisual_set` down to GPU buffers**, and that research held up (it's what made the loader, vertex format, and shader pairing correct). But §1 *started* at `cNameVisual_set` and implicitly assumed the visual **name** arrives there intact. It does not. For a spawned game object the name first travels a **game/server-side pipeline**, and that pipeline strips the file extension in several places. Both spawn-time crashes (`Can't find model file 'test\box_khronos.ogf'`) lived in this untraced half of the chain. Lesson: format/loader work must trace **both** directions from `model_Create` — down (render) *and* up (the spawn/visual-name pipeline).
+
+## The full pipeline (config → GPU), every extension-handling site
+1. **Config**: `[phys_obj_box_khronos]:physic_object` / `visual = test\box_khronos.glb`.
+2. **Server ctor** `CSE_ALifeObjectPhysic::CSE_ALifeObjectPhysic` (`xrServer_Objects_ALife.cpp:994-1024`): `if (line_exist(sect,"visual")) set_visual(r_string(sect,"visual"))` (`:1000-1002`). Also hardcodes `type = epotSkeleton` (`:997`) and `mass = 10` (`:998`).
+3. **STRIP SITE #1** — `CSE_Visual::set_visual` + ctor (`xrServer_Objects_Abstract.cpp:19-35, 41-48`): originally `*strext(tmp)=0` on every extension. **Fixed** to preserve `.glb/.gltf`.
+4. **Net serialize**: `CSE_ALifeObjectPhysic::STATE_Write/Read` (`:1030-1085`) round-trips `visual` via `CSE_Visual::visual_write/read` (`xrServer_Objects_Abstract.cpp:50-61`) and reads `type` (`r_u32(type)`, `:1047`) — so `type` comes from the packet, **not config-overridable** for this class.
+5. **Client spawn** `CGameObject` (`GameObject.cpp:275-289`): `visualName = visual_name(E)` = `cse_visual->get_visual()` (`:1179-1184`, no strip). Then:
+   ```cpp
+   if (!Render->models_Exists(visualName) && line_exist(sect,"visual"))
+       cNameVisual_set(pSettings->r_string(sect,"visual"));  // RAW config value (keeps .glb)
+   else
+       cNameVisual_set(visualName);                          // server value
+   ```
+   `models_Exists` → `CModelPool::Exists` (`r4.cpp:694`).
+6. **STRIP SITE #2** — `CModelPool::Create`/`CreateChild`/`Exists` (`ModelPool.cpp:328-330, 380-382, 563-565`): strip the extension for the cache key. **Fixed** to preserve `.glb/.gltf`.
+7. **`.ogf` default + the choke point** — `CModelPool::Instance_Load` (`:138-140`): `if (0==strext(N)) name = N + ".ogf"`. A name that lost its extension upstream becomes `<base>.ogf` here and fails at the fatal (`:152-153`).
+
+## The fix that actually works: a loader-level fallback
+Because the name can lose its extension at #1, #2, or in the `models_Exists`/`visualName` branching at #5, patching each site is whack-a-mole. The reliable fix is at the **single choke point** — `Instance_Load`: when `strext(N)==0` and no `.ogf` resolves, probe `$game_meshes$`/`$level$` for `<base>.glb` then `<base>.gltf` and route the hit to the external loader. OGF-safe: it only runs on the not-found path for extension-less names; existing OGF resolves before it. This is the centralized place to absorb every upstream strip. (The upstream preservation fixes #1/#2 are kept — they keep cache keys clean when the extension *does* survive — but the fallback is what guarantees correctness.)
+
+## Open root-cause note (honest)
+Strip sites #1 and #2 were verified correct in source and their objects recompiled + linked into the AVX exe (`xrServer_Objects_Abstract.obj` 19:38, single copy; `ModelPool.obj` rebuilt into `Release-AVX/xrRender_R4`), yet the name still reached the loader stripped to `<base>.ogf`. The exact site that drops the extension on the *server-originated* value (vs. the raw-config fallback at #5) is **not yet pinned** — candidates: the ALife save/load serialization of `visual_name`, or `models_Exists` returning true on a cached/stripped key. The loader fallback makes this moot for correctness; flagged for a proper trace later.
+
+## A bigger finding: dynamic game objects assume *kinematic* visuals
+`physic_object` hardcodes `type = epotSkeleton` (`xrServer_Objects_ALife.cpp:997`). The client physics for `epotSkeleton` is `CPhysicObject::CreateSkeleton` → `P_build_Shell` → `build_FromKinematics(ObjectKinematics())` (§3d/§3f), which requires the visual to be an `IKinematics` (a `CKinematics`/skeletal visual). A **static** `FExternalVisual` (`MT_EXTERNAL_STATIC`, not kinematic) therefore renders but **cannot be a normal `physic_object`** — `ObjectKinematics()` is null and the shell build fails *after* the visual loads. Stock "static" props (artefacts, etc.) are actually skeletal OGF (`MT_SKELETON_RIGID`, ≥1 bone), which is why they work as physic objects.
+
+**Implication for the plan:** a pure static external visual is only directly usable where the engine expects a *non-kinematic* visual (level geometry, LODs, simple `Render(LOD)` draws). To be spawnable as a typical dynamic game object (physic_object, item, NPC, HUD), the external mesh must present as a minimal **kinematics** (1 implicit bone) — i.e. **Phase 3 (`FExternalKinematics`) is a prerequisite for object spawning, not an optional later step.** Phase 1 (static `FExternalVisual`) remains correct and useful for the render/level path and as the geometry backend, but the "spawn a `.glb` as a physic_object" test really needs the kinematic wrapper (or an `epotBox` container that uses `P_build_SimpleShell` and no kinematics — but `physic_object`'s `type` is not config-settable, so that needs an engine change or a different object class).
+
+## Net correction to the phasing (§10)
+- **Phase 1** (static `FExternalVisual`): renders correctly; valid for non-spawned/level use and as the geometry backend. **Not** sufficient on its own to spawn as a `physic_object`.
+- **Phase 3 brought forward**: a minimal `FExternalKinematics` (inherit `CKinematics`, one identity bone, `children` = the geometry) is what makes external models behave as real game objects — it satisfies `ObjectKinematics()`, `CalculateBones`, `dcast_PKinematics()` (used by `set_visual_name`, `script_game_object2.cpp:695-696`), and the `epotSkeleton` physics path. This should be the next implementation step before further static polish.
