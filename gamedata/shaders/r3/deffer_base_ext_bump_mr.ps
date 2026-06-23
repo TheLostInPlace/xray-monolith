@@ -1,0 +1,41 @@
+// deffer_base_ext_bump_mr.ps : deferred G-buffer PS for external (GLTF/GLB) models that carry a
+// standard tangent-space normal map AND a glTF metallic-roughness map.
+//
+// Same as deffer_base_ext_bump.ps but the constant gloss is replaced by gloss derived from the
+// glTF metallic-roughness texture. glTF packs roughness in the GREEN channel and metallic in BLUE.
+// X-Ray's deferred only has a single "gloss" (specular sharpness/intensity) channel -- no true
+// metalness workflow -- so we map roughness -> gloss (smooth surfaces get a tight, bright highlight)
+// and leave metallic out (it would need colored specular / diffuse suppression the stock lighting
+// can't express). Bind: s_base = albedo, s_bump = normal map, s_bumpX = metallic-roughness map.
+
+#include "common.h"
+
+f_deffer main( p_bumped I )
+{
+	f_deffer O;
+
+	// albedo
+	float4 base = s_base.Sample( smp_base, I.tcdh.xy );
+
+	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1]
+	float3 n_ts = s_bump.Sample( smp_base, I.tcdh.xy ).xyz * 2.0h - 1.0h;
+	float3 Ne   = normalize( mul( float3x3(I.M1, I.M2, I.M3), n_ts ) );
+
+	// hemi + material id
+	float ms = xmaterial;
+	float h  = I.position.w;
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	ms = I.tcdh.w;
+#endif
+
+	// glTF metallic-roughness: G = roughness, B = metallic. gloss = 1 - roughness.
+	float  rough = s_bumpX.Sample( smp_base, I.tcdh.xy ).y;
+	float  gloss = saturate( 1.0h - rough );
+
+	O = pack_gbuffer(
+			float4( Ne,             h     ),
+			float4( I.position.xyz, ms    ),
+			float4( base.xyz,       gloss ) );
+
+	return O;
+}

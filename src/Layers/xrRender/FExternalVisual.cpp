@@ -59,6 +59,11 @@
 // normal texture. Receives a "albedo,normal" texture list (t_base = albedo, t_second = normal map).
 #define EXTERNAL_BUMP_SHADER "external_bump"
 
+// Lit + normal + metallic-roughness variant, used when the material also has a metallic-roughness
+// map. Texture list is still "albedo,normal"; the metal-rough texture is registered under a derived
+// "$user$gltf_mr\..." name that external_bump_mr.s reconstructs from the normal map's name.
+#define EXTERNAL_BUMP_MR_SHADER "external_bump_mr"
+
 // Engine missing-texture placeholder (ships with the base game, always present). Bound when the
 // glTF has no usable base-color texture, or the named texture isn't on disk -- X-Ray FATALS on a
 // missing texture ("Can't find texture ..."), so we must never bind a name that does not resolve.
@@ -187,6 +192,13 @@ static void ext_make_user_name(string_path out, const char* short_name)
 static void ext_make_user_name_n(string_path out, const char* short_name)
 {
 	strconcat(sizeof(string_path), out, "$user$gltf_n\\", short_name ? short_name : "unnamed");
+}
+
+// Synthetic resource name for a model's decoded metallic-roughness map. MUST stay in sync with the
+// "gltf_n"->"gltf_mr" derivation in external_bump_mr.s (which rebuilds this from the normal name).
+static void ext_make_user_name_mr(string_path out, const char* short_name)
+{
+	strconcat(sizeof(string_path), out, "$user$gltf_mr\\", short_name ? short_name : "unnamed");
 }
 
 // Fetch the bytes for a glTF image and decode them. Handles GLB/.bin bufferView images and external
@@ -318,6 +330,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	const char* base_tex_uri = NULL;
 	const cgltf_image* base_img = NULL;
 	const cgltf_image* normal_img = NULL;
+	const cgltf_image* mr_img = NULL;
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
@@ -437,6 +450,13 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				const cgltf_texture* nt = prim.material->normal_texture.texture;
 				if (nt->image) normal_img = nt->image;
 			}
+
+			// remember the first material's metallic-roughness map (-> gloss via the bump_mr shader)
+			if (!mr_img && prim.material && prim.material->has_pbr_metallic_roughness)
+			{
+				const cgltf_texture* mt = prim.material->pbr_metallic_roughness.metallic_roughness_texture.texture;
+				if (mt && mt->image) mr_img = mt->image;
+			}
 		}
 	}
 
@@ -446,6 +466,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	bool have_tex = ext_texture_name_from_uri(base_tex_uri, tex_name);
 	ID3DBaseTexture* decoded_tex = base_img ? ext_decode_gltf_image(base_img, full_path) : NULL;
 	ID3DBaseTexture* decoded_nrm = normal_img ? ext_decode_gltf_image(normal_img, full_path) : NULL;
+	ID3DBaseTexture* decoded_mr = mr_img ? ext_decode_gltf_image(mr_img, full_path) : NULL;
 
 	cgltf_free(gltf);
 	xr_free(blob);
@@ -579,6 +600,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	// placeholder (X-Ray FATALS on a missing texture, so the bound name must always resolve).
 	ref_texture user_tex; // must outlive SetShaderTexture so the shader can take its own ref
 	ref_texture user_nrm; // ditto, for the normal map
+	ref_texture user_mr;  // ditto, for the metallic-roughness map
 	bool resolved = false;
 
 	if (decoded_tex)
@@ -620,7 +642,32 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		_RELEASE(decoded_nrm);
 	}
 
-	if (have_normal)
+	// Metallic-roughness map -> its own $user$ texture (name matched by external_bump_mr.s). Only
+	// useful alongside a normal map (that shader path needs both); decode is linear like the normal.
+	bool have_mr = false;
+	if (decoded_mr)
+	{
+		if (have_normal)
+		{
+			string_path mr_name;
+			ext_make_user_name_mr(mr_name, short_name);
+			user_mr.create(mr_name);
+			if (user_mr._get())
+			{
+				user_mr->surface_set(decoded_mr);
+				have_mr = true;
+			}
+		}
+		_RELEASE(decoded_mr);
+	}
+
+	if (have_normal && have_mr)
+	{
+		string_path tlist;
+		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name); // MR name derived in the shader
+		SetShaderTexture(EXTERNAL_BUMP_MR_SHADER, tlist);
+	}
+	else if (have_normal)
 	{
 		string_path tlist;
 		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name);
