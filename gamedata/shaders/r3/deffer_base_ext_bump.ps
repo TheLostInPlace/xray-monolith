@@ -13,12 +13,19 @@
 
 #include "common.h"
 
+// glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip is a no-op). Set
+// per-object in FExternalVisual::Render.
+float4 ext_alpha_cutoff;
+
 f_deffer main( p_bumped I )
 {
 	f_deffer O;
 
 	// albedo
 	float4 base = s_base.Sample( smp_base, I.tcdh.xy );
+
+	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
+	clip( base.a - ext_alpha_cutoff.x );
 
 	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1]
 	// (glTF uses +Y/OpenGL convention; if bumps read as dents, negate n_ts.y here)

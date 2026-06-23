@@ -5,12 +5,13 @@
 -- a metallic-roughness map. All three maps are passed explicitly in the texture list
 -- "albedo,normal,metalrough"; the engine forwards the 3rd list texture as a 5th arg (t_metalrough).
 
-function normal		(shader, t_base, t_second, t_detail, t_metalrough)
+function normal		(shader, t_base, t_second, t_detail, t_metalrough, t_ao)
 	shader:begin	("deffer_model_bump","deffer_base_ext_bump_mr")
 			: fog		(false)
 	shader:dx10texture	("s_base",	t_base)			-- albedo
 	shader:dx10texture	("s_bump",	t_second)		-- glTF tangent-space normal map
 	shader:dx10texture	("s_bumpX",	t_metalrough)	-- glTF metallic-roughness map (G=rough, B=metal)
+	shader:dx10texture	("s_ao",	t_ao)			-- glTF occlusion (R); = MR tex for ORM, else separate AO
 	shader:dx10sampler	("smp_base")
 	shader:dx10stencil	(true, 8, 255, 127, 1, 3, 1)  -- lit-geometry stencil mark (skybox fix)
 	shader:dx10stencil_ref	(1)

@@ -31,15 +31,19 @@ public:
 	// and diagnostics. `material_filter` selects which material's primitives to load:
 	// -1 (default) merges every primitive (single-material models); >=0 loads only the
 	// primitives assigned to that glTF material index (one child per material, see
-	// FExternalKinematics); -2 loads only primitives with no material. `emissive_pass` builds the
-	// forward additive emissive OVERLAY (external_emissive) instead of the lit batch -- it returns
-	// false if the selected material has no emissive map. Returns false if the filter selects no
-	// geometry.
-	bool LoadExternal(const char* short_name, const char* full_path, int material_filter = -1, bool emissive_pass = false);
+	// FExternalKinematics); -2 loads only primitives with no material. `pass` selects which batch to
+	// build: ext_lit = the deferred lit batch; ext_emissive = the forward additive emissive OVERLAY
+	// (external_emissive); ext_metal = the forward additive colored-reflection OVERLAY (external_metal).
+	// The overlay passes return false if the selected material lacks the map they need. Returns false
+	// if the filter selects no geometry.
+	enum EExtPass { ext_lit = 0, ext_emissive, ext_metal, ext_blend };
+	bool LoadExternal(const char* short_name, const char* full_path, int material_filter = -1, EExtPass pass = ext_lit);
 
-	// One enumerated glTF material: its index (-1 = the no-material group) and whether it carries an
-	// emissive map (so FExternalKinematics knows to add an emissive overlay child).
-	struct MatInfo { int index; bool emissive; };
+	// One enumerated glTF material: its index (-1 = the no-material group), whether it carries an
+	// emissive map, whether it is metallic (MR map with metallic_factor > 0), and whether it is
+	// transparent (alphaMode=BLEND). FExternalKinematics uses these to pick the per-material children:
+	// BLEND -> a single forward blended child; otherwise a lit child + optional emissive/metal overlays.
+	struct MatInfo { int index; bool emissive; bool metallic; bool blend; };
 
 	// Lightweight parse: collect the distinct materials used by triangle primitives (first-seen
 	// order). Used by FExternalKinematics to decide how many per-material child visuals to build.
@@ -58,6 +62,26 @@ public:
 	// "ext_emissive_scale" so the emissive PS multiplies the map by it. Copied for instancing.
 	bool m_emissive = false;
 	Fvector m_emissive_scale = {1.f, 1.f, 1.f};
+
+	// Metal-reflection overlay child only: forward additive colored env reflection (external_metal).
+	// No per-object constant needed (env cubemaps + env_color are engine globals). Copied for instancing.
+	bool m_metal = false;
+
+	// glTF alphaMode for the LIT batch. MASK -> the material's alphaCutoff (deferred PS clips texels
+	// below it); OPAQUE/BLEND -> -1 (sentinel: clip never fires). Pushed as the shader constant
+	// "ext_alpha_cutoff" in Render(). Copied for instancing. (BLEND is treated as opaque for now.)
+	float m_alpha_cutoff = -1.f;
+
+	// glTF occlusion strength for the LIT batch, but ONLY when occlusion is packed in the R channel of
+	// this material's metallic-roughness texture (ORM). 0 otherwise (no AO / separate AO texture not yet
+	// supported). Pushed as "ext_ao_strength"; the MR deferred PS modulates hemi by it. Copied.
+	float m_ao_strength = 0.f;
+
+	// Forward BLEND child only (glTF alphaMode=BLEND): m_blend marks it; m_blend_alpha = baseColorFactor.a
+	// (overall opacity multiplier), pushed as "ext_blend_alpha" so the forward blend PS scales opacity.
+	// This child renders forward/alpha-blended INSTEAD of writing the deferred G-buffer. Copied.
+	bool m_blend = false;
+	float m_blend_alpha = 1.f;
 };
 
 #endif // FExternalVisualH

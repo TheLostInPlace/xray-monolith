@@ -52,13 +52,13 @@ bool FExternalKinematics::LoadExternal(const char* short_name, const char* full_
 	Fbox total;
 	total.invalidate();
 
-	auto add_child = [&](int material_filter, bool emissive) -> bool
+	auto add_child = [&](int material_filter, FExternalVisual::EExtPass pass) -> bool
 	{
 		FExternalVisual* geom = xr_new<FExternalVisual>();
 		geom->Type = MT_EXTERNAL_STATIC;
-		if (!geom->LoadExternal(short_name, full_path, material_filter, emissive))
+		if (!geom->LoadExternal(short_name, full_path, material_filter, pass))
 		{
-			xr_delete(geom); // selected no geometry / no emissive map (or failed) -> skip
+			xr_delete(geom); // selected no geometry / no map for this overlay (or failed) -> skip
 			return false;
 		}
 		children.push_back(geom);
@@ -70,22 +70,42 @@ bool FExternalKinematics::LoadExternal(const char* short_name, const char* full_
 
 	if (mats.size() <= 1)
 	{
-		if (!add_child(-1, false)) // lit batch (merge all)
-			return false;          // bones not yet allocated -> object is dtor-safe for the caller
-		if (!mats.empty() && mats[0].emissive)
-			add_child(-1, true);   // forward additive emissive overlay (same merge-all geometry)
+		if (!mats.empty() && mats[0].blend)
+		{
+			// transparent: a single forward blended child (NO deferred lit child -- can't go in G-buffer)
+			if (!add_child(-1, FExternalVisual::ext_blend))
+				return false;                             // bones not yet allocated -> object is dtor-safe for the caller
+		}
+		else
+		{
+			if (!add_child(-1, FExternalVisual::ext_lit)) // lit batch (merge all)
+				return false;
+			if (!mats.empty() && mats[0].emissive)
+				add_child(-1, FExternalVisual::ext_emissive); // forward additive emissive overlay (same geometry)
+			if (!mats.empty() && mats[0].metallic)
+				add_child(-1, FExternalVisual::ext_metal);    // forward additive colored-reflection overlay
+		}
 	}
 	else
 	{
 		// one child per material; map the "no material" group (-1) to the -2 filter so it loads only
 		// its own primitives instead of re-merging everything (which -1 means inside LoadExternal).
-		// Materials with an emissive map get a second, forward-additive emissive overlay child.
+		// BLEND materials -> one forward blended child; others -> lit child + emissive/metal overlays.
 		for (const FExternalVisual::MatInfo& m : mats)
 		{
 			const int f = (m.index < 0) ? -2 : m.index;
-			add_child(f, false);
-			if (m.emissive)
-				add_child(f, true);
+			if (m.blend)
+			{
+				add_child(f, FExternalVisual::ext_blend); // transparent: forward blended only
+			}
+			else
+			{
+				add_child(f, FExternalVisual::ext_lit);
+				if (m.emissive)
+					add_child(f, FExternalVisual::ext_emissive);
+				if (m.metallic)
+					add_child(f, FExternalVisual::ext_metal);
+			}
 		}
 		if (children.empty())
 			return false;

@@ -1,0 +1,30 @@
+// deffer_base_ext_blend.ps : forward LIT, alpha-BLENDED pass for external (GLTF/GLB) models whose
+// material is glTF alphaMode = BLEND.
+//
+// Opaque / MASK geometry writes the deferred G-buffer; a TRANSPARENT surface can't (the G-buffer holds
+// one opaque surface per pixel), so a BLEND material renders ONLY here: a forward, back-to-front,
+// src-alpha-blended pass after the deferred combine. Because it's not in the G-buffer it has no deferred
+// lighting, so we light it here with a simple sun N.L + ambient model -- enough to read as a lit
+// transparent surface (point lights / shadows on it aren't available without a full forward path).
+//
+// Bind: s_base = albedo (rgb + opacity in .a). Paired with deffer_model_flat.vs (p_flat).
+
+#include "common.h"
+
+// glTF baseColorFactor alpha (.x) -- overall opacity multiplier on top of the texture's alpha. Set
+// per-object in FExternalVisual::Render.
+float4 ext_blend_alpha;
+
+float4 main( p_flat I ) : SV_Target
+{
+	float4 base = s_base.Sample( smp_base, I.tcdh.xy );
+
+	// simple forward lighting (no deferred buffer to sample): sun diffuse + ambient/hemi. L_sun_dir_e is
+	// the eye-space sun direction (direction of travel), so the vector to the light is its negation.
+	float3 N   = normalize( (float3)I.N.xyz );
+	float  ndl = saturate( dot( N, -L_sun_dir_e ) );
+	float3 lit = base.rgb * ( L_hemi_color.rgb + L_sun_color * ndl );
+
+	// glTF BLEND: src-alpha blend (set in the .s). opacity = texture alpha * baseColorFactor.a.
+	return float4( lit, base.a * ext_blend_alpha.x );
+}

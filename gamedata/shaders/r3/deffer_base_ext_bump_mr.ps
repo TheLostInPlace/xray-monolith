@@ -3,12 +3,26 @@
 //
 // Same as deffer_base_ext_bump.ps but the constant gloss is replaced by gloss derived from the
 // glTF metallic-roughness texture. glTF packs roughness in the GREEN channel and metallic in BLUE.
-// X-Ray's deferred only has a single "gloss" (specular sharpness/intensity) channel -- no true
-// metalness workflow -- so we map roughness -> gloss (smooth surfaces get a tight, bright highlight)
-// and leave metallic out (it would need colored specular / diffuse suppression the stock lighting
-// can't express). Bind: s_base = albedo, s_bump = normal map, s_bumpX = metallic-roughness map.
+// roughness -> gloss (smooth surfaces get a tight, bright highlight). For metalness we do the part
+// that IS expressible stock-safely in our own G-buffer write: metals have ~no diffuse, so we
+// suppress albedo by metalness here (diffuse = albedo * (1-metallic)). The metal's colored specular
+// reflection is added later by our own forward reflection pass -- the shared deferred lighting is
+// never touched. Bind: s_base = albedo, s_bump = normal map, s_bumpX = metallic-roughness map.
 
 #include "common.h"
+
+// glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip is a no-op). Set
+// per-object in FExternalVisual::Render.
+float4 ext_alpha_cutoff;
+
+// glTF occlusion strength (.x): >0 when the material has an occlusion map, 0 when it doesn't. Set
+// per-object in FExternalVisual::Render.
+float4 ext_ao_strength;
+
+// glTF occlusion map -- R channel = ambient occlusion. The loader binds this to the MR texture when
+// occlusion is ORM-packed (occlusion in MR.r), or to a SEPARATE AO texture otherwise; either way we
+// read .r here. When the material has no occlusion it's bound to the MR texture and ignored (strength 0).
+Texture2D s_ao;
 
 f_deffer main( p_bumped I )
 {
@@ -16,6 +30,9 @@ f_deffer main( p_bumped I )
 
 	// albedo
 	float4 base = s_base.Sample( smp_base, I.tcdh.xy );
+
+	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
+	clip( base.a - ext_alpha_cutoff.x );
 
 	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1]
 	float3 n_ts = s_bump.Sample( smp_base, I.tcdh.xy ).xyz * 2.0h - 1.0h;
@@ -28,14 +45,34 @@ f_deffer main( p_bumped I )
 	ms = I.tcdh.w;
 #endif
 
-	// glTF metallic-roughness: G = roughness, B = metallic. gloss = 1 - roughness.
-	float  rough = s_bumpX.Sample( smp_base, I.tcdh.xy ).y;
-	float  gloss = saturate( 1.0h - rough );
+	// glTF metallic-roughness: G = roughness, B = metallic.
+	float2 mr       = s_bumpX.Sample( smp_base, I.tcdh.xy ).yz;
+	float  rough    = mr.x;
+	float  metallic = mr.y;
+
+	// glTF occlusion: darken the ambient/hemi term by the AO in the occlusion map's R channel.
+	// ext_ao_strength.x = the material's occlusionTexture.strength (0 = no occlusion -> no change).
+	float  ao = s_ao.Sample( smp_base, I.tcdh.xy ).r;
+	h *= lerp( 1.0h, ao, ext_ao_strength.x );
+
+	// Diffuse is removed only for SMOOTH metal (a mirror has no diffuse). ROUGH metal KEEPS its albedo
+	// as a stable matte base -- otherwise its whole look becomes the forward reflection, which swings
+	// bright<->dark with view angle (matte paint must not do that). Weight the kill by smoothness:
+	//   smooth metal -> albedo*0 (mirror);  rough metal -> albedo*1 (matte);  dielectric -> albedo.
+	float  smooth_m = metallic * ( 1.0h - rough );          // metalness * smoothness
+	float3 albedo   = base.xyz * ( 1.0h - smooth_m );
+
+	// gloss drives the engine's deferred reflection. Plain roughness mapping: SMOOTH metal keeps the
+	// engine's bright reflection (our overlay adds the colour tint on top), while ROUGH metal's gloss is
+	// ~0 so it stays matte with no SSR artifact -- that, plus keeping its diffuse above, is the matte fix.
+	// (A metallic-wide gloss kill was tried and made smooth metal render black -- the engine reflection
+	// is what gives smooth metal its brightness.)
+	float  gloss    = saturate( 1.0h - rough );
 
 	O = pack_gbuffer(
 			float4( Ne,             h     ),
 			float4( I.position.xyz, ms    ),
-			float4( base.xyz,       gloss ) );
+			float4( albedo,         gloss ) );
 
 	return O;
 }

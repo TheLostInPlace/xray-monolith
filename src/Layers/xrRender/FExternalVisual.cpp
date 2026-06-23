@@ -71,6 +71,17 @@
 // emissive map as t_base. See external_emissive.s / deffer_base_ext_emissive.ps.
 #define EXTERNAL_EMISSIVE_SHADER "external_emissive"
 
+// Forward additive colored-REFLECTION (metal) OVERLAY. Gets "albedo,metalrough" (t_base / t_second) and
+// reflects the sky cubes tinted by albedo, masked by metalness. See external_metal.s /
+// deffer_base_ext_metal.ps. This is the stock-safe half of glTF metalness (the deferred half -- diffuse
+// suppression -- lives in deffer_base_ext_*_mr.ps).
+#define EXTERNAL_METAL_SHADER "external_metal"
+
+// Forward LIT, alpha-BLENDED pass for glTF alphaMode=BLEND materials. Gets the albedo (rgb + opacity in
+// .a) as t_base; renders forward (src-alpha blend, back-to-front) INSTEAD of the deferred batch, since a
+// transparent surface can't go in the G-buffer. See external_blend.s / deffer_base_ext_blend.ps.
+#define EXTERNAL_BLEND_SHADER "external_blend"
+
 // Engine missing-texture placeholder (ships with the base game, always present). Bound when the
 // glTF has no usable base-color texture, or the named texture isn't on disk -- X-Ray FATALS on a
 // missing texture ("Can't find texture ..."), so we must never bind a name that does not resolve.
@@ -213,6 +224,12 @@ static void ext_make_user_name_e(string_path out, const char* short_name)
 	strconcat(sizeof(string_path), out, "$user$gltf_e\\", short_name ? short_name : "unnamed");
 }
 
+// Synthetic resource name for a model's decoded SEPARATE occlusion (AO) map (its own namespace).
+static void ext_make_user_name_ao(string_path out, const char* short_name)
+{
+	strconcat(sizeof(string_path), out, "$user$gltf_ao\\", short_name ? short_name : "unnamed");
+}
+
 // Fetch the bytes for a glTF image and decode them. Handles GLB/.bin bufferView images and external
 // image files (resolved relative to the glTF). base64 "data:" URIs are not decoded yet.
 static ID3DBaseTexture* ext_decode_gltf_image(const cgltf_image* image, const char* gltf_full_path)
@@ -337,7 +354,20 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInf
 			{
 				const bool emis = prim.material && prim.material->emissive_texture.texture
 					&& prim.material->emissive_texture.texture->image;
-				out.push_back(MatInfo{ idx, emis });
+				// metallic = has a metallic-roughness map AND metallic_factor > 0 (cgltf defaults the
+				// factor to 1.0 per spec). Drives the forward colored-reflection overlay. (Factor-only
+				// metals with no MR map aren't handled yet -- they'd need a constant + white MR stand-in.)
+				bool metal = false;
+				if (prim.material && prim.material->has_pbr_metallic_roughness)
+				{
+					const cgltf_pbr_metallic_roughness& pbr = prim.material->pbr_metallic_roughness;
+					const bool has_mr_tex = pbr.metallic_roughness_texture.texture
+						&& pbr.metallic_roughness_texture.texture->image;
+					metal = has_mr_tex && (pbr.metallic_factor > 0.01f);
+				}
+				// transparent surface (renders forward/blended instead of the deferred batch)
+				const bool blend = prim.material && prim.material->alpha_mode == cgltf_alpha_mode_blend;
+				out.push_back(MatInfo{ idx, emis, metal, blend });
 			}
 		}
 	}
@@ -347,12 +377,17 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInf
 	return true;
 }
 
-bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter, bool emissive_pass)
+bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter, EExtPass pass)
 {
 	dbg_name = short_name;
 	dbg_id = 1;
 	skinning = -1; // SKIN_NONE: m_skinning < 0 selects the static v_model VS path (r4.cpp:1487)
 	hud = false;
+
+	// Overlay-pass flags (kept as bools so the rest of the loader reads naturally).
+	const bool emissive_pass = (pass == ext_emissive);
+	const bool metal_pass    = (pass == ext_metal);
+	const bool blend_pass    = (pass == ext_blend);
 
 	// Per-material key so each material child's decoded textures get a unique $user$ name (no
 	// collisions between submeshes of the same model). -1 (merge-all) keeps the bare name.
@@ -404,8 +439,14 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	const cgltf_image* normal_img = NULL;
 	const cgltf_image* mr_img = NULL;
 	const cgltf_image* emissive_img = NULL;
+	const cgltf_image* occ_img = NULL;  // glTF occlusionTexture image (AO); R channel = ambient occlusion
+	float occ_strength = 1.f;           // occlusionTexture.strength (cgltf stores it in .scale)
 	Fvector emissive_scale;
 	emissive_scale.set(1.f, 1.f, 1.f); // glTF emissiveFactor * emissive_strength (captured with the map)
+	cgltf_alpha_mode alpha_mode = cgltf_alpha_mode_opaque; // glTF alphaMode of this child's material
+	float            alpha_cutoff = 0.5f;                  // glTF alphaCutoff (default 0.5)
+	float            base_alpha = 1.f;                     // glTF baseColorFactor.a (opacity for BLEND)
+	bool             alpha_captured = false;
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
@@ -521,6 +562,16 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				}
 			}
 
+			// glTF alphaMode/cutoff of this child's material (first one in the filtered primitive set)
+			if (!alpha_captured && prim.material)
+			{
+				alpha_mode = prim.material->alpha_mode;
+				alpha_cutoff = prim.material->alpha_cutoff;
+				if (prim.material->has_pbr_metallic_roughness)
+					base_alpha = prim.material->pbr_metallic_roughness.base_color_factor[3];
+				alpha_captured = true;
+			}
+
 			// remember the first textured material's base-color image (for embedded/external decode)
 			if (!base_img && prim.material && prim.material->has_pbr_metallic_roughness)
 			{
@@ -546,6 +597,14 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				if (mt && mt->image) mr_img = mt->image;
 			}
 
+			// remember the first material's occlusion (AO) map + strength. cgltf stores the glTF
+			// occlusionTexture.strength in the texture_view's .scale field.
+			if (!occ_img && prim.material && prim.material->occlusion_texture.texture)
+			{
+				const cgltf_texture* ot = prim.material->occlusion_texture.texture;
+				if (ot->image) { occ_img = ot->image; occ_strength = prim.material->occlusion_texture.scale; }
+			}
+
 			// remember the first material's emissive map + its factor*strength (-> additive overlay)
 			if (!emissive_img && prim.material && prim.material->emissive_texture.texture)
 			{
@@ -565,12 +624,17 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	// gltf-owned buffer memory. Also copy the URI-derived name for the pre-converted-.dds fallback.
 	string_path tex_name;
 	bool have_tex = ext_texture_name_from_uri(base_tex_uri, tex_name);
-	// the lit pass needs base/normal/metal-rough; the emissive overlay pass needs only the emissive
-	// map -- decode just what this pass uses (avoids wasted decodes on the doubled emissive children)
+	// Decode just what THIS pass uses (avoids wasted decodes on the doubled overlay children):
+	//   ext_lit   -> albedo + normal + metal-rough(+AO)   ext_emissive -> emissive map only
+	//   ext_metal -> albedo + metal-rough (no normal)     ext_blend    -> albedo only
 	ID3DBaseTexture* decoded_tex = (!emissive_pass && base_img) ? ext_decode_gltf_image(base_img, full_path) : NULL;
-	ID3DBaseTexture* decoded_nrm = (!emissive_pass && normal_img) ? ext_decode_gltf_image(normal_img, full_path) : NULL;
-	ID3DBaseTexture* decoded_mr = (!emissive_pass && mr_img) ? ext_decode_gltf_image(mr_img, full_path) : NULL;
+	ID3DBaseTexture* decoded_nrm = (!emissive_pass && !metal_pass && !blend_pass && normal_img) ? ext_decode_gltf_image(normal_img, full_path) : NULL;
+	ID3DBaseTexture* decoded_mr = (!emissive_pass && !blend_pass && mr_img) ? ext_decode_gltf_image(mr_img, full_path) : NULL;
 	ID3DBaseTexture* decoded_emis = (emissive_pass && emissive_img) ? ext_decode_gltf_image(emissive_img, full_path) : NULL;
+	// separate occlusion (AO) texture -- decode only when it's a DIFFERENT image than the MR map (ORM
+	// occlusion lives in the MR texture's R, so it needs no separate decode). Lit pass only.
+	ID3DBaseTexture* decoded_ao = (!emissive_pass && !metal_pass && !blend_pass && occ_img && occ_img != mr_img)
+		? ext_decode_gltf_image(occ_img, full_path) : NULL;
 
 	cgltf_free(gltf);
 	xr_free(blob);
@@ -719,6 +783,53 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		return true;
 	}
 
+	// --- metal-reflection overlay pass ----------------------------------------------
+	// Forward additive batch: bind albedo (reflection tint = F0) + the metallic-roughness map (metal
+	// mask) and the external_metal shader. Needs both maps; if either is missing this child is pointless
+	// so fail (FExternalKinematics skips it; the GPU buffers built above are released by the dtor). Uses
+	// a metal-specific $user$ key so its decoded textures don't collide with the lit child's same-name
+	// albedo/MR (both children parse the same material independently).
+	if (metal_pass)
+	{
+		if (!decoded_tex || !decoded_mr)
+		{
+			_RELEASE(decoded_tex);
+			_RELEASE(decoded_mr);
+			return false;
+		}
+		string_path mkey;
+		xr_sprintf(mkey, "%s_metal", tex_key);
+
+		ref_texture user_tex_m, user_mr_m; // must outlive SetShaderTexture
+		string_path albedo_name, mrm_name;
+		ext_make_user_name(albedo_name, mkey);
+		user_tex_m.create(albedo_name);
+		if (user_tex_m._get())
+			user_tex_m->surface_set(decoded_tex);
+		_RELEASE(decoded_tex);
+
+		ext_make_user_name_mr(mrm_name, mkey);
+		user_mr_m.create(mrm_name);
+		if (user_mr_m._get())
+			user_mr_m->surface_set(decoded_mr);
+		_RELEASE(decoded_mr);
+
+		string_path tlist_m;
+		strconcat(sizeof(tlist_m), tlist_m, albedo_name, ",", mrm_name); // albedo + metal-rough
+		SetShaderTexture(EXTERNAL_METAL_SHADER, tlist_m);
+		m_metal = true;
+		Type = MT_EXTERNAL_STATIC;
+		return true;
+	}
+
+	// glTF alphaMode for this LIT batch: MASK clips at the material's alphaCutoff; OPAQUE (and, for now,
+	// BLEND) use -1 so the deferred PS never clips. Render() pushes this as "ext_alpha_cutoff".
+	m_alpha_cutoff = (alpha_mode == cgltf_alpha_mode_mask) ? alpha_cutoff : -1.f;
+
+	// glTF occlusion strength (the MR deferred shaders read AO from s_ao.r). 0 = no occlusion map. s_ao is
+	// bound below to the MR texture (ORM: occlusion in MR.r) or to the separately-decoded AO texture.
+	m_ao_strength = occ_img ? occ_strength : 0.f;
+
 	// --- material / shader ----------------------------------------------------------
 	// Preferred: the runtime texture decoded from the glTF's embedded/external base-color image,
 	// registered under a "$user$" name so the engine binds it without touching disk. Fallbacks, in
@@ -727,6 +838,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	ref_texture user_tex; // must outlive SetShaderTexture so the shader can take its own ref
 	ref_texture user_nrm; // ditto, for the normal map
 	ref_texture user_mr;  // ditto, for the metallic-roughness map
+	ref_texture user_ao;  // ditto, for a SEPARATE occlusion (AO) map
 	bool resolved = false;
 
 	if (decoded_tex)
@@ -749,6 +861,19 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		if (have_tex)
 			Msg("~ [gltf] base texture '%s' not found; using placeholder for '%s'", tex_name, full_path);
 		xr_strcpy(tex_name, sizeof(tex_name), EXTERNAL_FALLBACK_TEXTURE);
+	}
+
+	// --- forward BLEND surface -----------------------------------------------------
+	// alphaMode=BLEND can't write the deferred G-buffer, so this child renders forward/alpha-blended with
+	// just the albedo (opacity in .a). The albedo is already resolved above; bind it + external_blend and
+	// stop here (no normal/MR/AO -- the forward pass is a simple lit blend).
+	if (blend_pass)
+	{
+		SetShaderTexture(EXTERNAL_BLEND_SHADER, tex_name);
+		m_blend = true;
+		m_blend_alpha = base_alpha; // glTF baseColorFactor.a (overall opacity multiplier)
+		Type = MT_EXTERNAL_STATIC;
+		return true;
 	}
 
 	// Decode the normal map into its own $user$ texture. When present, switch to the bump shader and
@@ -785,11 +910,31 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		_RELEASE(decoded_mr);
 	}
 
+	// SEPARATE occlusion map -> its own $user$ texture (linear decode). Only decoded when occlusion is a
+	// DIFFERENT image than the MR map; ORM occlusion is read from the MR texture's R instead.
+	bool have_sep_ao = false;
+	string_path ao_sep_name;
+	if (decoded_ao)
+	{
+		ext_make_user_name_ao(ao_sep_name, tex_key);
+		user_ao.create(ao_sep_name);
+		if (user_ao._get())
+		{
+			user_ao->surface_set(decoded_ao);
+			have_sep_ao = true;
+		}
+		_RELEASE(decoded_ao);
+	}
+
+	// s_ao source for the MR shaders: the separate AO texture if we have one, else the MR texture (ORM
+	// occlusion lives in MR.r; when there's no occlusion, ext_ao_strength is 0 so this bind is ignored).
+	const char* ao_name = have_sep_ao ? ao_sep_name : mr_name;
+
 	string_path tlist;
 	if (have_normal && have_mr)
 	{
-		// albedo,normal,metalrough -> t_base / t_second / t_metalrough (engine forwards the 3rd entry)
-		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name, ",", mr_name);
+		// albedo,normal,metalrough,ao -> t_base / t_second / t_metalrough / t_ao (engine forwards 3rd+4th)
+		xr_sprintf(tlist, "%s,%s,%s,%s", tex_name, normal_name, mr_name, ao_name);
 		SetShaderTexture(EXTERNAL_BUMP_MR_SHADER, tlist);
 	}
 	else if (have_normal)
@@ -799,7 +944,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	}
 	else if (have_mr)
 	{
-		strconcat(sizeof(tlist), tlist, tex_name, ",", mr_name);     // albedo + metal-rough (no normal)
+		// albedo,metalrough,ao (no normal) -> t_base / t_second / t_ao
+		xr_sprintf(tlist, "%s,%s,%s", tex_name, mr_name, ao_name);
 		SetShaderTexture(EXTERNAL_MR_SHADER, tlist);
 	}
 	else
@@ -820,8 +966,18 @@ void FExternalVisual::Render(float)
 	PROF_EVENT("FExternalVisual::Render");
 	// emissive overlay: push glTF emissiveFactor*strength so the emissive PS scales the map. The
 	// shader is already bound (set_Element ran before Render), so this binds into the active table.
+	// Push only the constant(s) this child's shader declares (set_c on a missing constant is a no-op, but
+	// this keeps it clear). Child kinds are mutually exclusive: emissive overlay / blend surface / metal
+	// overlay / lit deferred batch.
 	if (m_emissive)
 		RCache.set_c("ext_emissive_scale", m_emissive_scale.x, m_emissive_scale.y, m_emissive_scale.z, 1.f);
+	else if (m_blend)
+		RCache.set_c("ext_blend_alpha", m_blend_alpha, 0.f, 0.f, 0.f); // glTF baseColorFactor.a (opacity)
+	else if (!m_metal) // lit deferred batch
+	{
+		RCache.set_c("ext_alpha_cutoff", m_alpha_cutoff, 0.f, 0.f, 0.f); // MASK cutoff (-1 = no clip)
+		RCache.set_c("ext_ao_strength", m_ao_strength, 0.f, 0.f, 0.f);   // glTF occlusion (ORM in MR.r)
+	}
 	RCache.set_Geometry(rm_geom);
 #if defined(USE_DX11) || defined(USE_DX10)
 	// set_Geometry() just bound the IB as R16_UINT (the backend hardcodes that format). For a 32-bit
@@ -862,4 +1018,9 @@ void FExternalVisual::Copy(dxRender_Visual* pSrc)
 	PCOPY(m_index32);
 	PCOPY(m_emissive);
 	PCOPY(m_emissive_scale);
+	PCOPY(m_metal);
+	PCOPY(m_alpha_cutoff);
+	PCOPY(m_ao_strength);
+	PCOPY(m_blend);
+	PCOPY(m_blend_alpha);
 }

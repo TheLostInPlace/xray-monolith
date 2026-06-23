@@ -1,0 +1,62 @@
+// deffer_base_ext_metal.ps : forward additive COLORED-REFLECTION overlay for external (GLTF/GLB)
+// models that carry a glTF metallic-roughness map.
+//
+// This is the part of glTF metalness that X-Ray's shared deferred lighting can't express and that we
+// must NOT add there (a metal flag can't be packed stock-safely into the FP16 G-buffer). Instead it
+// runs entirely in OUR OWN forward pass -- like the emissive overlay -- so zero stock code/shaders are
+// touched. Metals reflect their albedo as colored specular and have ~no diffuse; the paired deferred
+// PS (deffer_base_ext_bump_mr / _mr) already suppressed diffuse by metalness, and here we ADD the
+// environment reflection tinted by the metal's base colour (Fresnel F0 = albedo), masked by metalness.
+//
+// The environment cubemaps (s_env0 = current sky, s_env1 = target sky) and env_color (xyz = intensity,
+// w = day/night lerp) are the SAME globals the engine's own hmodel reflections use, so a metal reflects
+// the same sky the scene does. Sampling mirrors hmodel's specular path exactly (remap + blend) for a
+// consistent look. Rendered :sorting(2,true):blend(one,one) onto the LDR scene (like the emissive
+// overlay) -- so no gamma-square here (that would mismatch the tone-mapped scene).
+//
+// Bind: s_base = albedo, s_bumpX = metallic-roughness (G=rough, B=metal), s_env0/s_env1 = sky cubes.
+
+#include "common.h"
+
+TextureCube s_env0;     // current sky cube  ($user$sky0)
+TextureCube s_env1;     // target  sky cube  ($user$sky1)
+float4      env_color;  // engine global (set at phase_combine): xyz = env intensity, w = day/night lerp
+
+float4 main( p_flat I ) : SV_Target
+{
+	float3 base     = s_base.Sample ( smp_base, I.tcdh.xy ).rgb;      // albedo = metal reflection colour (F0)
+	float2 mr       = s_bumpX.Sample( smp_base, I.tcdh.xy ).yz;       // glTF: G = roughness, B = metallic
+	float  rough    = mr.x;
+	float  metallic = mr.y;
+
+	// view-space normal / position / view direction
+	float3 Nv = normalize( (float3)I.N.xyz );
+	float3 Pv = I.position.xyz;
+	float3 Vv = -normalize( Pv );
+
+	// world-space reflection vector (mirror hmodel: view->world via m_inv_V, then reflect)
+	float3 nw       = mul( m_inv_V, Nv );
+	float3 v2Pnt    = mul( m_inv_V, normalize( Pv ) );
+	float3 vreflect = reflect( v2Pnt, nw );
+
+	// sky in the mirror direction (hmodel's specular cube remap)
+	float3 va = abs( vreflect );
+	float  vm = max( va.x, max( va.y, va.z ) );
+	vreflect /= vm;
+	if ( vreflect.y < 0.999 ) vreflect.y = vreflect.y * 2 - 1;
+	float3 e0s = s_env0.SampleLevel( smp_rtlinear, vreflect, 0 ).rgb;
+	float3 e1s = s_env1.SampleLevel( smp_rtlinear, vreflect, 0 ).rgb;
+	float3 env = env_color.xyz * lerp( e0s, e1s, env_color.w );
+
+	// Fresnel-Schlick, F0 = albedo: metals reflect their own colour, brightening at grazing angles
+	float  NoV = saturate( dot( Nv, Vv ) );
+	float3 F   = base + ( 1.0h - base ) * pow( 1.0h - NoV, 5.0h );
+
+	// Reflection strength = metalness * SMOOTHNESS. Only smooth metal mirrors the sky; ROUGH metal gets
+	// ~no reflection here and instead shows the stable matte diffuse the deferred pass kept for it. That
+	// pairing is what stops matte metal (e.g. the painted helmet shell) swinging bright<->dark with the
+	// view angle -- a mirror's look is view-dependent, a matte surface's must not be.
+	float  gloss = saturate( 1.0h - rough );
+	float3 refl  = env * F * metallic * gloss;
+	return float4( refl, 1.0h );
+}
