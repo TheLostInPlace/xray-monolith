@@ -39,6 +39,14 @@
 #define EXTERNAL_FLIP_Z 1
 #define EXTERNAL_FLIP_WINDING 1
 
+// Auto-scale comically-large imported models down to roughly player size. Many authored glTF
+// assets use arbitrary unit scales (a "rubber duck" can be tens of metres). If the loaded model's
+// largest bounding-box dimension exceeds EXTERNAL_AUTOSCALE_MAX_SIZE (metres / engine units), the
+// geometry is uniformly scaled down (about the local origin) so it fits; models already at or below
+// the target are left untouched (never scaled UP). Set EXTERNAL_AUTOSCALE 0 to disable.
+#define EXTERNAL_AUTOSCALE 1
+#define EXTERNAL_AUTOSCALE_MAX_SIZE 2.0f
+
 // Phase 1 shader (gamedata/shaders/r3/external_static.s). It reuses the stock deferred
 // MODEL vertex/pixel shaders, which consume the exact D3DCOLOR-packed model vertex layout
 // produced below, and renders the mesh fullbright (emissive) so it is visible regardless of
@@ -426,6 +434,34 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		Msg("! [gltf] '%s' has no triangle geometry", full_path);
 		return false;
 	}
+
+	// --- auto-scale oversized models -------------------------------------------------
+	// Cap the model's largest dimension at the player-ish target so wrongly-scaled assets don't
+	// spawn comically large. Uniform scale about the local origin -> the bbox below (and the
+	// physics box FExternalKinematics builds from it) stay consistent. Never scales models UP.
+#if EXTERNAL_AUTOSCALE
+	{
+		float maxdim = bb.max.x - bb.min.x;
+		const float dy = bb.max.y - bb.min.y;
+		const float dz = bb.max.z - bb.min.z;
+		if (dy > maxdim) maxdim = dy;
+		if (dz > maxdim) maxdim = dz;
+		if (maxdim > EXTERNAL_AUTOSCALE_MAX_SIZE)
+		{
+			const float s = EXTERNAL_AUTOSCALE_MAX_SIZE / maxdim;
+			for (u32 vi = 0; vi < verts.size(); ++vi)
+			{
+				verts[vi].P[0] *= s;
+				verts[vi].P[1] *= s;
+				verts[vi].P[2] *= s;
+			}
+			bb.min.mul(s);
+			bb.max.mul(s);
+			Msg("~ [gltf] '%s' auto-scaled x%.4f (largest dim %.2f -> %.2f units)", full_path, s, maxdim,
+			    EXTERNAL_AUTOSCALE_MAX_SIZE);
+		}
+	}
+#endif
 
 	// --- GPU buffers (mirror Fvisual) -----------------------------------------------
 	vBase = 0;
