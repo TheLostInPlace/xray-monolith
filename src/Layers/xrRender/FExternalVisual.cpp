@@ -37,6 +37,11 @@
 // scene lighting -- ideal for confirming geometry/UVs. Phase 2 swaps in a lit pbr_external.
 #define EXTERNAL_DEFAULT_SHADER "external_static"
 
+// Engine missing-texture placeholder (ships with the base game, always present). Bound when the
+// glTF has no usable base-color texture, or the named texture isn't on disk -- X-Ray FATALS on a
+// missing texture ("Can't find texture ..."), so we must never bind a name that does not resolve.
+#define EXTERNAL_FALLBACK_TEXTURE "ed\\ed_not_existing_texture"
+
 //////////////////////////////////////////////////////////////////////
 // Vertex format
 //
@@ -101,6 +106,17 @@ static bool ext_texture_name_from_uri(const char* uri, string_path out)
 	// strip extension
 	if (char* e = strext(out)) *e = 0;
 	return out[0] != 0;
+}
+
+// True if a texture "<name>.dds" exists under $game_textures$. X-Ray fatals on a missing texture,
+// so the loader checks this before binding a glTF-provided base-color name.
+static bool ext_texture_exists(const char* name)
+{
+	if (!name || !name[0])
+		return false;
+	string_path fn, with_ext;
+	strconcat(sizeof(with_ext), with_ext, name, ".dds");
+	return !!FS.exist(fn, "$game_textures$", with_ext);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -346,11 +362,13 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	vis.sphere.set(c, half.magnitude());
 
 	// --- material / shader ----------------------------------------------------------
-	// Fall back to the model's own name if the glTF gives no usable texture.
-	if (!have_tex)
+	// X-Ray fatals on a missing texture, so the bound name must resolve to a real file: use the
+	// glTF base-color image only if it exists on disk, otherwise the engine placeholder.
+	if (!have_tex || !ext_texture_exists(tex_name))
 	{
-		xr_strcpy(tex_name, sizeof(tex_name), short_name);
-		if (char* e = strext(tex_name)) *e = 0;
+		if (have_tex)
+			Msg("~ [gltf] base texture '%s' not found; using placeholder for '%s'", tex_name, full_path);
+		xr_strcpy(tex_name, sizeof(tex_name), EXTERNAL_FALLBACK_TEXTURE);
 	}
 	SetShaderTexture(EXTERNAL_DEFAULT_SHADER, tex_name);
 
