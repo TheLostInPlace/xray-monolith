@@ -341,7 +341,7 @@ IRenderVisual* CKinematics::GetVisualByBone(u16 bone_id)
 	{
 		IRenderVisual* child = children[it];
 		CSkeletonX* childSkel = smart_cast<CSkeletonX*>(child);
-		if (childSkel->has_bone_id(bone_id))
+		if (childSkel && childSkel->has_bone_id(bone_id)) // non-skeletal children (external static geometry) are skipped
 		{
 			return child;
 		}
@@ -438,7 +438,8 @@ void CKinematics::Copy(dxRender_Visual* P)
 	IBoneInstances_Create();
 
 	for (u32 i = 0; i < children.size(); i++)
-		LL_GetChild(i)->SetParent(this);
+		if (CSkeletonX* c = LL_GetChild(i)) // skip non-skeletal children (external static geometry)
+			c->SetParent(this);
 
 	CalculateBones_Invalidate();
 
@@ -573,7 +574,7 @@ void CKinematics::Visibility_Update()
 	for (u32 c_it = 0; c_it < children.size(); c_it++)
 	{
 		CSkeletonX* _c = smart_cast<CSkeletonX*>(children[c_it]);
-		VERIFY(_c);
+		if (!_c) continue; // non-skeletal child (external static geometry) -- always visible, never hidden by bones
 		if (!_c->has_visible_bones())
 		{
 			// move into invisible list
@@ -588,7 +589,7 @@ void CKinematics::Visibility_Update()
 	for (u32 _it = 0; _it < children_invisible.size(); _it++)
 	{
 		CSkeletonX* _c = smart_cast<CSkeletonX*>(children_invisible[_it]);
-		VERIFY(_c) ;
+		if (!_c) continue; // non-skeletal child -- never in the invisible list, but guard anyway
 		if (_c->has_visible_bones())
 		{
 			// move into visible list
@@ -634,7 +635,8 @@ void BuildMatrix(Fmatrix& mView, float invsz, const Fvector norm, const Fvector&
 void CKinematics::EnumBoneVertices(SEnumVerticesCallback& C, u16 bone_id)
 {
 	for (u32 i = 0; i < children.size(); i++)
-		LL_GetChild(i)->EnumBoneVertices(C, bone_id);
+		if (CSkeletonX* c = LL_GetChild(i)) // skip non-skeletal children (external static geometry)
+			c->EnumBoneVertices(C, bone_id);
 }
 
 #include "cl_intersect.h"
@@ -651,7 +653,7 @@ bool CKinematics::PickBone(const Fmatrix& parent_xform, IKinematics::pick_result
 	P.transform_tiny(S, start);
 	P.transform_dir(D, dir);
 	for (u32 i = 0; i < children.size(); i++)
-		if (LL_GetChild(i)->PickBone(r, dist, S, D, bone_id))
+		if (LL_GetChild(i) && LL_GetChild(i)->PickBone(r, dist, S, D, bone_id))
 		{
 			parent_xform.transform_dir(r.normal);
 			parent_xform.transform_tiny(r.tri[0]);
@@ -691,7 +693,7 @@ void CKinematics::AddWallmark(const Fmatrix* parent_xform, const Fvector3& start
 			if (CDB::TestRayOBB(S, D, obb))
 				for (u32 i = 0; i < children.size(); i++)
 				{
-					if (LL_GetChild(i)->PickBone(r, dist, S, D, k))
+					if (LL_GetChild(i) && LL_GetChild(i)->PickBone(r, dist, S, D, k))
 					{
 						picked = TRUE;
 						dist = r.dist;
@@ -757,6 +759,7 @@ void CKinematics::AddWallmark(const Fmatrix* parent_xform, const Fvector3& start
 	for (u32 i = 0; i < children.size(); i++)
 	{
 		CSkeletonX* S = LL_GetChild(i);
+		if (!S) continue; // skip non-skeletal (external static) children
 		for (U16It b_it = test_bones.begin(); b_it != test_bones.end(); b_it++)
 			S->FillVertices(mView, *wm, normal, size, *b_it);
 	}

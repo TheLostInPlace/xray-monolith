@@ -321,6 +321,9 @@
     <ClInclude Include="..\xrRender\FExternalVisual.h">
       <Filter>Models\Visuals</Filter>
     </ClInclude>
+    <ClInclude Include="..\xrRender\FExternalKinematics.h">
+      <Filter>Models\Visuals</Filter>
+    </ClInclude>
     <ClInclude Include="..\xrRender\cgltf.h">
       <Filter>Models\Visuals</Filter>
     </ClInclude>
@@ -871,6 +874,9 @@
       <Filter>Models\Visuals</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRender\FExternalVisual.cpp">
+      <Filter>Models\Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="..\xrRender\FExternalKinematics.cpp">
       <Filter>Models\Visuals</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRender\cgltf_impl.cpp">

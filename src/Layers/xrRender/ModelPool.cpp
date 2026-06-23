@@ -16,10 +16,12 @@
 #include "ParticleGroup.h"
 #include "ParticleEffect.h"
 #include "FExternalVisual.h"
+#include "FExternalKinematics.h"
 #else
     #include "fmesh.h"
     #include "fvisual.h"
     #include "FExternalVisual.h"
+    #include "FExternalKinematics.h"
     #include "fprogressive.h"
     #include "ParticleEffect.h"
     #include "ParticleGroup.h"
@@ -98,12 +100,13 @@ bool CModelPool::is_external_format(const char* name)
 
 dxRender_Visual* CModelPool::Instance_Create_External(const char* short_name, const char* full_path, bool assert)
 {
-	FExternalVisual* V = xr_new<FExternalVisual>();
-	V->Type = MT_EXTERNAL_STATIC;
+	// Wrap the external mesh in a 1-bone kinematic so it can be spawned as a normal game object
+	// (the physics/collision/object pipeline requires a kinematic visual). LoadExternal builds the
+	// geometry child + skeleton and sets Type = MT_SKELETON_RIGID.
+	FExternalKinematics* V = xr_new<FExternalKinematics>();
 	if (!V->LoadExternal(short_name, full_path))
 	{
-		V->Release();
-		xr_delete(V);
+		xr_delete(V); // dtor-safe on partial load (bones not allocated yet)
 		if (assert)
 			Debug.fatal(DEBUG_INFO, "Can't load external model '%s'.", full_path);
 		return nullptr;
