@@ -67,6 +67,10 @@
 // normals; gets a "albedo,metalrough" list (t_base / t_second) -- no derivation needed (2 textures).
 #define EXTERNAL_MR_SHADER "external_mr"
 
+// Forward additive emissive OVERLAY (rendered in addition to the lit batch, post-deferred). Gets the
+// emissive map as t_base. See external_emissive.s / deffer_base_ext_emissive.ps.
+#define EXTERNAL_EMISSIVE_SHADER "external_emissive"
+
 // Engine missing-texture placeholder (ships with the base game, always present). Bound when the
 // glTF has no usable base-color texture, or the named texture isn't on disk -- X-Ray FATALS on a
 // missing texture ("Can't find texture ..."), so we must never bind a name that does not resolve.
@@ -203,6 +207,12 @@ static void ext_make_user_name_mr(string_path out, const char* short_name)
 	strconcat(sizeof(string_path), out, "$user$gltf_mr\\", short_name ? short_name : "unnamed");
 }
 
+// Synthetic resource name for a model's decoded emissive map (its own namespace).
+static void ext_make_user_name_e(string_path out, const char* short_name)
+{
+	strconcat(sizeof(string_path), out, "$user$gltf_e\\", short_name ? short_name : "unnamed");
+}
+
 // Fetch the bytes for a glTF image and decode them. Handles GLB/.bin bufferView images and external
 // image files (resolved relative to the glTF). base64 "data:" URIs are not decoded yet.
 static ID3DBaseTexture* ext_decode_gltf_image(const cgltf_image* image, const char* gltf_full_path)
@@ -285,7 +295,7 @@ void FExternalVisual::Load(LPCSTR N, IReader* /*data*/, u32 /*dwFlags*/)
 // External loader
 //////////////////////////////////////////////////////////////////////
 
-bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<int>& out)
+bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInfo>& out)
 {
 	out.clear();
 
@@ -307,8 +317,8 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<int>& 
 		return false;
 	}
 
-	// distinct material indices used by triangle primitives, in first-seen order (mirrors the node
-	// iteration in LoadExternal so the set matches what actually emits geometry)
+	// distinct materials used by triangle primitives, in first-seen order (mirrors the node iteration
+	// in LoadExternal so the set matches what actually emits geometry); record emissive presence too
 	for (cgltf_size ni = 0; ni < gltf->nodes_count; ++ni)
 	{
 		const cgltf_node& node = gltf->nodes[ni];
@@ -322,8 +332,13 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<int>& 
 				continue;
 			const int idx = prim.material ? (int)(prim.material - gltf->materials) : -1;
 			bool seen = false;
-			for (int v : out) if (v == idx) { seen = true; break; }
-			if (!seen) out.push_back(idx);
+			for (const MatInfo& v : out) if (v.index == idx) { seen = true; break; }
+			if (!seen)
+			{
+				const bool emis = prim.material && prim.material->emissive_texture.texture
+					&& prim.material->emissive_texture.texture->image;
+				out.push_back(MatInfo{ idx, emis });
+			}
 		}
 	}
 
@@ -332,7 +347,7 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<int>& 
 	return true;
 }
 
-bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter)
+bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter, bool emissive_pass)
 {
 	dbg_name = short_name;
 	dbg_id = 1;
@@ -388,6 +403,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	const cgltf_image* base_img = NULL;
 	const cgltf_image* normal_img = NULL;
 	const cgltf_image* mr_img = NULL;
+	const cgltf_image* emissive_img = NULL;
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
@@ -527,6 +543,13 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				const cgltf_texture* mt = prim.material->pbr_metallic_roughness.metallic_roughness_texture.texture;
 				if (mt && mt->image) mr_img = mt->image;
 			}
+
+			// remember the first material's emissive map (-> additive overlay when emissive_pass)
+			if (!emissive_img && prim.material && prim.material->emissive_texture.texture)
+			{
+				const cgltf_texture* et = prim.material->emissive_texture.texture;
+				if (et->image) emissive_img = et->image;
+			}
 		}
 	}
 
@@ -534,9 +557,12 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	// gltf-owned buffer memory. Also copy the URI-derived name for the pre-converted-.dds fallback.
 	string_path tex_name;
 	bool have_tex = ext_texture_name_from_uri(base_tex_uri, tex_name);
-	ID3DBaseTexture* decoded_tex = base_img ? ext_decode_gltf_image(base_img, full_path) : NULL;
-	ID3DBaseTexture* decoded_nrm = normal_img ? ext_decode_gltf_image(normal_img, full_path) : NULL;
-	ID3DBaseTexture* decoded_mr = mr_img ? ext_decode_gltf_image(mr_img, full_path) : NULL;
+	// the lit pass needs base/normal/metal-rough; the emissive overlay pass needs only the emissive
+	// map -- decode just what this pass uses (avoids wasted decodes on the doubled emissive children)
+	ID3DBaseTexture* decoded_tex = (!emissive_pass && base_img) ? ext_decode_gltf_image(base_img, full_path) : NULL;
+	ID3DBaseTexture* decoded_nrm = (!emissive_pass && normal_img) ? ext_decode_gltf_image(normal_img, full_path) : NULL;
+	ID3DBaseTexture* decoded_mr = (!emissive_pass && mr_img) ? ext_decode_gltf_image(mr_img, full_path) : NULL;
+	ID3DBaseTexture* decoded_emis = (emissive_pass && emissive_img) ? ext_decode_gltf_image(emissive_img, full_path) : NULL;
 
 	cgltf_free(gltf);
 	xr_free(blob);
@@ -662,6 +688,26 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	Fvector half;
 	half.sub(bb.max, bb.min).mul(0.5f);
 	vis.sphere.set(c, half.magnitude());
+
+	// --- emissive overlay pass ------------------------------------------------------
+	// Forward additive batch: bind only the emissive map and the external_emissive shader. If the
+	// selected material has no emissive map this child is pointless, so fail (FExternalKinematics
+	// then skips it; the GPU buffers built above are released by the dtor).
+	if (emissive_pass)
+	{
+		if (!decoded_emis)
+			return false;
+		ref_texture user_emis; // must outlive SetShaderTexture
+		string_path emis_name;
+		ext_make_user_name_e(emis_name, tex_key);
+		user_emis.create(emis_name);
+		if (user_emis._get())
+			user_emis->surface_set(decoded_emis);
+		_RELEASE(decoded_emis);
+		SetShaderTexture(EXTERNAL_EMISSIVE_SHADER, emis_name);
+		Type = MT_EXTERNAL_STATIC;
+		return true;
+	}
 
 	// --- material / shader ----------------------------------------------------------
 	// Preferred: the runtime texture decoded from the glTF's embedded/external base-color image,

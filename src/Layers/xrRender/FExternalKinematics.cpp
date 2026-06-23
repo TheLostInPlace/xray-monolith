@@ -46,19 +46,19 @@ bool FExternalKinematics::LoadExternal(const char* short_name, const char* full_
 	// material, each loading only its material's primitives. The skeleton below stays a single rigid
 	// root and all children render under it. A single-material model makes exactly one child
 	// (filter -1 = merge everything), identical to the original behaviour.
-	xr_vector<int> mats;
+	xr_vector<FExternalVisual::MatInfo> mats;
 	FExternalVisual::GetMaterialIndices(full_path, mats);
 
 	Fbox total;
 	total.invalidate();
 
-	auto add_child = [&](int material_filter) -> bool
+	auto add_child = [&](int material_filter, bool emissive) -> bool
 	{
 		FExternalVisual* geom = xr_new<FExternalVisual>();
 		geom->Type = MT_EXTERNAL_STATIC;
-		if (!geom->LoadExternal(short_name, full_path, material_filter))
+		if (!geom->LoadExternal(short_name, full_path, material_filter, emissive))
 		{
-			xr_delete(geom); // selected no geometry (or failed) -> skip
+			xr_delete(geom); // selected no geometry / no emissive map (or failed) -> skip
 			return false;
 		}
 		children.push_back(geom);
@@ -70,15 +70,23 @@ bool FExternalKinematics::LoadExternal(const char* short_name, const char* full_
 
 	if (mats.size() <= 1)
 	{
-		if (!add_child(-1))
-			return false; // bones not yet allocated -> object is dtor-safe for the caller
+		if (!add_child(-1, false)) // lit batch (merge all)
+			return false;          // bones not yet allocated -> object is dtor-safe for the caller
+		if (!mats.empty() && mats[0].emissive)
+			add_child(-1, true);   // forward additive emissive overlay (same merge-all geometry)
 	}
 	else
 	{
 		// one child per material; map the "no material" group (-1) to the -2 filter so it loads only
 		// its own primitives instead of re-merging everything (which -1 means inside LoadExternal).
-		for (int mi : mats)
-			add_child(mi < 0 ? -2 : mi);
+		// Materials with an emissive map get a second, forward-additive emissive overlay child.
+		for (const FExternalVisual::MatInfo& m : mats)
+		{
+			const int f = (m.index < 0) ? -2 : m.index;
+			add_child(f, false);
+			if (m.emissive)
+				add_child(f, true);
+		}
 		if (children.empty())
 			return false;
 	}
