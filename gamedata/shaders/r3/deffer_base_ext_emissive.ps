@@ -13,9 +13,12 @@
 
 #include "common.h"
 
+// glTF emissiveFactor * emissive_strength, pushed per-object by FExternalVisual::Render via set_c.
+float4 ext_emissive_scale;
+
 float4 main( p_flat I ) : SV_Target
 {
-	float3 e = s_base.Sample( smp_base, I.tcdh.xy ).rgb;	// glTF emissive map
+	float3 e = s_base.Sample( smp_base, I.tcdh.xy ).rgb * ext_emissive_scale.rgb;	// glTF emissive
 	// additive blend (one,one) adds this straight onto the lit scene colour
 	return float4( e, 1.0h );
 }

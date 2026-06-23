@@ -52,6 +52,12 @@ public:
 	// mesh exceeds 65535 vertices. Render() rebinds the IB format accordingly (the backend's
 	// set_Indices() hardcodes R16_UINT). Copied by Copy() for instancing.
 	bool m_index32 = false;
+
+	// Emissive overlay child only: m_emissive marks it, m_emissive_scale = glTF emissiveFactor *
+	// emissive_strength (KHR_materials_emissive_strength). Render() pushes it as the shader constant
+	// "ext_emissive_scale" so the emissive PS multiplies the map by it. Copied for instancing.
+	bool m_emissive = false;
+	Fvector m_emissive_scale = {1.f, 1.f, 1.f};
 };
 
 #endif // FExternalVisualH

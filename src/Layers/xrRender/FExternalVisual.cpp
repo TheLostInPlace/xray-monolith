@@ -404,6 +404,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	const cgltf_image* normal_img = NULL;
 	const cgltf_image* mr_img = NULL;
 	const cgltf_image* emissive_img = NULL;
+	Fvector emissive_scale;
+	emissive_scale.set(1.f, 1.f, 1.f); // glTF emissiveFactor * emissive_strength (captured with the map)
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
@@ -544,11 +546,17 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				if (mt && mt->image) mr_img = mt->image;
 			}
 
-			// remember the first material's emissive map (-> additive overlay when emissive_pass)
+			// remember the first material's emissive map + its factor*strength (-> additive overlay)
 			if (!emissive_img && prim.material && prim.material->emissive_texture.texture)
 			{
 				const cgltf_texture* et = prim.material->emissive_texture.texture;
-				if (et->image) emissive_img = et->image;
+				if (et->image)
+				{
+					emissive_img = et->image;
+					const cgltf_material* m = prim.material;
+					const float str = m->has_emissive_strength ? m->emissive_strength.emissive_strength : 1.f;
+					emissive_scale.set(m->emissive_factor[0] * str, m->emissive_factor[1] * str, m->emissive_factor[2] * str);
+				}
 			}
 		}
 	}
@@ -705,6 +713,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			user_emis->surface_set(decoded_emis);
 		_RELEASE(decoded_emis);
 		SetShaderTexture(EXTERNAL_EMISSIVE_SHADER, emis_name);
+		m_emissive = true;
+		m_emissive_scale = emissive_scale; // glTF emissiveFactor * emissive_strength
 		Type = MT_EXTERNAL_STATIC;
 		return true;
 	}
@@ -808,6 +818,10 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 void FExternalVisual::Render(float)
 {
 	PROF_EVENT("FExternalVisual::Render");
+	// emissive overlay: push glTF emissiveFactor*strength so the emissive PS scales the map. The
+	// shader is already bound (set_Element ran before Render), so this binds into the active table.
+	if (m_emissive)
+		RCache.set_c("ext_emissive_scale", m_emissive_scale.x, m_emissive_scale.y, m_emissive_scale.z, 1.f);
 	RCache.set_Geometry(rm_geom);
 #if defined(USE_DX11) || defined(USE_DX10)
 	// set_Geometry() just bound the IB as R16_UINT (the backend hardcodes that format). For a 32-bit
@@ -846,4 +860,6 @@ void FExternalVisual::Copy(dxRender_Visual* pSrc)
 	PCOPY(iCount);
 	PCOPY(dwPrimitives);
 	PCOPY(m_index32);
+	PCOPY(m_emissive);
+	PCOPY(m_emissive_scale);
 }
