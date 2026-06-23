@@ -23,11 +23,18 @@ function normal		(shader, t_base, t_second, t_detail)
 end
 
 function l_special	(shader, t_base, t_second, t_detail)
-	-- Sun shadow-map caster. Matches the stock model shadow pass: z-test + z-WRITE on (this pass
-	-- writes the shadow depth -- z-write OFF yields a thin/incomplete cast shadow), colour off.
+	-- Sun shadow-map caster. z-test + z-WRITE on (writes the shadow depth; z-write OFF => no cast
+	-- shadow), colour writes off.
+	-- Cast from BACK faces (cull front, D3DCULL_CW=2). With front-face casting (the engine default
+	-- for the near cascade) a lit front surface is the nearest depth in its OWN shadow map, so it
+	-- self-shadows -- visible as flickering acne in creases, especially on big smooth untextured
+	-- meshes like the duck. Storing the far-side depth instead means the lit surface is never
+	-- closest, killing the acne. Slight peter-panning is the trade and is imperceptible on a
+	-- grounded prop. The cull is baked into THIS pass, so it only affects external-model geometry.
 	shader:begin	("shadow_direct_model",	"dumb")
 			: zb		(true,true)
 			: fog		(false)
+			: dx10cullmode	(2)
 	shader:dx10texture	("s_base",	t_base)
 	shader:dx10sampler	("smp_base")
 	shader:dx10color_write_enable	(false, false, false, false)
