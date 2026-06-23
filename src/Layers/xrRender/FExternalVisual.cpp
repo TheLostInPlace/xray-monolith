@@ -64,6 +64,10 @@
 // "$user$gltf_mr\..." name that external_bump_mr.s reconstructs from the normal map's name.
 #define EXTERNAL_BUMP_MR_SHADER "external_bump_mr"
 
+// Lit + metallic-roughness but NO normal map (e.g. smooth PBR spheres). Uses the flat VS + vertex
+// normals; gets a "albedo,metalrough" list (t_base / t_second) -- no derivation needed (2 textures).
+#define EXTERNAL_MR_SHADER "external_mr"
+
 // Engine missing-texture placeholder (ships with the base game, always present). Bound when the
 // glTF has no usable base-color texture, or the named texture isn't on disk -- X-Ray FATALS on a
 // missing texture ("Can't find texture ..."), so we must never bind a name that does not resolve.
@@ -642,36 +646,38 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		_RELEASE(decoded_nrm);
 	}
 
-	// Metallic-roughness map -> its own $user$ texture (name matched by external_bump_mr.s). Only
-	// useful alongside a normal map (that shader path needs both); decode is linear like the normal.
+	// Metallic-roughness map -> its own $user$ texture (decode is linear like the normal map). Created
+	// regardless of a normal map: with a normal it feeds external_bump_mr (name derived in shader),
+	// without one it feeds external_mr (name passed explicitly).
 	bool have_mr = false;
+	string_path mr_name;
 	if (decoded_mr)
 	{
-		if (have_normal)
+		ext_make_user_name_mr(mr_name, short_name);
+		user_mr.create(mr_name);
+		if (user_mr._get())
 		{
-			string_path mr_name;
-			ext_make_user_name_mr(mr_name, short_name);
-			user_mr.create(mr_name);
-			if (user_mr._get())
-			{
-				user_mr->surface_set(decoded_mr);
-				have_mr = true;
-			}
+			user_mr->surface_set(decoded_mr);
+			have_mr = true;
 		}
 		_RELEASE(decoded_mr);
 	}
 
+	string_path tlist;
 	if (have_normal && have_mr)
 	{
-		string_path tlist;
 		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name); // MR name derived in the shader
 		SetShaderTexture(EXTERNAL_BUMP_MR_SHADER, tlist);
 	}
 	else if (have_normal)
 	{
-		string_path tlist;
 		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name);
 		SetShaderTexture(EXTERNAL_BUMP_SHADER, tlist);
+	}
+	else if (have_mr)
+	{
+		strconcat(sizeof(tlist), tlist, tex_name, ",", mr_name);     // albedo + metal-rough (no normal)
+		SetShaderTexture(EXTERNAL_MR_SHADER, tlist);
 	}
 	else
 	{

@@ -1,0 +1,35 @@
+// deffer_base_ext_mr.ps : deferred G-buffer PS for external (GLTF/GLB) models that have a glTF
+// metallic-roughness map but NO normal map (e.g. smooth PBR test spheres). Based on
+// deffer_base_flat.ps (uses the interpolated vertex normal I.N, no tangent space needed) but the
+// constant def_gloss is replaced by gloss derived from the metallic-roughness map.
+//
+// Paired with the stock deffer_model_flat.vs (emits p_flat with the eye-space vertex normal).
+// Bind: s_base = albedo, s_bump = metallic-roughness map (G = roughness, B = metallic).
+
+#include "common.h"
+
+f_deffer main( p_flat I )
+{
+	f_deffer O;
+
+	float3 D = s_base.Sample( smp_base, I.tcdh.xy ).rgb;	// albedo
+
+	float ms = xmaterial;
+	float h  = I.position.w;
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	ms = I.tcdh.w;
+#endif
+
+	float4 Ne = float4( normalize((float3)I.N.xyz), h );	// interpolated vertex normal
+
+	// glTF metallic-roughness: G = roughness. gloss = 1 - roughness.
+	float  rough = s_bump.Sample( smp_base, I.tcdh.xy ).y;
+	float  gloss = saturate( 1.0h - rough );
+
+	O = pack_gbuffer(
+			Ne,
+			float4( I.position.xyz, ms    ),
+			float4( D.rgb,          gloss ) );
+
+	return O;
+}
