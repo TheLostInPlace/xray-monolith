@@ -22,9 +22,12 @@ CSE_Visual::CSE_Visual(LPCSTR name)
 	{
 		string_path tmp;
 		xr_strcpy(tmp, name);
-		if (strext(tmp))
-			*strext(tmp) = 0;
 		xr_strlwr(tmp);
+		// Keep recognized external extensions (.glb/.gltf) so the external model loader is
+		// reachable; strip everything else (the engine re-appends .ogf for the OGF path).
+		if (char* e = strext(tmp))
+			if (0 != xr_strcmp(e, ".glb") && 0 != xr_strcmp(e, ".gltf"))
+				*e = 0;
 		visual_name = tmp;
 	}
 	else
@@ -42,8 +45,11 @@ void CSE_Visual::set_visual(LPCSTR name, bool load)
 {
 	string_path tmp;
 	xr_strcpy(tmp, name);
-	if (strext(tmp)) *strext(tmp) = 0;
 	xr_strlwr(tmp);
+	// Keep recognized external extensions (.glb/.gltf); strip everything else (OGF path).
+	if (char* e = strext(tmp))
+		if (0 != xr_strcmp(e, ".glb") && 0 != xr_strcmp(e, ".gltf"))
+			*e = 0;
 	visual_name = tmp;
 }
 

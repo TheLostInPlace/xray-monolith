@@ -15,9 +15,11 @@
 #include "ftreevisual.h"
 #include "ParticleGroup.h"
 #include "ParticleEffect.h"
+#include "FExternalVisual.h"
 #else
     #include "fmesh.h"
     #include "fvisual.h"
+    #include "FExternalVisual.h"
     #include "fprogressive.h"
     #include "ParticleEffect.h"
     #include "ParticleGroup.h"
@@ -72,12 +74,40 @@ dxRender_Visual* CModelPool::Instance_Create(u32 type)
 		V = xr_new<FTreeVisual_PM>();
 		break;
 #endif
+	case MT_EXTERNAL_STATIC:
+		// External (GLTF/GLB) static mesh. Created here so Instance_Duplicate (which
+		// dispatches on V->Type) can clone an already-loaded external visual.
+		V = xr_new<FExternalVisual>();
+		break;
 	default:
 		FATAL("Unknown visual type");
 		break;
 	}
 	R_ASSERT(V);
 	V->Type = type;
+	return V;
+}
+
+bool CModelPool::is_external_format(const char* name)
+{
+	if (!name) return false;
+	const char* e = strext(name);
+	if (!e) return false;
+	return (0 == stricmp(e, ".gltf")) || (0 == stricmp(e, ".glb"));
+}
+
+dxRender_Visual* CModelPool::Instance_Create_External(const char* short_name, const char* full_path, bool assert)
+{
+	FExternalVisual* V = xr_new<FExternalVisual>();
+	V->Type = MT_EXTERNAL_STATIC;
+	if (!V->LoadExternal(short_name, full_path))
+	{
+		V->Release();
+		xr_delete(V);
+		if (assert)
+			Debug.fatal(DEBUG_INFO, "Can't load external model '%s'.", full_path);
+		return nullptr;
+	}
 	return V;
 }
 
@@ -129,6 +159,21 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 	else
 	{
 		xr_strcpy(fn, N);
+	}
+
+	// External (non-OGF) formats: dispatch to the dedicated loader instead of reading an
+	// OGF header. `fn` is the resolved OS path; `name` carries the original extension. This
+	// branch is reached only when the name kept a .gltf/.glb extension (see Create()), so the
+	// OGF path below is untouched for all existing content.
+	if (is_external_format(name))
+	{
+		V = Instance_Create_External(N, fn, assert);
+		if (!V)
+			return nullptr;
+		g_pGamePersistent->RegisterModel(V); // no-op for MT_EXTERNAL_STATIC; keeps parity with OGF path
+		if (allow_register)
+			V = Instance_Register(N, V);
+		return V;
 	}
 
 	// Actual loading
@@ -276,7 +321,13 @@ dxRender_Visual* CModelPool::Create(const char* name, IReader* data, bool assert
 	VERIFY(xr_strlen(name)<sizeof(low_name));
 	xr_strcpy(low_name, name);
 	strlwr(low_name);
-	if (strext(low_name)) *strext(low_name) = 0;
+	// Strip the extension to form the cache key, EXCEPT for recognized external formats
+	// (.gltf/.glb): keeping their extension lets the format survive into Instance_Load and
+	// gives external files a distinct cache key from a same-named .ogf. OGF behavior is
+	// unchanged (no extension or .ogf -> stripped -> ".ogf" re-appended in Instance_Load).
+	if (char* _ext = strext(low_name))
+		if (!is_external_format(low_name))
+			*_ext = 0;
 	
 	// 0. Search POOL
 	POOL_IT it = Pool.find(low_name);
@@ -322,7 +373,13 @@ dxRender_Visual* CModelPool::CreateChild(LPCSTR name, IReader* data)
 	VERIFY(xr_strlen(name)<256);
 	xr_strcpy(low_name, name);
 	strlwr(low_name);
-	if (strext(low_name)) *strext(low_name) = 0;
+	// Strip the extension to form the cache key, EXCEPT for recognized external formats
+	// (.gltf/.glb): keeping their extension lets the format survive into Instance_Load and
+	// gives external files a distinct cache key from a same-named .ogf. OGF behavior is
+	// unchanged (no extension or .ogf -> stripped -> ".ogf" re-appended in Instance_Load).
+	if (char* _ext = strext(low_name))
+		if (!is_external_format(low_name))
+			*_ext = 0;
 
 	// 1. Search for already loaded model
 	dxRender_Visual* Base = Instance_Find(low_name);
@@ -499,7 +556,13 @@ bool CModelPool::Exists(LPCSTR N)
 	VERIFY(xr_strlen(N) < sizeof(low_name));
 	xr_strcpy(low_name, N);
 	strlwr(low_name);
-	if (strext(low_name)) *strext(low_name) = 0;
+	// Strip the extension to form the cache key, EXCEPT for recognized external formats
+	// (.gltf/.glb): keeping their extension lets the format survive into Instance_Load and
+	// gives external files a distinct cache key from a same-named .ogf. OGF behavior is
+	// unchanged (no extension or .ogf -> stripped -> ".ogf" re-appended in Instance_Load).
+	if (char* _ext = strext(low_name))
+		if (!is_external_format(low_name))
+			*_ext = 0;
 
 	// Search pool and return early if exists
 	POOL_IT it = Pool.find(low_name);

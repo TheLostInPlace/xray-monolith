@@ -69,6 +69,13 @@ public:
 	dxRender_Visual* Instance_Register(LPCSTR N, dxRender_Visual* V);
 	dxRender_Visual* Instance_Find(LPCSTR N);
 
+	// External (non-OGF) loader entry point. `short_name` is the logical visual name
+	// (with extension preserved, e.g. "dynamics\\foo.glb"); `full_path` is the OS path
+	// already resolved by Instance_Load. Returns a populated FExternalVisual* or 0.
+	dxRender_Visual* Instance_Create_External(const char* short_name, const char* full_path, bool assert);
+	// Returns true if `name`'s extension denotes a supported external format (.gltf/.glb).
+	static bool is_external_format(const char* name);
+
 	dxRender_Visual* CreatePE(PS::CPEDef* source);
 	dxRender_Visual* CreatePG(PS::CPGDef* source);
 	dxRender_Visual* Create(LPCSTR name, IReader* data = 0, bool assert = true);

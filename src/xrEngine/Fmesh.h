@@ -22,6 +22,12 @@ enum MT
 	MT_TREE_PM = 11,
 
 	MT_3DFLUIDVOLUME = 12,
+
+	// External (non-OGF) model formats. These values can never appear in an OGF
+	// file's u8 `type` field (OGF content predates them), so the OGF dispatch in
+	// CModelPool::Instance_Create is unaffected. See docs/GLTF_GLB_Integration_Research.md.
+	MT_EXTERNAL_STATIC = 13, // GLTF/GLB static mesh (FExternalVisual)
+	MT_EXTERNAL_SKELETAL = 14, // reserved for Phase 3 (FExternalKinematics)
 };
 
 enum OGF_Chuncks

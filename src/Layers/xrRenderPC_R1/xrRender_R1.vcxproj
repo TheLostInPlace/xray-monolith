@@ -449,6 +449,8 @@
     <ClInclude Include="..\xrRender\FTreeVisual.h" />
     <ClInclude Include="..\xrRender\FVF.h" />
     <ClInclude Include="..\xrRender\FVisual.h" />
+    <ClInclude Include="..\xrRender\FExternalVisual.h" />
+    <ClInclude Include="..\xrRender\cgltf.h" />
     <ClInclude Include="..\xrRender\gifPlayer.h" />
     <ClInclude Include="..\xrRender\HOM.h" />
     <ClInclude Include="..\xrRender\HW.h" />
@@ -579,6 +581,10 @@
     <ClCompile Include="..\xrRender\FSkinned.cpp" />
     <ClCompile Include="..\xrRender\FTreeVisual.cpp" />
     <ClCompile Include="..\xrRender\FVisual.cpp" />
+    <ClCompile Include="..\xrRender\FExternalVisual.cpp" />
+    <ClCompile Include="..\xrRender\cgltf_impl.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\xrRender\gifPlayer.cpp" />
     <ClCompile Include="..\xrRender\HOM.cpp" />
     <ClCompile Include="..\xrRender\HW.cpp" />
