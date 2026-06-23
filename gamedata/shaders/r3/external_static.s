@@ -13,10 +13,9 @@ function normal		(shader, t_base, t_second, t_detail)
 			: fog		(false)
 	shader:dx10texture	("s_base",	t_base)
 	shader:dx10sampler	("smp_base")
-	shader:dx10stencil	( 	true, cmp_func.always,
-							255 , 127,
-							stencil_op.keep, stencil_op.replace, stencil_op.keep)
-	shader:dx10stencil_ref	(1)
+	-- No stencil override: let the deferred G-buffer phase set its default lit-geometry stencil.
+	-- (The emissive 'selflight' shaders set dx10stencil_ref(1) to mark pixels self-illuminated,
+	--  which is exactly what makes them fullbright -- we must NOT do that for a lit model.)
 end
 
 function l_special	(shader, t_base, t_second, t_detail)
