@@ -626,12 +626,16 @@ ShaderElement* CBlender_Compile::_lua_Compile(LPCSTR namesp, LPCSTR name)
 	LPCSTR t_0 = *L_textures[0] ? *L_textures[0] : "null";
 	LPCSTR t_1 = (L_textures.size() > 1) ? *L_textures[1] : "null";
 	LPCSTR t_d = detail_texture ? detail_texture : "null";
+	// 3rd texture-list entry (e.g. a glTF metallic-roughness map). Forwarded as a 5th Lua arg; stock
+	// .s element functions declare only (shader,t_base,t_second,t_detail) so Lua discards it -- this
+	// changes nothing for OGF/stock shaders and lets a .s opt in by declaring a 5th parameter.
+	LPCSTR t_2 = (L_textures.size() > 2) ? *L_textures[2] : "null";
 	lua_State* LSVM = dxRenderDeviceRender::Instance().Resources->LSVM;
 	object shader = get_globals(LSVM)[namesp];
 	functor<void> element = object_cast<functor<void>>(shader[name]);
 	bool bFirstPass = false;
 	adopt_compiler ac = adopt_compiler(this, bFirstPass);
-	element(ac, t_0, t_1, t_d);
+	element(ac, t_0, t_1, t_d, t_2);
 	r_End();
 	ShaderElement* _r = dxRenderDeviceRender::Instance().Resources->_CreateElement(E);
 	return _r;

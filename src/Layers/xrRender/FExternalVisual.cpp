@@ -59,9 +59,8 @@
 // normal texture. Receives a "albedo,normal" texture list (t_base = albedo, t_second = normal map).
 #define EXTERNAL_BUMP_SHADER "external_bump"
 
-// Lit + normal + metallic-roughness variant, used when the material also has a metallic-roughness
-// map. Texture list is still "albedo,normal"; the metal-rough texture is registered under a derived
-// "$user$gltf_mr\..." name that external_bump_mr.s reconstructs from the normal map's name.
+// Lit + normal + metallic-roughness variant, used when the material has both a normal map and a
+// metallic-roughness map. All three are passed explicitly: "albedo,normal,metalrough".
 #define EXTERNAL_BUMP_MR_SHADER "external_bump_mr"
 
 // Lit + metallic-roughness but NO normal map (e.g. smooth PBR spheres). Uses the flat VS + vertex
@@ -198,8 +197,7 @@ static void ext_make_user_name_n(string_path out, const char* short_name)
 	strconcat(sizeof(string_path), out, "$user$gltf_n\\", short_name ? short_name : "unnamed");
 }
 
-// Synthetic resource name for a model's decoded metallic-roughness map. MUST stay in sync with the
-// "gltf_n"->"gltf_mr" derivation in external_bump_mr.s (which rebuilds this from the normal name).
+// Synthetic resource name for a model's decoded metallic-roughness map (its own namespace).
 static void ext_make_user_name_mr(string_path out, const char* short_name)
 {
 	strconcat(sizeof(string_path), out, "$user$gltf_mr\\", short_name ? short_name : "unnamed");
@@ -666,7 +664,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	string_path tlist;
 	if (have_normal && have_mr)
 	{
-		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name); // MR name derived in the shader
+		// albedo,normal,metalrough -> t_base / t_second / t_metalrough (engine forwards the 3rd entry)
+		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name, ",", mr_name);
 		SetShaderTexture(EXTERNAL_BUMP_MR_SHADER, tlist);
 	}
 	else if (have_normal)
