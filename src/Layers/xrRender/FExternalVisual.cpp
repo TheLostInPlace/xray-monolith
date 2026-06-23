@@ -25,11 +25,13 @@
 // Configuration
 //////////////////////////////////////////////////////////////////////
 
-// glTF is right-handed (Y-up); X-Ray is left-handed (Y-up). Negating Z converts
-// handedness and, as a mirror, flips triangle orientation so glTF's CCW front faces
-// become the CW front faces DirectX expects -- hence no winding reversal is needed.
-// Toggle to 0 if a particular exporter already authors left-handed data.
+// glTF is right-handed (Y-up); X-Ray is left-handed (Y-up). Negating Z converts the handedness
+// of positions/normals. Mirroring also reverses triangle orientation, so we reverse the winding
+// (EXTERNAL_FLIP_WINDING) to keep front faces facing OUT -- otherwise the mesh renders inside-out
+// (front faces culled => the box looks see-through). Toggle either if a given exporter authors
+// left-handed data or the result looks inverted.
 #define EXTERNAL_FLIP_Z 1
+#define EXTERNAL_FLIP_WINDING 1
 
 // Phase 1 shader (gamedata/shaders/r3/external_static.s). It reuses the stock deferred
 // MODEL vertex/pixel shaders, which consume the exact D3DCOLOR-packed model vertex layout
@@ -270,19 +272,22 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				bb.modify(P);
 			}
 
-			// indices (offset by v_base); reverse nothing - see EXTERNAL_FLIP_Z note
-			if (prim.indices)
+			// indices (offset by v_base), per triangle, with optional winding reversal to match
+			// the engine's left-handed front-face convention (see EXTERNAL_FLIP_WINDING note).
 			{
-				const cgltf_size n = prim.indices->count;
+				const cgltf_size n = prim.indices ? prim.indices->count : v_count;
 				indices.reserve(indices.size() + n);
-				for (cgltf_size i = 0; i < n; ++i)
-					indices.push_back((u16)(v_base + cgltf_accessor_read_index(prim.indices, i)));
-			}
-			else
-			{
-				indices.reserve(indices.size() + v_count);
-				for (cgltf_size i = 0; i < v_count; ++i)
-					indices.push_back((u16)(v_base + i));
+				for (cgltf_size i = 0; i + 3 <= n; i += 3)
+				{
+					const u16 a = (u16)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0));
+					const u16 b = (u16)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1));
+					const u16 c = (u16)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2));
+#if EXTERNAL_FLIP_WINDING
+					indices.push_back(a); indices.push_back(c); indices.push_back(b);
+#else
+					indices.push_back(a); indices.push_back(b); indices.push_back(c);
+#endif
+				}
 			}
 
 			// remember a base-color texture name from the first material we see
