@@ -46,8 +46,8 @@
 // EXTERNAL_AUTOSCALE_MIN_SIZE it's scaled up; models already in [MIN,MAX] are left untouched. Scale
 // is about the local origin so the bbox / physics box stay consistent. Set EXTERNAL_AUTOSCALE 0 to off.
 #define EXTERNAL_AUTOSCALE 1
-#define EXTERNAL_AUTOSCALE_MIN_SIZE 0.5f
-#define EXTERNAL_AUTOSCALE_MAX_SIZE 2.0f
+#define EXTERNAL_AUTOSCALE_MIN_SIZE 0.01f // 3.4 -- grow only ABSURDLY tiny models; real meters honored otherwise
+#define EXTERNAL_AUTOSCALE_MAX_SIZE 50.0f  // 3.4 -- shrink only ABSURDLY large models
 
 // Phase 1 shader (gamedata/shaders/r3/external_static.s). It reuses the stock deferred
 // MODEL vertex/pixel shaders, which consume the exact D3DCOLOR-packed model vertex layout
@@ -457,6 +457,64 @@ static bool ext_gltf_unsupported(const cgltf_data* gltf, const char* full_path)
 	return false;
 }
 
+// 3.3 -- collect the nodes of the default scene, recursively (root nodes + their descendants).
+// cgltf_node_transform_world() gives each node's world matrix regardless of how it's reached, so only
+// the SET of visited nodes matters; recursing the default scene excludes nodes not in any scene. Falls
+// back to the flat gltf->nodes[] list when the file declares no scenes.
+static void ext_collect_node(const cgltf_node* node, xr_vector<const cgltf_node*>& out, int depth = 0)
+{
+	if (!node || depth > 256) return; // depth cap guards against a malformed cyclic node graph
+	out.push_back(node);
+	for (cgltf_size i = 0; i < node->children_count; ++i)
+		ext_collect_node(node->children[i], out, depth + 1);
+}
+static void ext_scene_nodes(const cgltf_data* gltf, xr_vector<const cgltf_node*>& out)
+{
+	const cgltf_scene* scene = gltf->scene ? gltf->scene : (gltf->scenes_count ? &gltf->scenes[0] : NULL);
+	if (scene)
+		for (cgltf_size i = 0; i < scene->nodes_count; ++i)
+			ext_collect_node(scene->nodes[i], out);
+	else
+		for (cgltf_size i = 0; i < gltf->nodes_count; ++i)
+			out.push_back(&gltf->nodes[i]);
+}
+
+// 3.4 -- model-wide post-transform bounds (ALL scene primitives, ignoring the per-material filter), in the
+// SAME final vertex space as the loaded geometry (node-world bake + Z-flip). Used so every per-material
+// child computes ONE shared auto-scale factor instead of one per filtered subset (which tears multi-material
+// models apart). Buffers must already be resolved.
+static void ext_model_bounds(const cgltf_data* gltf, const xr_vector<const cgltf_node*>& nodes, Fbox& bb)
+{
+	bb.invalidate();
+	for (const cgltf_node* np : nodes)
+	{
+		const cgltf_node& node = *np;
+		if (!node.mesh) continue;
+		cgltf_float w[16]; cgltf_node_transform_world(&node, w);
+		Fmatrix Mw; memcpy(&Mw, w, sizeof(w));
+		const cgltf_mesh& mesh = *node.mesh;
+		for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
+		{
+			const cgltf_primitive& prim = mesh.primitives[pi];
+			if (prim.type != cgltf_primitive_type_triangles) continue;
+			const cgltf_accessor* a_pos = NULL;
+			for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai)
+				if (prim.attributes[ai].type == cgltf_attribute_type_position) { a_pos = prim.attributes[ai].data; break; }
+			if (!a_pos) continue;
+			for (cgltf_size i = 0; i < a_pos->count; ++i)
+			{
+				Fvector P; P.set(0, 0, 0);
+				cgltf_accessor_read_float(a_pos, i, &P.x, 3);
+				Fvector t; Mw.transform_tiny(t, P); P = t;
+#if EXTERNAL_FLIP_Z
+				P.z = -P.z;
+#endif
+				bb.modify(P);
+			}
+		}
+	}
+}
+
 bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInfo>& out)
 {
 	out.clear();
@@ -481,9 +539,11 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInf
 
 	// distinct materials used by triangle primitives, in first-seen order (mirrors the node iteration
 	// in LoadExternal so the set matches what actually emits geometry); record emissive presence too
-	for (cgltf_size ni = 0; ni < gltf->nodes_count; ++ni)
+	xr_vector<const cgltf_node*> scene_nodes;
+	ext_scene_nodes(gltf, scene_nodes);
+	for (const cgltf_node* _np : scene_nodes)
 	{
-		const cgltf_node& node = gltf->nodes[ni];
+		const cgltf_node& node = *_np;
 		if (!node.mesh)
 			continue;
 		const cgltf_mesh& mesh = *node.mesh;
@@ -776,9 +836,11 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
 	// the mesh. (A glTF with meshes but no node referencing them is unusual and emits nothing.)
-	for (cgltf_size ni = 0; ni < gltf->nodes_count; ++ni)
+	xr_vector<const cgltf_node*> scene_nodes;
+	ext_scene_nodes(gltf, scene_nodes);
+	for (const cgltf_node* _np : scene_nodes)
 	{
-		const cgltf_node& node = gltf->nodes[ni];
+		const cgltf_node& node = *_np;
 		if (!node.mesh)
 			continue;
 		cgltf_float _world[16];
@@ -1068,6 +1130,12 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	ID3DBaseTexture* decoded_ao = (!emissive_pass && !metal_pass && !blend_pass && occ_img && occ_img != mr_img)
 		? ext_decode_gltf_image(occ_img, full_path) : NULL;
 
+	// 3.4 -- compute the model-wide bounds BEFORE cgltf_free (ext_model_bounds reads node/accessor data;
+	// reading it after the free would be a use-after-free).
+#if EXTERNAL_AUTOSCALE
+	Fbox model_bb; ext_model_bounds(gltf, scene_nodes, model_bb);
+#endif
+
 	cgltf_free(gltf);
 	xr_free(blob);
 
@@ -1077,23 +1145,25 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		return false;
 	}
 
-	// --- auto-scale oversized models -------------------------------------------------
-	// Cap the model's largest dimension at the player-ish target so wrongly-scaled assets don't
-	// spawn comically large. Uniform scale about the local origin -> the bbox below (and the
-	// physics box FExternalKinematics builds from it) stay consistent. Never scales models UP.
+	// --- auto-scale only ABSURDLY-sized models (3.4) ---------------------------------
+	// glTF is authored in metres, so honour real scale by default. Only rescale assets whose largest
+	// dimension is genuinely absurd (>50u or <0.01u). The factor is computed from the WHOLE model's bounds
+	// (ext_model_bounds, all scene primitives) -- NOT this child's filtered subset -- so every per-material
+	// child gets the SAME factor and multi-material models don't tear apart. Uniform scale about the local
+	// origin keeps the bbox + physics box consistent.
 #if EXTERNAL_AUTOSCALE
 	{
-		float maxdim = bb.max.x - bb.min.x;
-		const float dy = bb.max.y - bb.min.y;
-		const float dz = bb.max.z - bb.min.z;
+		float maxdim = model_bb.max.x - model_bb.min.x;
+		const float dy = model_bb.max.y - model_bb.min.y;
+		const float dz = model_bb.max.z - model_bb.min.z;
 		if (dy > maxdim) maxdim = dy;
 		if (dz > maxdim) maxdim = dz;
 
 		float s = 1.0f;
 		if (maxdim > EXTERNAL_AUTOSCALE_MAX_SIZE)
-			s = EXTERNAL_AUTOSCALE_MAX_SIZE / maxdim;                    // too big -> shrink to player-ish
+			s = EXTERNAL_AUTOSCALE_MAX_SIZE / maxdim;                    // absurdly large -> shrink
 		else if (maxdim > 1e-4f && maxdim < EXTERNAL_AUTOSCALE_MIN_SIZE)
-			s = EXTERNAL_AUTOSCALE_MIN_SIZE / maxdim;                    // too small -> grow to visible size
+			s = EXTERNAL_AUTOSCALE_MIN_SIZE / maxdim;                    // absurdly tiny -> grow
 
 		if (s != 1.0f)
 		{
@@ -1105,7 +1175,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			}
 			bb.min.mul(s);
 			bb.max.mul(s);
-			Msg("~ [gltf] '%s' auto-scaled x%.4f (largest dim %.2f -> %.2f units)", full_path, s, maxdim, maxdim * s);
+			Msg("~ [gltf] '%s' auto-scaled x%.4f (model dim %.2f -> %.2f units)", full_path, s, maxdim, maxdim * s);
 		}
 	}
 #endif
@@ -1558,9 +1628,11 @@ bool FExternalSkinned::LoadExternal(const char* short_name, const char* full_pat
 	const cgltf_image* base_img = NULL;
 	bool base_color_captured = false; // capture baseColorFactor once (first material in the filtered set)
 
-	for (cgltf_size ni = 0; ni < gltf->nodes_count; ++ni)
+	xr_vector<const cgltf_node*> scene_nodes;
+	ext_scene_nodes(gltf, scene_nodes);
+	for (const cgltf_node* _np : scene_nodes)
 	{
-		const cgltf_node& node = gltf->nodes[ni];
+		const cgltf_node& node = *_np;
 		if (!node.mesh)
 			continue;
 		// NOTE: skinned meshes are positioned by their JOINTS, not the mesh node transform (glTF spec),

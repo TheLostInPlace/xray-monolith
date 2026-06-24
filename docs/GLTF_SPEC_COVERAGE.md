@@ -39,7 +39,7 @@ Last updated: 2026-06-23.
 | Node transforms (TRS **and** matrix) | ✅ | `cgltf_node_transform_world` baked into vertex positions/normals/tangents at load. |
 | Node hierarchy | ✅ | World transform (full parent chain) is baked per node. |
 | Right-handed → left-handed conversion | ✅ | `EXTERNAL_FLIP_Z` + winding reversal so front faces face out. |
-| Multiple scenes / active-scene selection | ⚠️ | We iterate **all** mesh-bearing nodes regardless of which `scene` they belong to; the `scene` property isn't respected (rare to matter). |
+| Multiple scenes / active-scene selection | ✅ | The **default scene** (`gltf->scene`, else `scenes[0]`) is recursed (roots + descendants); nodes outside it are skipped. Falls back to the flat node list only when the file declares no scenes. |
 | `KHR_node_visibility` | ❌ | Node visibility toggling not read. |
 
 ---
@@ -157,8 +157,9 @@ Things we add to make glTF assets behave as first-class X-Ray objects (not glTF 
 - ✅ **Spawns + physics** — wrapped as a 1-bone rigid `CKinematics` with an `stBox` collision shape from
   the bounding box, so glTF models spawn as `physic_object`s.
 - ✅ **Runtime texture decode from memory** (D3DX11) under synthetic `$user$` names — no disk round-trip.
-- ✅ **Auto-scale** — clamps a model's largest dimension into a sane band so wrongly-scaled assets aren't
-  comically large/small.
+- ✅ **Auto-scale** — honours real metres by default; only rescales **absurdly**-sized assets (largest
+  dimension >50u or <0.01u). The factor is computed from the **whole model's** bounds (not per-material
+  child), so multi-material models scale uniformly and don't tear.
 - ✅ **Skybox-correct deferred integration** — writes the lit-geometry stencil mark.
 - ✅ **Sun shadows** — cast via a back-face depth-only pass (tuned against self-shadow acne).
 - ⚠️ **Dynamic-light (flashlight/lamp) shadows** — **deliberately not cast** by props: a close light +
