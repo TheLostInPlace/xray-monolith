@@ -26,6 +26,7 @@ f_deffer main( p_bumped I )
 	float2 uv   = ext_uv( I.tcdh.xy );          // KHR_texture_transform
 	float4 base = s_base.Sample( smp_base, uv );
 	base.rgb   *= ext_base_color.rgb;           // glTF baseColorFactor tint
+	base.a     *= ext_base_color.w;             // glTF baseColorFactor.a (alpha for the MASK test)
 
 	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
 	clip( base.a - ext_alpha_cutoff.x );

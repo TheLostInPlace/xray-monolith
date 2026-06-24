@@ -5,14 +5,19 @@
 #ifndef EXTERNAL_COMMON_H
 #define EXTERNAL_COMMON_H
 
-float4 ext_base_color;    // rgb = glTF baseColorFactor (albedo/F0 tint). Render writes (1,1,1,1) default.
+float4 ext_base_color;    // rgb = glTF baseColorFactor (albedo/F0 tint), a = baseColorFactor.a (MASK alpha).
 float4 ext_mr_factor;     // x = metallicFactor, y = roughnessFactor, z = normalScale. Default (1,1,1,_).
 float4 ext_uv_transform;  // KHR_texture_transform: xy = scale, zw = offset. Default (1,1,0,0) = identity.
+float4 ext_uv_rot;        // KHR_texture_transform rotation: x = cos, y = sin. Default (1,0,0,0) = identity.
 
-// Apply KHR_texture_transform (offset + scale; rotation not handled in v1) to a UV before sampling.
+// Apply KHR_texture_transform (scale, then rotate, then offset -- the glTF T*R*S order) to a UV before
+// sampling. Default constants make this the identity transform, so untransformed maps are unchanged.
 float2 ext_uv( float2 uv )
 {
-	return uv * ext_uv_transform.xy + ext_uv_transform.zw;
+	float2 s = uv * ext_uv_transform.xy;                              // scale
+	float2 r = float2( ext_uv_rot.x * s.x - ext_uv_rot.y * s.y,       // rotate (x=cos, y=sin)
+	                   ext_uv_rot.y * s.x + ext_uv_rot.x * s.y );
+	return r + ext_uv_transform.zw;                                  // offset
 }
 
 // How much of a metal's diffuse to actually suppress (1 = pure PBR, no diffuse; 0 = keep all diffuse).

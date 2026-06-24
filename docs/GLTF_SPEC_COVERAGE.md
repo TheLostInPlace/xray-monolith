@@ -69,7 +69,7 @@ Last updated: 2026-06-23.
 |---|---|---|
 | `baseColorTexture` | ✅ | Decoded from GLB bufferView or external file. |
 | `baseColorFactor` (RGB tint) | ✅ | Multiplies albedo. |
-| `baseColorFactor.a` | ⚠️ | Used as the BLEND opacity multiplier; **not** applied to the MASK alpha test (rarely ≠ 1 on MASK). |
+| `baseColorFactor.a` | ✅ | BLEND opacity multiplier **and** applied to the MASK alpha test (texel alpha `*= baseColorFactor.a` before `clip`). |
 | `metallicRoughnessTexture` | ✅ | G→roughness, B→metallic. |
 | `metallicFactor` / `roughnessFactor` | ✅ | Multiply the sampled values. |
 | **Real metalness** (colored reflection, ~no diffuse) | ⚠️ | Implemented in our **own** forward pass (reflects the engine sky cubes, tinted by albedo, roughness-aware). Stock-safe but **not** physically-tinted SSR, and needs an MR *texture* — `metallicFactor`-only metals aren't treated as metal. See `GLTF_REVISIT.md` A2/B2. |
@@ -96,7 +96,7 @@ Last updated: 2026-06-23.
 | sRGB vs linear color space | ✅ | Resolved: X-Ray is a gamma pipeline, so base/emissive are correctly left UNORM (forcing sRGB would darken vs stock). |
 | Texture sampler wrap modes (repeat/clamp/mirror) | ⚠️ | We bind a default linear/repeat sampler; per-texture wrap/filter from the glTF `sampler` isn't read. |
 | Texture sampler filter / mip settings | ⚠️ | Default linear + mips from the decoder; the glTF sampler's min/mag/mip filters aren't honored. |
-| `KHR_texture_transform` | ⚠️ | Offset + scale only (no rotation); one transform (the base-color texture's) applied to **all** maps rather than per-texture. |
+| `KHR_texture_transform` | ⚠️ | Offset + scale + **rotation**; one transform (the base-color texture's) applied to **all** maps rather than per-texture. |
 | `KHR_texture_basisu` (KTX2 / Basis) | ❌ | Basis-compressed textures won't decode. |
 
 ---
@@ -127,7 +127,7 @@ Last updated: 2026-06-23.
 | Extension | Status | Notes |
 |---|---|---|
 | `KHR_materials_emissive_strength` | ✅ | `emissiveFactor × strength` respected. |
-| `KHR_texture_transform` | ⚠️ | Offset+scale, no rotation, one transform for all maps (see §5). |
+| `KHR_texture_transform` | ⚠️ | Offset+scale+rotation, one transform for all maps (see §5). |
 | `KHR_mesh_quantization` | ⚠️ | Quantized attributes are dequantized by cgltf's accessor reads, so geometry loads; not explicitly validated. |
 | `KHR_materials_unlit` | ❌ | Unlit materials render lit. |
 | `KHR_materials_clearcoat` | ❌ | |
@@ -177,9 +177,9 @@ engine integration (spawn/physics/auto-scale/sun-shadows).
 
 **Implemented but not fully proper (⚠️):** metalness (own forward reflection, not tinted SSR; needs an MR
 texture), BLEND (simple forward lighting, not in SSR, no shadow), emissive (LDR, no bloom), texture-
-transform (no rotation / one transform for all maps), vertex colours (flat path only), AO (MR shaders
-only), texture samplers (wrap/filter ignored), 2nd UV set & per-texture `texCoord` (ignored),
-`baseColorFactor.a` on MASK, and dynamic-light shadows (deliberately off for props).
+transform (one transform for all maps; rotation supported, per-map decoupling not yet), vertex colours
+(flat path only), AO (MR shaders only), texture samplers (wrap/filter ignored), 2nd UV set & per-texture
+`texCoord` (ignored), and dynamic-light shadows (deliberately off for props).
 
 **Not implemented (❌):** **animation & skinning** (the biggest gap), morph targets, `doubleSided`,
 non-triangle primitives, base64 data-URI images, KTX2/Basis & Draco compression, and the advanced KHR

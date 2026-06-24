@@ -29,6 +29,7 @@ f_deffer main( p_flat I )
 	float2 uv = ext_uv( I.tcdh.xy );                 // KHR_texture_transform (shared by all maps)
 	float4 D  = s_base.Sample( smp_base, uv );	// albedo (+ alpha in .a)
 	D.rgb    *= ext_base_color.rgb;                  // glTF baseColorFactor tint
+	D.a      *= ext_base_color.w;                    // glTF baseColorFactor.a (alpha for the MASK test)
 
 	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
 	clip( D.a - ext_alpha_cutoff.x );

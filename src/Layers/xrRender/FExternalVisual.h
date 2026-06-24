@@ -118,6 +118,8 @@ public:
 	Fvector  m_base_color = {1.f, 1.f, 1.f};        // glTF baseColorFactor.rgb (albedo/F0 tint)
 	Fvector  m_mr_factor  = {1.f, 1.f, 1.f};        // x=metallicFactor, y=roughnessFactor, z=normalScale
 	Fvector4 m_uv_xform   = {1.f, 1.f, 0.f, 0.f};   // KHR_texture_transform: xy=scale, zw=offset
+	Fvector2 m_uv_rot     = {1.f, 0.f};             // KHR_texture_transform rotation: x=cos, y=sin (identity)
+	float    m_base_alpha = 1.f;                    // glTF baseColorFactor.a (MASK alpha multiplier)
 };
 
 // Skinned external (GLTF/GLB) render visual. A child of FExternalKinematics that deforms with the

@@ -752,6 +752,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	float base_color_factor[3] = {1.f, 1.f, 1.f};         // glTF baseColorFactor.rgb (albedo/F0 tint)
 	float metallic_factor = 1.f, roughness_factor = 1.f, normal_scale = 1.f; // glTF scalar factors
 	float uv_scale[2] = {1.f, 1.f}, uv_offset[2] = {0.f, 0.f};               // KHR_texture_transform
+	float uv_rot = 0.f;                                                      // KHR_texture_transform rotation (radians)
 	bool  have_vertex_color = false;                       // any primitive carries glTF COLOR_0
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
@@ -918,6 +919,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 						const cgltf_texture_transform& tt = pbr.base_color_texture.transform;
 						uv_scale[0] = tt.scale[0];   uv_scale[1] = tt.scale[1];
 						uv_offset[0] = tt.offset[0]; uv_offset[1] = tt.offset[1];
+						uv_rot = tt.rotation; // radians; converted to cos/sin in the member copy below
 					}
 				}
 				if (m->normal_texture.texture) normal_scale = m->normal_texture.scale; // glTF normalScale
@@ -1118,6 +1120,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	m_base_color.set(base_color_factor[0], base_color_factor[1], base_color_factor[2]);
 	m_mr_factor.set(metallic_factor, roughness_factor, normal_scale);
 	m_uv_xform.set(uv_scale[0], uv_scale[1], uv_offset[0], uv_offset[1]);
+	m_uv_rot.set(cosf(uv_rot), sinf(uv_rot)); // KHR_texture_transform rotation (radians -> cos/sin)
+	m_base_alpha = base_alpha;                // glTF baseColorFactor.a (multiplies texel alpha before MASK clip)
 
 	// --- emissive overlay pass ------------------------------------------------------
 	// Forward additive batch: bind only the emissive map and the external_emissive shader. If the
@@ -1355,6 +1359,7 @@ void FExternalSkinned::Render(float LOD)
 	// captured base-color tint + identity UV/MR, no alpha clip (opaque), no AO. Without this the shader
 	// reads stale registers -> black / order-dependent output.
 	RCache.set_c("ext_uv_transform", 1.f, 1.f, 0.f, 0.f);
+	RCache.set_c("ext_uv_rot", 1.f, 0.f, 0.f, 0.f); // identity rotation (no KHR_texture_transform on skinned yet)
 	RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, 1.f);
 	RCache.set_c("ext_mr_factor", 1.f, 1.f, 1.f, 1.f);
 	RCache.set_c("ext_alpha_cutoff", -1.f, 0.f, 0.f, 0.f); // opaque (no MASK clip on skinned yet)
@@ -1700,7 +1705,8 @@ void FExternalVisual::Render(float)
 	{
 		// shared material params -- every lit/metal/blend child samples albedo/MR/normal through these
 		RCache.set_c("ext_uv_transform", m_uv_xform.x, m_uv_xform.y, m_uv_xform.z, m_uv_xform.w); // KHR_texture_transform
-		RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, 1.f);      // baseColorFactor tint
+		RCache.set_c("ext_uv_rot", m_uv_rot.x, m_uv_rot.y, 0.f, 0.f);                             // KHR_texture_transform rotation (cos,sin)
+		RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, m_base_alpha); // baseColorFactor (a = MASK alpha)
 		RCache.set_c("ext_mr_factor", m_mr_factor.x, m_mr_factor.y, m_mr_factor.z, 1.f);          // metallic/roughness/normalScale
 		if (m_blend)
 			RCache.set_c("ext_blend_alpha", m_blend_alpha, 0.f, 0.f, 0.f); // glTF baseColorFactor.a (opacity)
@@ -1759,4 +1765,6 @@ void FExternalVisual::Copy(dxRender_Visual* pSrc)
 	PCOPY(m_base_color);
 	PCOPY(m_mr_factor);
 	PCOPY(m_uv_xform);
+	PCOPY(m_uv_rot);
+	PCOPY(m_base_alpha);
 }

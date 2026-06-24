@@ -26,7 +26,7 @@ f_deffer main( p_flat_vc I )
 	f_deffer O;
 
 	// albedo = glTF baseColorFactor * per-vertex colour (no base texture for vertex-colour models)
-	float4 base = float4( ext_base_color.rgb * I.vcolor.rgb, I.vcolor.a );
+	float4 base = float4( ext_base_color.rgb * I.vcolor.rgb, I.vcolor.a * ext_base_color.w );
 
 	clip( base.a - ext_alpha_cutoff.x );
 
