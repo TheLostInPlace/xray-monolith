@@ -26,7 +26,7 @@ Last updated: 2026-06-23.
 | `.gltf` (JSON) + external `.bin` | ✅ | `cgltf_load_buffers` resolves the `.bin` relative to the file path. |
 | Base64 `data:` URI **buffers** | ✅ | cgltf decodes embedded base64 buffers. |
 | Buffers / bufferViews / accessors | ✅ | Read via `cgltf_accessor_read_float` / `cgltf_accessor_read_index`. |
-| Sparse accessors | ✅ | cgltf applies sparse substitution transparently in accessor reads. |
+| Sparse accessors | ❌ | **Rejected with a log**, not loaded. cgltf's `cgltf_accessor_read_*` silently return 0 for a sparse accessor (would collapse the mesh to the origin), so the loader detects `is_sparse` on any consumed vertex/index/IBM accessor up front and refuses the model (`! [gltf] ... sparse accessor`). |
 | Read through the engine VFS | ✅ | Loaded via `FS.r_open`, so loose **and** packed (.db) assets work. |
 
 ---
@@ -140,7 +140,9 @@ Last updated: 2026-06-23.
 | `KHR_materials_iridescence` | ❌ | |
 | `KHR_materials_dispersion` | ❌ | |
 | `KHR_materials_variants` | ❌ | Material switching not supported. |
-| `KHR_draco_mesh_compression` | ❌ | Draco-compressed meshes won't load (no Draco decoder). |
+| `KHR_draco_mesh_compression` | ❌ | No Draco decoder. **Detected and rejected with a log** (`has_draco_mesh_compression`) instead of loading as garbage. |
+| `EXT_meshopt_compression` | ❌ | No meshopt decoder. **Detected and rejected with a log** (`has_meshopt_compression`) instead of loading as garbage. |
+| `extensionsRequired` gate | ✅ | A required extension not on the allowlist (`KHR_materials_emissive_strength`, `KHR_texture_transform`, `KHR_mesh_quantization`) is rejected with a log — one front door covering Draco/Basis/meshopt at once. |
 | `KHR_lights_punctual` | ➖ | See §7. |
 | `KHR_node_visibility` | ❌ | |
 | `KHR_xmp_json_ld` | ➖ | Metadata; not relevant to rendering. |

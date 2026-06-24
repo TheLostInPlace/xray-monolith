@@ -366,6 +366,85 @@ void FExternalVisual::Load(LPCSTR N, IReader* /*data*/, u32 /*dwFlags*/)
 // External loader
 //////////////////////////////////////////////////////////////////////
 
+// glTF front-door conformance gate (Phase 1 -- kill silent corruption). Returns true (and logs ONE
+// reason via Msg) when the parsed model uses something this loader cannot honor and would otherwise
+// render as garbage with no diagnostic:
+//  - a REQUIRED extension we don't implement (extensionsRequired)         -> 1.2
+//  - Draco / meshopt-compressed geometry cgltf parses but never decodes   -> 1.3
+//  - a sparse accessor on data we consume: cgltf_accessor_read_float/_uint/_index silently return 0 for
+//    sparse accessors (cgltf.h:2357/2501/2521/2644), collapsing the mesh to the origin                -> 1.1
+// The caller rejects the load on true. External-path only; stock OGF/OMF is unaffected.
+static bool ext_gltf_unsupported(const cgltf_data* gltf, const char* full_path)
+{
+	// 1.2 -- extensionsRequired allowlist. Anything the asset *requires* that we don't implement -> reject.
+	// (Extend this list as features land. KHR_texture_transform/mesh_quantization/emissive_strength are
+	// the ones the loader honors today.)
+	for (cgltf_size i = 0; i < gltf->extensions_required_count; ++i)
+	{
+		const char* ext = gltf->extensions_required[i];
+		const bool ok =
+			!xr_strcmp(ext, "KHR_materials_emissive_strength") ||
+			!xr_strcmp(ext, "KHR_texture_transform") ||
+			!xr_strcmp(ext, "KHR_mesh_quantization");
+		if (!ok)
+		{
+			Msg("! [gltf] '%s' requires unsupported extension '%s' -- not loading", full_path, ext);
+			return true;
+		}
+	}
+
+	// 1.3 -- EXT_meshopt_compression on any bufferView (cgltf reads metadata, doesn't decompress).
+	for (cgltf_size bi = 0; bi < gltf->buffer_views_count; ++bi)
+		if (gltf->buffer_views[bi].has_meshopt_compression)
+		{
+			Msg("! [gltf] '%s' uses EXT_meshopt_compression (not decoded) -- not loading", full_path);
+			return true;
+		}
+
+	// 1.3 Draco + 1.1 sparse on consumed vertex/index accessors, per primitive.
+	for (cgltf_size mi = 0; mi < gltf->meshes_count; ++mi)
+	{
+		const cgltf_mesh& mesh = gltf->meshes[mi];
+		for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
+		{
+			const cgltf_primitive& prim = mesh.primitives[pi];
+			if (prim.has_draco_mesh_compression)
+			{
+				Msg("! [gltf] '%s' uses KHR_draco_mesh_compression (not decoded) -- not loading", full_path);
+				return true;
+			}
+			if (prim.indices && prim.indices->is_sparse)
+			{
+				Msg("! [gltf] '%s' has a sparse index accessor (unsupported) -- not loading", full_path);
+				return true;
+			}
+			for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai)
+			{
+				const cgltf_accessor* a = prim.attributes[ai].data;
+				if (a && a->is_sparse)
+				{
+					Msg("! [gltf] '%s' has a sparse vertex accessor (%s) -- not loading", full_path,
+						prim.attributes[ai].name ? prim.attributes[ai].name : "?");
+					return true;
+				}
+			}
+		}
+	}
+
+	// 1.1 -- sparse inverseBindMatrices (the skinned path reads this accessor directly).
+	for (cgltf_size si = 0; si < gltf->skins_count; ++si)
+	{
+		const cgltf_accessor* ibm = gltf->skins[si].inverse_bind_matrices;
+		if (ibm && ibm->is_sparse)
+		{
+			Msg("! [gltf] '%s' has a sparse inverseBindMatrices accessor (unsupported) -- not loading", full_path);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInfo>& out)
 {
 	out.clear();
@@ -643,6 +722,15 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		return false;
 	}
 
+	// Phase 1 front-door gate: reject (with a log) anything we'd otherwise render as garbage --
+	// required-but-unimplemented extensions, Draco/meshopt geometry, or sparse accessors.
+	if (ext_gltf_unsupported(gltf, full_path))
+	{
+		cgltf_free(gltf);
+		xr_free(blob);
+		return false;
+	}
+
 	// --- accumulate all triangle primitives into one VB/IB --------------------------
 	xr_vector<vertExternal> verts;
 	xr_vector<u32> indices; // 32-bit accumulator; packed down to 16-bit at buffer-creation if it fits
@@ -728,6 +816,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			const cgltf_size v_count = a_pos->count;
 
 			verts.reserve(verts.size() + v_count);
+			bool read_warned = false;
 			for (cgltf_size i = 0; i < v_count; ++i)
 			{
 				Fvector P, N, T;
@@ -738,7 +827,13 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				float tan4[4] = {1, 0, 0, 1};
 				float col[4] = {1, 1, 1, 1}; // glTF COLOR_0 (default opaque white)
 
-				cgltf_accessor_read_float(a_pos, i, &P.x, 3);
+				// 1.1 -- read_float returns false (output untouched) for sparse/corrupt accessors; sparse is
+				// already gated out, so this guards the residual corrupt-buffer case. Log once, keep default.
+				if (!cgltf_accessor_read_float(a_pos, i, &P.x, 3) && !read_warned)
+				{
+					Msg("! [gltf] '%s' POSITION read failed (corrupt accessor)", full_path);
+					read_warned = true;
+				}
 				if (a_nrm) cgltf_accessor_read_float(a_nrm, i, &N.x, 3);
 				if (a_uv) cgltf_accessor_read_float(a_uv, i, uv, 2);
 				if (a_tan)
@@ -774,11 +869,26 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			{
 				const cgltf_size n = prim.indices ? prim.indices->count : v_count;
 				indices.reserve(indices.size() + n);
+				bool idx_warned = false;
 				for (cgltf_size i = 0; i + 3 <= n; i += 3)
 				{
-					const u32 a = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0));
-					const u32 b = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1));
-					const u32 c = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2));
+					const cgltf_size ia = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0;
+					const cgltf_size ib = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1;
+					const cgltf_size ic = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2;
+					// 1.4 index sanity: indices are local to this primitive's vertex array; an out-of-range
+					// index (corrupt asset) would read past the VB. Skip the triangle, log once per primitive.
+					if (ia >= v_count || ib >= v_count || ic >= v_count)
+					{
+						if (!idx_warned)
+						{
+							Msg("! [gltf] '%s' index >= vertex count (%u) -- skipping triangle(s)", full_path, (u32)v_count);
+							idx_warned = true;
+						}
+						continue;
+					}
+					const u32 a = (u32)(v_base + ia);
+					const u32 b = (u32)(v_base + ib);
+					const u32 c = (u32)(v_base + ic);
 #if EXTERNAL_FLIP_WINDING
 					indices.push_back(a); indices.push_back(c); indices.push_back(b);
 #else
@@ -1314,6 +1424,14 @@ bool FExternalSkinned::LoadExternal(const char* short_name, const char* full_pat
 		return false;
 	}
 
+	// Phase 1 front-door gate (see ext_gltf_unsupported): sparse / Draco / meshopt / unsupported-ext.
+	if (ext_gltf_unsupported(gltf, full_path))
+	{
+		cgltf_free(gltf);
+		xr_free(blob);
+		return false;
+	}
+
 	const u16 nb = (u16)skin.bones.size();
 
 	// glTF RH -> engine LH coordinate conversion (Z-flip). MUST match GetSkinData (which conjugates the
@@ -1380,11 +1498,17 @@ bool FExternalSkinned::LoadExternal(const char* short_name, const char* full_pat
 			const u32 v_base = (u32)verts.size();
 			const cgltf_size v_count = a_pos->count;
 			verts.reserve(verts.size() + v_count);
+			bool read_warned = false;
 			for (cgltf_size i = 0; i < v_count; ++i)
 			{
 				Fvector P, N, T; P.set(0, 0, 0); N.set(0, 1, 0); T.set(1, 0, 0);
 				float uv[2] = {0, 0}; float tan4[4] = {1, 0, 0, 1};
-				cgltf_accessor_read_float(a_pos, i, &P.x, 3);
+				// 1.1 -- guard the residual corrupt-accessor case (sparse already gated). Log once, keep default.
+				if (!cgltf_accessor_read_float(a_pos, i, &P.x, 3) && !read_warned)
+				{
+					Msg("! [gltf] skinned '%s' POSITION read failed (corrupt accessor)", full_path);
+					read_warned = true;
+				}
 				if (a_nrm) cgltf_accessor_read_float(a_nrm, i, &N.x, 3);
 				if (a_uv) cgltf_accessor_read_float(a_uv, i, uv, 2);
 				if (a_tan) { cgltf_accessor_read_float(a_tan, i, tan4, 4); T.set(tan4[0], tan4[1], tan4[2]); }
@@ -1422,11 +1546,25 @@ bool FExternalSkinned::LoadExternal(const char* short_name, const char* full_pat
 
 			const cgltf_size n = prim.indices ? prim.indices->count : v_count;
 			indices.reserve(indices.size() + n);
+			bool idx_warned = false;
 			for (cgltf_size i = 0; i + 3 <= n; i += 3)
 			{
-				const u32 a = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0));
-				const u32 b = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1));
-				const u32 c = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2));
+				const cgltf_size ia = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0;
+				const cgltf_size ib = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1;
+				const cgltf_size ic = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2;
+				// 1.4 index sanity (see static path): skip out-of-range triangles, log once per primitive.
+				if (ia >= v_count || ib >= v_count || ic >= v_count)
+				{
+					if (!idx_warned)
+					{
+						Msg("! [gltf] skinned '%s' index >= vertex count (%u) -- skipping triangle(s)", full_path, (u32)v_count);
+						idx_warned = true;
+					}
+					continue;
+				}
+				const u32 a = (u32)(v_base + ia);
+				const u32 b = (u32)(v_base + ib);
+				const u32 c = (u32)(v_base + ic);
 #if EXTERNAL_FLIP_WINDING
 				indices.push_back(a); indices.push_back(c); indices.push_back(b);
 #else
