@@ -6,19 +6,36 @@
 // additive (blend one,one) pass AFTER the deferred lighting/combine (routed by :sorting in
 // external_emissive.s), like a translucent/particle material. It never writes the G-buffer.
 //
-// Paired with the stock deferred model VS deffer_model_flat.vs (same VS the lit external_static pass
-// uses, so our custom v_model UVs come through correctly -- the forward VS model_distort.vs did NOT
-// feed UVs with our vertex format). The VS's extra eye-space pos/normal varyings are just unused
-// here. Bind: s_base = glTF emissive map.
+// Paired with the deferred model VS deffer_model_flat_vc.vs (the same VS the lit external_static pass
+// uses): it carries our custom UVs PLUS the 2nd UV set (tc1), so an emissive map routed to glTF
+// TEXCOORD_1 (3.5 / MultiUVTest) samples the correct UV set. The VS's extra eye-space pos/normal/vcolor
+// varyings are unused here. Bind: s_base = glTF emissive map.
 
 #include "common.h"
+#include "external_common.h"
 
 // glTF emissiveFactor * emissive_strength, pushed per-object by FExternalVisual::Render via set_c.
 float4 ext_emissive_scale;
 
-float4 main( p_flat I ) : SV_Target
+// Matches deffer_model_flat_vc.vs output (and deffer_base_ext_static.ps); only tcdh + tc1 are read here.
+struct p_flat_x
 {
-	float3 e = s_base.Sample( smp_base, I.tcdh.xy ).rgb * ext_emissive_scale.rgb;	// glTF emissive
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	float4 tcdh     : TEXCOORD0;
+#else
+	float2 tcdh     : TEXCOORD0;
+#endif
+	float4 position : TEXCOORD1;
+	float3 N        : TEXCOORD2;
+	float2 tc1      : TEXCOORD3;
+	float4 vcolor   : TEXCOORD5;
+};
+
+float4 main( p_flat_x I ) : SV_Target
+{
+	float2 uv0     = ext_uv( I.tcdh.xy );                       // KHR-transformed UV0
+	float2 emis_uv = ext_uv_pick( uv0, I.tc1, ext_uv_set.x );   // route emissive map to its glTF texCoord
+	float3 e = s_base.Sample( smp_base, emis_uv ).rgb * ext_emissive_scale.rgb;	// glTF emissive
 	// additive blend (one,one) adds this straight onto the lit scene colour
 	return float4( e, 1.0h );
 }

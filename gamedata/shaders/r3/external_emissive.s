@@ -12,7 +12,9 @@
 -- for a partial emissive map. True HDR bloom here would need hooking the combine itself.
 
 function normal		(shader, t_base, t_second, t_detail)
-	shader:begin	("deffer_model_flat","deffer_base_ext_emissive")
+	-- deffer_model_flat_vc carries the 2nd UV set (tc1) so the emissive PS can route a UV1 emissive map
+	-- (3.5 / MultiUVTest); the plain deffer_model_flat VS does not pass tc1 through.
+	shader:begin	("deffer_model_flat_vc","deffer_base_ext_emissive")
 			: sorting	(2, true)							-- forward 'Sorted' list, post-combine
 			: blend		(true, blend.one, blend.one)		-- additive: scene += emissive
 			: zb		(true, false)						-- test against scene depth, don't write

@@ -38,7 +38,17 @@ public:
 	// The overlay passes return false if the selected material lacks the map they need. Returns false
 	// if the filter selects no geometry.
 	enum EExtPass { ext_lit = 0, ext_emissive, ext_metal, ext_blend };
-	bool LoadExternal(const char* short_name, const char* full_path, int material_filter = -1, EExtPass pass = ext_lit);
+	// `log_scale` gates the one-line auto-scale diagnostic. A multi-material model builds one child per
+	// material, all sharing the SAME model-wide scale factor, so only the first child should log it (the
+	// caller passes true once) -- otherwise the message is spammed once per material/sphere.
+	bool LoadExternal(const char* short_name, const char* full_path, int material_filter = -1,
+	                  EExtPass pass = ext_lit, bool log_scale = true);
+
+	// Build a small error-textured marker cube (no glTF parse). Used as the geometry of the placeholder
+	// kinematic that FExternalKinematics::BuildPlaceholder spawns when a glTF/GLB load is REJECTED or
+	// fails -- the stock visual pipeline (CObject::cNameVisual_set) dereferences the returned visual
+	// without a null check, so a failed external load must hand back a valid (visible) visual, not null.
+	bool BuildPlaceholder();
 
 	// One enumerated glTF material: its index (-1 = the no-material group), whether it carries an
 	// emissive map, whether it is metallic (MR map with metallic_factor > 0), and whether it is

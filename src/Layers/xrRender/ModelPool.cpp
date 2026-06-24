@@ -113,6 +113,20 @@ dxRender_Visual* CModelPool::Instance_Create_External(const char* short_name, co
 	if (!V->LoadExternal(short_name, full_path))
 	{
 		xr_delete(V); // dtor-safe on partial load (bones not allocated yet)
+
+		// The model was rejected by the conformance gate or failed to parse. We CANNOT return null here:
+		// the stock visual pipeline (CObject::cNameVisual_set) dereferences the returned visual without a
+		// null check, so null would crash the game. Instead hand back a visible placeholder (1-bone rigid
+		// marker cube) so a rejected spawn shows an obvious error cube and the game keeps running. The
+		// rejection reason was already logged by the loader.
+		Msg("! [gltf] '%s' could not be loaded -- spawning placeholder marker cube", full_path);
+		V = xr_new<FExternalKinematics>();
+		if (V->BuildPlaceholder(short_name))
+			return V;
+
+		// Placeholder build itself failed (e.g. GPU buffer creation) -- only now fall back to the original
+		// hard-failure behaviour.
+		xr_delete(V);
 		if (assert)
 			Debug.fatal(DEBUG_INFO, "Can't load external model '%s'.", full_path);
 		return nullptr;

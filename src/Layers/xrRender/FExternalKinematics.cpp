@@ -34,6 +34,81 @@ void FExternalKinematics::Load(LPCSTR N, IReader* /*data*/, u32 /*dwFlags*/)
 	Msg("! FExternalKinematics::Load() called unexpectedly for [%s] - built via LoadExternal()", N);
 }
 
+bool FExternalKinematics::BuildPlaceholder(const char* short_name)
+{
+	dbg_name = short_name;
+	dbg_id = 1;
+	skinning = -1;
+	hud = false;
+
+	// geometry: a single marker cube child (no glTF parse, always succeeds on a healthy device)
+	FExternalVisual* geom = xr_new<FExternalVisual>();
+	geom->Type = MT_EXTERNAL_STATIC;
+	if (!geom->BuildPlaceholder())
+	{
+		xr_delete(geom);
+		return false; // no children/bones allocated yet -> dtor-safe for the caller
+	}
+	children.push_back(geom);
+
+	// bounds = the cube child's box
+	const Fbox& gb = geom->getVisData().box;
+	vis.box.set(gb.min, gb.max);
+	Fvector c, h;
+	c.add(gb.min, gb.max).mul(0.5f);
+	h.sub(gb.max, gb.min).mul(0.5f);
+	if (h.x < EPS_L) h.x = EPS_L;
+	if (h.y < EPS_L) h.y = EPS_L;
+	if (h.z < EPS_L) h.z = EPS_L;
+	vis.sphere.set(c, h.magnitude());
+
+	// --- 1-bone rigid root (identical to LoadExternal's non-skinned branch) ----------
+	bone_map_N = xr_new<accel>();
+	bone_map_P = xr_new<accel>();
+	bones = xr_new<vecBones>();
+	bone_instances = nullptr;
+	bones_size = 0;
+	hidden_bones.zero();
+	visimask.zero();
+
+	CBoneData* B = CreateBoneData(0);
+	B->name = shared_str("$external_root$");
+	B->child_faces.resize(children.size());
+	bones->push_back(B);
+	bone_map_N->push_back(mk_pair(B->name, u32(0)));
+	bone_map_P->push_back(mk_pair(B->name, u32(0)));
+	visimask.set(u64(1) << 0, TRUE);
+
+	iRoot = 0;
+	B->SetParentID(BI_NONE);
+	B->bind_transform.identity();
+	B->IK_data.Reset();
+	B->mass = 10.f;
+	B->center_of_mass.set(c);
+	B->game_mtl_name = "default_object";
+	B->shape.Reset();
+	B->shape.type = SBoneShape::stBox;
+	B->shape.flags.zero();
+	B->shape.box.m_rotate.identity();
+	B->shape.box.m_translate.set(c);
+	B->shape.box.m_halfsize.set(h);
+	B->obb.m_rotate.identity();
+	B->obb.m_translate.set(c);
+	B->obb.m_halfsize.set(h);
+
+	(*bones)[LL_GetBoneRoot()]->CalculateM2B(Fidentity);
+
+	IBoneInstances_Create();
+	Update_Callback = NULL;
+	wm_frame = u32(-1);
+	LL_Validate();
+	bones_size = (u16)bones->size();
+
+	Type = MT_SKELETON_RIGID;
+	CalculateBones_Invalidate();
+	return true;
+}
+
 bool FExternalKinematics::LoadExternal(const char* short_name, const char* full_path)
 {
 	dbg_name = short_name;
@@ -72,7 +147,9 @@ bool FExternalKinematics::LoadExternal(const char* short_name, const char* full_
 	{
 		FExternalVisual* geom = xr_new<FExternalVisual>();
 		geom->Type = MT_EXTERNAL_STATIC;
-		if (!geom->LoadExternal(short_name, full_path, material_filter, pass))
+		// Only the first-built child logs the (model-wide, shared) auto-scale factor -- otherwise a
+		// multi-material model spams the line once per material. children.empty() == "this is the first".
+		if (!geom->LoadExternal(short_name, full_path, material_filter, pass, children.empty()))
 		{
 			xr_delete(geom); // selected no geometry / no map for this overlay (or failed) -> skip
 			return false;

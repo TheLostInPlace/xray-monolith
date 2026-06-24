@@ -46,7 +46,11 @@
 // EXTERNAL_AUTOSCALE_MIN_SIZE it's scaled up; models already in [MIN,MAX] are left untouched. Scale
 // is about the local origin so the bbox / physics box stay consistent. Set EXTERNAL_AUTOSCALE 0 to off.
 #define EXTERNAL_AUTOSCALE 1
-#define EXTERNAL_AUTOSCALE_MIN_SIZE 0.01f // 3.4 -- grow only ABSURDLY tiny models; real meters honored otherwise
+// 3.4 -- only rescale ABSURDLY-sized models; real meters are honored inside the band. MIN is a
+// "smallest spawnable size" floor: some debug assets are authored sub-centimeter (e.g.
+// MetalRoughSpheresNoTextures is ~7.5 mm across), which is invisible when spawned, so anything below
+// 10 cm is grown to 10 cm. Normal props (>=10 cm) are untouched. (Keep the harness floor in sync.)
+#define EXTERNAL_AUTOSCALE_MIN_SIZE 0.10f
 #define EXTERNAL_AUTOSCALE_MAX_SIZE 50.0f  // 3.4 -- shrink only ABSURDLY large models
 
 // Phase 1 shader (gamedata/shaders/r3/external_static.s). It reuses the stock deferred
@@ -755,7 +759,7 @@ bool FExternalVisual::GetSkinData(const char* full_path, ExtSkinData& out)
 	return true;
 }
 
-bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter, EExtPass pass)
+bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter, EExtPass pass, bool log_scale)
 {
 	dbg_name = short_name;
 	dbg_id = 1;
@@ -830,6 +834,11 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	float occ_strength = 1.f;           // occlusionTexture.strength (cgltf stores it in .scale)
 	Fvector emissive_scale;
 	emissive_scale.set(1.f, 1.f, 1.f); // glTF emissiveFactor * emissive_strength (captured with the map)
+	// 3.5 -- the emissive map's OWN texCoord + KHR_texture_transform (the emissive overlay child applies
+	// these instead of the base-color material's, so MultiUVTest's UV1-routed emissive samples correctly).
+	int   emissive_uv_set = 0;
+	float em_uv_scale[2] = {1.f, 1.f}, em_uv_offset[2] = {0.f, 0.f};
+	float em_uv_rot = 0.f;
 	cgltf_alpha_mode alpha_mode = cgltf_alpha_mode_opaque; // glTF alphaMode of this child's material
 	float            alpha_cutoff = 0.5f;                  // glTF alphaCutoff (default 0.5)
 	float            base_alpha = 1.f;                     // glTF baseColorFactor.a (opacity for BLEND)
@@ -1128,6 +1137,15 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 					const cgltf_material* m = prim.material;
 					const float str = m->has_emissive_strength ? m->emissive_strength.emissive_strength : 1.f;
 					emissive_scale.set(m->emissive_factor[0] * str, m->emissive_factor[1] * str, m->emissive_factor[2] * str);
+					// 3.5 -- emissive map's glTF texCoord (UV0/UV1) + its own KHR_texture_transform
+					emissive_uv_set = m->emissive_texture.texcoord;
+					if (m->emissive_texture.has_transform)
+					{
+						const cgltf_texture_transform& tt = m->emissive_texture.transform;
+						em_uv_scale[0] = tt.scale[0];   em_uv_scale[1] = tt.scale[1];
+						em_uv_offset[0] = tt.offset[0]; em_uv_offset[1] = tt.offset[1];
+						em_uv_rot = tt.rotation;
+					}
 				}
 			}
 		}
@@ -1194,7 +1212,10 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			}
 			bb.min.mul(s);
 			bb.max.mul(s);
-			Msg("~ [gltf] '%s' auto-scaled x%.4f (model dim %.2f -> %.2f units)", full_path, s, maxdim, maxdim * s);
+			// One line per MODEL, not per material child: a multi-material model builds many children that
+			// all share this same factor, so only the first child (log_scale) reports it.
+			if (log_scale)
+				Msg("~ [gltf] '%s' auto-scaled x%.4f (model dim %.3f -> %.3f units)", full_path, s, maxdim, maxdim * s);
 		}
 	}
 #endif
@@ -1309,6 +1330,12 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		SetShaderTexture(EXTERNAL_EMISSIVE_SHADER, emis_name);
 		m_emissive = true;
 		m_emissive_scale = emissive_scale; // glTF emissiveFactor * emissive_strength
+		// 3.5 -- route the emissive sample through the EMISSIVE texture's own texCoord + KHR_texture_transform
+		// (override the base-color material's values copied above). MultiUVTest's emissive uses UV1; without
+		// this it samples UV0 and shows the baked "Multiple UVs not supported" message.
+		m_uv_set.set((float)emissive_uv_set, 0.f, 0.f, 0.f);
+		m_uv_xform.set(em_uv_scale[0], em_uv_scale[1], em_uv_offset[0], em_uv_offset[1]);
+		m_uv_rot.set(cosf(em_uv_rot), sinf(em_uv_rot));
 		Type = MT_EXTERNAL_STATIC;
 		return true;
 	}
@@ -1528,6 +1555,108 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			: (clamp_sampler ? EXTERNAL_DEFAULT_CLAMP_SHADER : EXTERNAL_DEFAULT_SHADER), tex_name);
 	}
 
+	Type = MT_EXTERNAL_STATIC;
+	return true;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Placeholder marker cube (no glTF parse)
+//
+// Builds a small error-textured cube so a REJECTED/failed external load still hands back a valid,
+// visible visual. Self-contained: it touches none of the LoadExternal path, so the working glTF/OGF
+// pipelines are unaffected. Uses the DOUBLE-SIDED default shader so the cube is visible regardless of
+// winding, and the engine's "not existing texture" placeholder so it reads as an obvious error marker.
+//////////////////////////////////////////////////////////////////////
+bool FExternalVisual::BuildPlaceholder()
+{
+	const float h = 0.15f;                       // 30 cm marker cube (half-size 0.15 m)
+	const float col[4] = {1.f, 1.f, 1.f, 1.f};   // COLOR_0 default white
+
+	// 8 corners; corner-normalized normals (placeholder lighting only -- the default shader is enough).
+	static const float cz[8][3] = {
+		{-1,-1,-1}, { 1,-1,-1}, { 1, 1,-1}, {-1, 1,-1},
+		{-1,-1, 1}, { 1,-1, 1}, { 1, 1, 1}, {-1, 1, 1},
+	};
+	xr_vector<vertExternal> verts;
+	verts.resize(8);
+	Fbox bb;
+	bb.invalidate();
+	for (int i = 0; i < 8; ++i)
+	{
+		Fvector P;
+		P.set(cz[i][0] * h, cz[i][1] * h, cz[i][2] * h);
+		Fvector N = P; // corner normal
+		Fvector T;
+		T.set(1.f, 0.f, 0.f);
+		Fvector B;
+		B.set(0.f, 1.f, 0.f);
+		const float u = (cz[i][0] + 1.f) * 0.5f, v = (cz[i][1] + 1.f) * 0.5f;
+		ext_set_vertex(verts[i], P, N, T, B, u, v, u, v, col);
+		bb.modify(P);
+	}
+
+	static const u16 idx[36] = {
+		0, 2, 1, 0, 3, 2, // -Z
+		4, 5, 6, 4, 6, 7, // +Z
+		0, 1, 5, 0, 5, 4, // -Y
+		3, 7, 6, 3, 6, 2, // +Y
+		0, 4, 7, 0, 7, 3, // -X
+		1, 2, 6, 1, 6, 5, // +X
+	};
+
+	// --- GPU buffers (16-bit IB; 8 verts) -------------------------------------------
+	vBase = 0;
+	vCount = (u32)verts.size();
+	iBase = 0;
+	iCount = 36;
+	dwPrimitives = iCount / 3;
+	m_index32 = false;
+
+	const u32 vStride = sizeof(vertExternal);
+#if defined(USE_DX10) || defined(USE_DX11)
+	VERIFY(NULL == p_rm_Vertices);
+	R_CHK(dx10BufferUtils::CreateVertexBuffer(&p_rm_Vertices, verts.data(), vCount * vStride));
+	HW.stats_manager.increment_stats_vb(p_rm_Vertices);
+	VERIFY(NULL == p_rm_Indices);
+	R_CHK(dx10BufferUtils::CreateIndexBuffer(&p_rm_Indices, idx, iCount * 2));
+	HW.stats_manager.increment_stats_ib(p_rm_Indices);
+#else // DX9
+	{
+		BOOL bSoft = HW.Caps.geometry.bSoftware;
+		u32 dwUsage = D3DUSAGE_WRITEONLY | (bSoft ? D3DUSAGE_SOFTWAREPROCESSING : 0);
+		BYTE* bytes = 0;
+		VERIFY(NULL == p_rm_Vertices);
+		R_CHK(HW.pDevice->CreateVertexBuffer(vCount * vStride, dwUsage, 0, D3DPOOL_MANAGED, &p_rm_Vertices, 0));
+		HW.stats_manager.increment_stats_vb(p_rm_Vertices);
+		R_CHK(p_rm_Vertices->Lock(0, 0, (void**)&bytes, 0));
+		CopyMemory(bytes, verts.data(), vCount * vStride);
+		p_rm_Vertices->Unlock();
+	}
+	{
+		BOOL bSoft = HW.Caps.geometry.bSoftware;
+		u32 dwUsage = (bSoft ? D3DUSAGE_SOFTWAREPROCESSING : 0);
+		BYTE* bytes = 0;
+		VERIFY(NULL == p_rm_Indices);
+		R_CHK(HW.pDevice->CreateIndexBuffer(iCount * 2, dwUsage, D3DFMT_INDEX16, D3DPOOL_MANAGED, &p_rm_Indices, 0));
+		HW.stats_manager.increment_stats_ib(p_rm_Indices);
+		R_CHK(p_rm_Indices->Lock(0, 0, (void**)&bytes, 0));
+		CopyMemory(bytes, idx, iCount * 2);
+		p_rm_Indices->Unlock();
+	}
+#endif
+
+	rm_geom.create(dwDecl_External, p_rm_Vertices, p_rm_Indices);
+
+	// bounding volumes
+	vis.box.set(bb.min, bb.max);
+	Fvector c, half;
+	c.add(bb.min, bb.max).mul(0.5f);
+	half.sub(bb.max, bb.min).mul(0.5f);
+	vis.sphere.set(c, half.magnitude());
+
+	// material members keep their identity defaults (white tint, identity UV, no clip). Double-sided so the
+	// cube shows regardless of winding; "not existing texture" marks it as an obvious error placeholder.
+	SetShaderTexture(EXTERNAL_DEFAULT_DS_SHADER, EXTERNAL_FALLBACK_TEXTURE);
 	Type = MT_EXTERNAL_STATIC;
 	return true;
 }
@@ -1913,6 +2042,11 @@ void FExternalVisual::Render(float)
 	if (m_emissive)
 	{
 		RCache.set_c("ext_emissive_scale", m_emissive_scale.x, m_emissive_scale.y, m_emissive_scale.z, 1.f);
+		// 3.5 -- the emissive PS routes its sample through the emissive texCoord + KHR transform (carried in
+		// m_uv_* for the emissive child). Push them so MultiUVTest's UV1 emissive samples the right UV set.
+		RCache.set_c("ext_uv_transform", m_uv_xform.x, m_uv_xform.y, m_uv_xform.z, m_uv_xform.w);
+		RCache.set_c("ext_uv_rot", m_uv_rot.x, m_uv_rot.y, 0.f, 0.f);
+		RCache.set_c("ext_uv_set", m_uv_set.x, m_uv_set.y, m_uv_set.z, m_uv_set.w);
 	}
 	else
 	{

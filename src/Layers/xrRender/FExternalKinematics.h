@@ -26,6 +26,12 @@ public:
 	// Parse the GLTF/GLB at `full_path`, build the geometry child + the 1-bone skeleton.
 	bool LoadExternal(const char* short_name, const char* full_path);
 
+	// Build a 1-bone rigid wrapper around a small marker cube (FExternalVisual::BuildPlaceholder), with
+	// no glTF parse. Used when LoadExternal fails or the conformance gate rejects a model, so a rejected
+	// spawn shows a visible error cube instead of crashing (cNameVisual_set derefs the visual). Call on a
+	// freshly-constructed object (a failed LoadExternal leaves no children/bones, but use a clean one).
+	bool BuildPlaceholder(const char* short_name);
+
 	FExternalKinematics();
 	virtual ~FExternalKinematics();
 };
