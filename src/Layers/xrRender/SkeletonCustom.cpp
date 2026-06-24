@@ -653,7 +653,9 @@ bool CKinematics::PickBone(const Fmatrix& parent_xform, IKinematics::pick_result
 	P.transform_tiny(S, start);
 	P.transform_dir(D, dir);
 	for (u32 i = 0; i < children.size(); i++)
-		if (LL_GetChild(i) && LL_GetChild(i)->PickBone(r, dist, S, D, bone_id))
+	{
+		CSkeletonX* c = LL_GetChild(i); // cache: avoid the double fast_dynamic_cast (behavior-identical)
+		if (c && c->PickBone(r, dist, S, D, bone_id))
 		{
 			parent_xform.transform_dir(r.normal);
 			parent_xform.transform_tiny(r.tri[0]);
@@ -661,6 +663,7 @@ bool CKinematics::PickBone(const Fmatrix& parent_xform, IKinematics::pick_result
 			parent_xform.transform_tiny(r.tri[2]);
 			return true;
 		}
+	}
 	return false;
 }
 
@@ -693,7 +696,8 @@ void CKinematics::AddWallmark(const Fmatrix* parent_xform, const Fvector3& start
 			if (CDB::TestRayOBB(S, D, obb))
 				for (u32 i = 0; i < children.size(); i++)
 				{
-					if (LL_GetChild(i) && LL_GetChild(i)->PickBone(r, dist, S, D, k))
+					CSkeletonX* c = LL_GetChild(i); // cache: avoid the double fast_dynamic_cast (behavior-identical)
+					if (c && c->PickBone(r, dist, S, D, k))
 					{
 						picked = TRUE;
 						dist = r.dist;

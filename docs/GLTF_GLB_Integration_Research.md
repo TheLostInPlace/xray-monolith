@@ -500,7 +500,7 @@ No `[UNVERIFIED]` tags remain in the document.
 
 # Phase 1 Implementation — Status, Files & Testing
 
-**Status:** implemented. A static `.gltf`/`.glb` mesh in `$game_meshes$` loads via `Render->model_Create()` / Lua `set_visual_name()`, renders through the stock deferred model pipeline, gets correct bounding volumes, and is cached/instanced/deleted exactly like an OGF visual. The OGF/OMF path is untouched.
+**Status:** implemented. A static `.gltf`/`.glb` mesh in `$game_meshes$` loads via `Render->model_Create()` / Lua `set_visual_name()`, renders through the stock deferred model pipeline, gets correct bounding volumes, and is cached/instanced/deleted exactly like an OGF visual. Stock OGF/OMF behavior is unchanged; the glTF integration is additive and gated.
 
 ## Files changed / added (Phase 1)
 | File | Change |
