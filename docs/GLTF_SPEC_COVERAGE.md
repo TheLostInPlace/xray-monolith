@@ -82,7 +82,7 @@ Last updated: 2026-06-23.
 | `alphaMode = OPAQUE` | ✅ | |
 | `alphaMode = MASK` + `alphaCutoff` | ✅ | Per-material cutoff, deferred alpha-test (`clip`). Verified exact at .25/.50/.75. |
 | `alphaMode = BLEND` | ⚠️ | Forward, back-to-front, src-alpha pass with simple sun+ambient lighting. Caveats: no point lights/shadows *on* the surface, per-object (not per-triangle) sort, doesn't cast shadows, not in SSR. |
-| `doubleSided` | ❌ | Everything renders single-sided (back faces culled). Affects foliage/cloth. |
+| `doubleSided` | ✅ | doubleSided materials use a no-cull `.s` variant (G-buffer **and** shadow) and the PS flips the shading normal on back faces via `SV_IsFrontFace`, on the deferred lit paths (static/MR/bump/bump+MR). The vertex-colour path renders single-sided. |
 
 ---
 
@@ -181,7 +181,7 @@ transform (one transform for all maps; rotation supported, per-map decoupling no
 (static lit paths; skinned/overlays not), AO (MR shaders only), texture samplers (wrap/filter ignored),
 and dynamic-light shadows (deliberately off for props).
 
-**Not implemented (❌):** **animation & skinning** (the biggest gap), morph targets, `doubleSided`,
+**Not implemented (❌):** **animation & skinning** (the biggest gap), morph targets,
 non-triangle primitives, base64 data-URI images, KTX2/Basis & Draco compression, and the advanced KHR
 material extensions (clearcoat, transmission, volume, ior, specular, sheen, anisotropy, iridescence,
 dispersion, unlit, variants).

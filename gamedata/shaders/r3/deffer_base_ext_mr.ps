@@ -24,7 +24,7 @@ struct p_flat_x
 	float4 vcolor   : TEXCOORD5;
 };
 
-f_deffer main( p_flat_x I )
+f_deffer main( p_flat_x I, bool front : SV_IsFrontFace )
 {
 	f_deffer O;
 
@@ -54,7 +54,9 @@ f_deffer main( p_flat_x I )
 	float  ao = s_ao.Sample( smp_base, ao_uv ).r;
 	h *= lerp( 1.0h, ao, ext_ao_strength.x );
 
-	float4 Ne = float4( normalize((float3)I.N.xyz), h );
+	float3 nrm = normalize((float3)I.N.xyz);
+	if (!front) nrm = -nrm; // 3.2 doubleSided: flip the normal on back faces (no-op for single-sided)
+	float4 Ne = float4( nrm, h );
 
 	// Diffuse removed only for SMOOTH metal (mirror); ROUGH metal keeps albedo as a stable matte base.
 	// metalness * smoothness, scaled by EXT_METAL_DIFFUSE_KILL so metals keep a flashlight-visible floor.

@@ -78,6 +78,14 @@
 // normals; gets a "albedo,metalrough" list (t_base / t_second) -- no derivation needed (2 textures).
 #define EXTERNAL_MR_SHADER "external_mr"
 
+// Double-sided (no backface cull) variants of the four deferred lit shaders, selected when the glTF
+// material has doubleSided=true. Same bindings as the single-sided ones; the .s sets dx10cullmode NONE
+// and the PS flips the shading normal on back faces via SV_IsFrontFace. (3.2)
+#define EXTERNAL_DEFAULT_DS_SHADER "external_static_ds"
+#define EXTERNAL_MR_DS_SHADER      "external_mr_ds"
+#define EXTERNAL_BUMP_DS_SHADER    "external_bump_ds"
+#define EXTERNAL_BUMP_MR_DS_SHADER "external_bump_mr_ds"
+
 // Forward additive emissive OVERLAY (rendered in addition to the lit batch, post-deferred). Gets the
 // emissive map as t_base. See external_emissive.s / deffer_base_ext_emissive.ps.
 #define EXTERNAL_EMISSIVE_SHADER "external_emissive"
@@ -762,6 +770,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	float uv_scale[2] = {1.f, 1.f}, uv_offset[2] = {0.f, 0.f};               // KHR_texture_transform
 	float uv_rot = 0.f;                                                      // KHR_texture_transform rotation (radians)
 	int   uv_set[4] = {0, 0, 0, 0};                                         // per-map texCoord: base/normal/mr/ao (0=UV0,1=UV1) (3.5)
+	bool  double_sided = false;                                            // glTF material doubleSided (3.2)
 	bool  have_vertex_color = false;                       // any primitive carries glTF COLOR_0
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
@@ -968,6 +977,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				const cgltf_material* m = prim.material;
 				alpha_mode = m->alpha_mode;
 				alpha_cutoff = m->alpha_cutoff;
+				double_sided = m->double_sided; // glTF doubleSided -> no-cull shader variant (3.2)
 				if (m->has_pbr_metallic_roughness)
 				{
 					const cgltf_pbr_metallic_roughness& pbr = m->pbr_metallic_roughness;
@@ -1401,27 +1411,28 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	{
 		// albedo,normal,metalrough,ao -> t_base / t_second / t_metalrough / t_ao (engine forwards 3rd+4th)
 		xr_sprintf(tlist, "%s,%s,%s,%s", tex_name, normal_name, mr_name, ao_name);
-		SetShaderTexture(EXTERNAL_BUMP_MR_SHADER, tlist);
+		SetShaderTexture(double_sided ? EXTERNAL_BUMP_MR_DS_SHADER : EXTERNAL_BUMP_MR_SHADER, tlist);
 	}
 	else if (have_normal)
 	{
 		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name);
-		SetShaderTexture(EXTERNAL_BUMP_SHADER, tlist);
+		SetShaderTexture(double_sided ? EXTERNAL_BUMP_DS_SHADER : EXTERNAL_BUMP_SHADER, tlist);
 	}
 	else if (have_mr)
 	{
 		// albedo,metalrough,ao (no normal) -> t_base / t_second / t_ao
 		xr_sprintf(tlist, "%s,%s,%s", tex_name, mr_name, ao_name);
-		SetShaderTexture(EXTERNAL_MR_SHADER, tlist);
+		SetShaderTexture(double_sided ? EXTERNAL_MR_DS_SHADER : EXTERNAL_MR_SHADER, tlist);
 	}
 	else if (have_vertex_color)
 	{
-		// per-vertex colours, no normal/MR/base texture (e.g. BoxVertexColors): vertex colour is albedo
+		// per-vertex colours, no normal/MR/base texture (e.g. BoxVertexColors): vertex colour is albedo.
+		// (No doubleSided variant for the vertex-colour path -- rare; renders single-sided.)
 		SetShaderTexture(EXTERNAL_VC_SHADER, tex_name);
 	}
 	else
 	{
-		SetShaderTexture(EXTERNAL_DEFAULT_SHADER, tex_name);
+		SetShaderTexture(double_sided ? EXTERNAL_DEFAULT_DS_SHADER : EXTERNAL_DEFAULT_SHADER, tex_name);
 	}
 
 	Type = MT_EXTERNAL_STATIC;

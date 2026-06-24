@@ -25,7 +25,7 @@ struct p_bump_x
 	float2 tc1      : TEXCOORD6;
 };
 
-f_deffer main( p_bump_x I )
+f_deffer main( p_bump_x I, bool front : SV_IsFrontFace )
 {
 	f_deffer O;
 
@@ -46,6 +46,7 @@ f_deffer main( p_bump_x I )
 
 	// tangent space -> eye space via the interpolated eye-space TBN (normalize the result)
 	float3 Ne = normalize( I.Te * n_ts.x + I.Be * n_ts.y + I.Ne * n_ts.z );
+	if (!front) Ne = -Ne; // 3.2 doubleSided: flip the shading normal on back faces (no-op for single-sided)
 
 	float ms = xmaterial;
 	float h  = I.position.w;

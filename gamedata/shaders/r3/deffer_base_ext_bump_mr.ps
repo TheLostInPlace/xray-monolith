@@ -27,7 +27,7 @@ struct p_bump_x
 	float2 tc1      : TEXCOORD6;
 };
 
-f_deffer main( p_bump_x I )
+f_deffer main( p_bump_x I, bool front : SV_IsFrontFace )
 {
 	f_deffer O;
 
@@ -47,6 +47,7 @@ f_deffer main( p_bump_x I )
 	float3 n_ts = s_bump.Sample( smp_base, nrm_uv ).xyz * 2.0h - 1.0h;
 	n_ts.xy    *= ext_mr_factor.z;
 	float3 Ne   = normalize( I.Te * n_ts.x + I.Be * n_ts.y + I.Ne * n_ts.z );
+	if (!front) Ne = -Ne; // 3.2 doubleSided: flip the shading normal on back faces (no-op for single-sided)
 
 	float ms = xmaterial;
 	float h  = I.position.w;
