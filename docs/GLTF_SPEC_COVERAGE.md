@@ -52,7 +52,7 @@ Last updated: 2026-06-23.
 | Points / lines / strips / fans | ❌ | Non-triangle primitives are skipped (no geometry emitted). |
 | `POSITION` | ✅ | |
 | `NORMAL` | ✅ | Defaults to up-normal if absent. |
-| `TANGENT` | ✅ | Bitangent derived with the glTF handedness sign. |
+| `TANGENT` | ✅ | Bitangent derived with the glTF handedness sign. **Absent TANGENT + a normal map → tangents are generated** (per-triangle UV-gradient, MikkTSpace-lite) instead of a constant T. |
 | `TEXCOORD_0` | ✅ | |
 | `TEXCOORD_1` (2nd UV set) | ✅ | UV1 is read and each map (base/normal/MR/AO) samples UV0 or UV1 by its glTF `texCoord` on the static lit paths. (KHR_texture_transform still applies to UV0 only; metal/blend/emissive overlays + skinned use UV0.) |
 | `COLOR_0` (vertex colours) | ✅ | Multiplied into albedo on the static lit paths (flat / MR / bump / bump+MR / vertex-colour). The skinned path and the metal/blend/emissive overlays still ignore it. |

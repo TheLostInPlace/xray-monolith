@@ -829,6 +829,45 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			const u32 v_base = (u32)verts.size();
 			const cgltf_size v_count = a_pos->count;
 
+			// 4.1 -- generate tangents when this primitive has a normal map but NO TANGENT attribute (else
+			// T stays the constant (1,0,0) -> mis-lit bumps). Per-triangle UV-gradient accumulation
+			// (MikkTSpace-lite), computed in RAW glTF space; each vertex's tangent is orthonormalized
+			// against its normal and baked/Z-flipped with the rest in the loop below.
+			xr_vector<Fvector> gen_tan;
+			const bool need_tangents = !a_tan && a_uv && a_nrm
+				&& prim.material && prim.material->normal_texture.texture;
+			if (need_tangents)
+			{
+				Fvector zero; zero.set(0, 0, 0);
+				gen_tan.assign(v_count, zero);
+				const cgltf_size n = prim.indices ? prim.indices->count : v_count;
+				for (cgltf_size t = 0; t + 3 <= n; t += 3)
+				{
+					const cgltf_size i0 = prim.indices ? cgltf_accessor_read_index(prim.indices, t + 0) : t + 0;
+					const cgltf_size i1 = prim.indices ? cgltf_accessor_read_index(prim.indices, t + 1) : t + 1;
+					const cgltf_size i2 = prim.indices ? cgltf_accessor_read_index(prim.indices, t + 2) : t + 2;
+					if (i0 >= v_count || i1 >= v_count || i2 >= v_count) continue;
+					Fvector p0, p1, p2; float t0[2], t1[2], t2[2];
+					cgltf_accessor_read_float(a_pos, i0, &p0.x, 3);
+					cgltf_accessor_read_float(a_pos, i1, &p1.x, 3);
+					cgltf_accessor_read_float(a_pos, i2, &p2.x, 3);
+					cgltf_accessor_read_float(a_uv, i0, t0, 2);
+					cgltf_accessor_read_float(a_uv, i1, t1, 2);
+					cgltf_accessor_read_float(a_uv, i2, t2, 2);
+					Fvector e1, e2; e1.sub(p1, p0); e2.sub(p2, p0);
+					const float du1 = t1[0] - t0[0], dv1 = t1[1] - t0[1];
+					const float du2 = t2[0] - t0[0], dv2 = t2[1] - t0[1];
+					const float det = du1 * dv2 - du2 * dv1;
+					if (_abs(det) < 1e-12f) continue; // degenerate UVs -> skip this triangle's contribution
+					const float r = 1.f / det;
+					Fvector tg;
+					tg.x = (e1.x * dv2 - e2.x * dv1) * r;
+					tg.y = (e1.y * dv2 - e2.y * dv1) * r;
+					tg.z = (e1.z * dv2 - e2.z * dv1) * r;
+					gen_tan[i0].add(tg); gen_tan[i1].add(tg); gen_tan[i2].add(tg);
+				}
+			}
+
 			verts.reserve(verts.size() + v_count);
 			bool read_warned = false;
 			for (cgltf_size i = 0; i < v_count; ++i)
@@ -857,6 +896,15 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				{
 					cgltf_accessor_read_float(a_tan, i, tan4, 4);
 					T.set(tan4[0], tan4[1], tan4[2]);
+				}
+				else if (need_tangents)
+				{
+					// 4.1 -- Gram-Schmidt orthonormalize the generated tangent against the raw normal
+					Fvector nn = N; nn.normalize_safe();
+					Fvector tg = gen_tan[i];
+					const float d = nn.dotproduct(tg);
+					tg.x -= nn.x * d; tg.y -= nn.y * d; tg.z -= nn.z * d;
+					if (tg.magnitude() > 1e-5f) { tg.normalize(); T = tg; } // else keep default (1,0,0)
 				}
 				if (a_col) // COLOR_0 is VEC3 or VEC4; read the right count so alpha stays 1 for VEC3
 					cgltf_accessor_read_float(a_col, i, col, (a_col->type == cgltf_type_vec4) ? 4 : 3);
