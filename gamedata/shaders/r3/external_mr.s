@@ -6,7 +6,7 @@
 -- are needed (albedo, metal-rough), so they're passed straight through as t_base / t_second.
 
 function normal		(shader, t_base, t_second, t_detail, t_ao)
-	shader:begin	("deffer_model_flat","deffer_base_ext_mr")
+	shader:begin	("deffer_model_flat_vc","deffer_base_ext_mr")
 			: fog		(false)
 	shader:dx10texture	("s_base",	t_base)		-- albedo
 	shader:dx10texture	("s_bump",	t_second)	-- glTF metallic-roughness map (G=rough, B=metal)

@@ -120,6 +120,7 @@ public:
 	Fvector4 m_uv_xform   = {1.f, 1.f, 0.f, 0.f};   // KHR_texture_transform: xy=scale, zw=offset
 	Fvector2 m_uv_rot     = {1.f, 0.f};             // KHR_texture_transform rotation: x=cos, y=sin (identity)
 	float    m_base_alpha = 1.f;                    // glTF baseColorFactor.a (MASK alpha multiplier)
+	Fvector4 m_uv_set     = {0.f, 0.f, 0.f, 0.f};   // 3.5 per-map texCoord: base/normal/mr/ao (0=UV0, 1=UV1)
 };
 
 // Skinned external (GLTF/GLB) render visual. A child of FExternalKinematics that deforms with the

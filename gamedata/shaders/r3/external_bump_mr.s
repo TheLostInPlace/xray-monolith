@@ -6,7 +6,7 @@
 -- "albedo,normal,metalrough"; the engine forwards the 3rd list texture as a 5th arg (t_metalrough).
 
 function normal		(shader, t_base, t_second, t_detail, t_metalrough, t_ao)
-	shader:begin	("deffer_model_bump","deffer_base_ext_bump_mr")
+	shader:begin	("deffer_model_bump_vc","deffer_base_ext_bump_mr")
 			: fog		(false)
 	shader:dx10texture	("s_base",	t_base)			-- albedo
 	shader:dx10texture	("s_bump",	t_second)		-- glTF tangent-space normal map

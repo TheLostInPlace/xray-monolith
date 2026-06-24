@@ -1,49 +1,53 @@
-// deffer_base_ext_bump_mr.ps : deferred G-buffer PS for external (GLTF/GLB) models that carry a
-// standard tangent-space normal map AND a glTF metallic-roughness map.
-//
-// Same as deffer_base_ext_bump.ps but the constant gloss is replaced by gloss derived from the
-// glTF metallic-roughness texture. glTF packs roughness in the GREEN channel and metallic in BLUE.
-// roughness -> gloss (smooth surfaces get a tight, bright highlight). For metalness we do the part
-// that IS expressible stock-safely in our own G-buffer write: metals have ~no diffuse, so we
-// suppress albedo by metalness here (diffuse = albedo * (1-metallic)). The metal's colored specular
-// reflection is added later by our own forward reflection pass -- the shared deferred lighting is
-// never touched. Bind: s_base = albedo, s_bump = normal map, s_bumpX = metallic-roughness map.
+// deffer_base_ext_bump_mr.ps : deferred G-buffer PS for external (GLTF/GLB) models with a tangent-space
+// normal map AND a glTF metallic-roughness map. Rendered through the external bump VS
+// (deffer_model_bump_vc.vs): eye-space Te/Be/Ne basis + COLOR_0 + both UV sets. roughness->gloss; metals
+// get diffuse suppressed here (the colored reflection is added by our own forward pass -- the shared
+// deferred lighting is never touched). Adds COLOR_0 (2.2) + per-map texCoord routing (3.5). Bind:
+// s_base = albedo, s_bump = normal map, s_bumpX = metallic-roughness map, s_ao = occlusion (R).
 
 #include "common.h"
 #include "external_common.h"
 
-// glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip is a no-op). Set
-// per-object in FExternalVisual::Render.
-float4 ext_alpha_cutoff;
-
-// glTF occlusion strength (.x): >0 when the material has an occlusion map, 0 when it doesn't. Set
-// per-object in FExternalVisual::Render.
-float4 ext_ao_strength;
-
-// glTF occlusion map -- R channel = ambient occlusion. The loader binds this to the MR texture when
-// occlusion is ORM-packed (occlusion in MR.r), or to a SEPARATE AO texture otherwise; either way we
-// read .r here. When the material has no occlusion it's bound to the MR texture and ignored (strength 0).
+float4 ext_alpha_cutoff;   // glTF MASK cutoff (.x); -1 for OPAQUE/BLEND
+float4 ext_ao_strength;    // glTF occlusionTexture.strength (.x); 0 = no occlusion
 Texture2D s_ao;
 
-f_deffer main( p_bumped I )
+struct p_bump_x
+{
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	float4 tcdh     : TEXCOORD0;
+#else
+	float2 tcdh     : TEXCOORD0;
+#endif
+	float4 position : TEXCOORD1;
+	float3 Te       : TEXCOORD2;
+	float3 Be       : TEXCOORD3;
+	float3 Ne       : TEXCOORD4;
+	float4 vcolor   : TEXCOORD5;
+	float2 tc1      : TEXCOORD6;
+};
+
+f_deffer main( p_bump_x I )
 {
 	f_deffer O;
 
-	// albedo
-	float2 uv   = ext_uv( I.tcdh.xy );          // KHR_texture_transform (shared by all maps)
-	float4 base = s_base.Sample( smp_base, uv );
-	base.rgb   *= ext_base_color.rgb;           // glTF baseColorFactor tint
-	base.a     *= ext_base_color.w;             // glTF baseColorFactor.a (alpha for the MASK test)
+	float2 uv0     = ext_uv( I.tcdh.xy );
+	float2 base_uv = ext_uv_pick( uv0, I.tc1, ext_uv_set.x );
+	float2 nrm_uv  = ext_uv_pick( uv0, I.tc1, ext_uv_set.y );
+	float2 mr_uv   = ext_uv_pick( uv0, I.tc1, ext_uv_set.z );
+	float2 ao_uv   = ext_uv_pick( uv0, I.tc1, ext_uv_set.w );
 
-	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
+	float4 base = s_base.Sample( smp_base, base_uv );
+	base.rgb   *= ext_base_color.rgb * I.vcolor.rgb;           // glTF baseColorFactor + COLOR_0 tint
+	base.a     *= ext_base_color.w * I.vcolor.a;              // baseColorFactor.a * COLOR_0.a (MASK alpha)
+
 	clip( base.a - ext_alpha_cutoff.x );
 
 	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1] (xy scaled by glTF normalScale)
-	float3 n_ts = s_bump.Sample( smp_base, uv ).xyz * 2.0h - 1.0h;
+	float3 n_ts = s_bump.Sample( smp_base, nrm_uv ).xyz * 2.0h - 1.0h;
 	n_ts.xy    *= ext_mr_factor.z;
-	float3 Ne   = normalize( mul( float3x3(I.M1, I.M2, I.M3), n_ts ) );
+	float3 Ne   = normalize( I.Te * n_ts.x + I.Be * n_ts.y + I.Ne * n_ts.z );
 
-	// hemi + material id
 	float ms = xmaterial;
 	float h  = I.position.w;
 #if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
@@ -51,29 +55,18 @@ f_deffer main( p_bumped I )
 #endif
 
 	// glTF metallic-roughness (G=rough, B=metal), each scaled by its glTF factor.
-	float2 mr       = s_bumpX.Sample( smp_base, uv ).yz;
+	float2 mr       = s_bumpX.Sample( smp_base, mr_uv ).yz;
 	float  rough    = saturate( mr.x * ext_mr_factor.y );
 	float  metallic = saturate( mr.y * ext_mr_factor.x );
 
-	// glTF occlusion: darken the ambient/hemi term by the AO in the occlusion map's R channel.
-	// ext_ao_strength.x = the material's occlusionTexture.strength (0 = no occlusion -> no change).
-	float  ao = s_ao.Sample( smp_base, uv ).r;
+	// glTF occlusion: darken the ambient/hemi term by the AO map's R channel (no-op when strength 0).
+	float  ao = s_ao.Sample( smp_base, ao_uv ).r;
 	h *= lerp( 1.0h, ao, ext_ao_strength.x );
 
-	// Diffuse is removed only for SMOOTH metal (a mirror has no diffuse). ROUGH metal KEEPS its albedo
-	// as a stable matte base -- otherwise its whole look becomes the forward reflection, which swings
-	// bright<->dark with view angle (matte paint must not do that). Weight the kill by smoothness:
-	//   smooth metal -> albedo*0 (mirror);  rough metal -> albedo*1 (matte);  dielectric -> albedo.
-	// metalness * smoothness, scaled by EXT_METAL_DIFFUSE_KILL so metals keep a diffuse floor (visible
-	// under the flashlight in a dark scene; pure-PBR diffuse=0 metals go black there).
+	// Diffuse removed only for SMOOTH metal (mirror); ROUGH metal keeps albedo as a stable matte base.
 	float  smooth_m = metallic * ( 1.0h - rough ) * EXT_METAL_DIFFUSE_KILL;
 	float3 albedo   = base.xyz * ( 1.0h - smooth_m );
 
-	// gloss drives the engine's deferred reflection. Plain roughness mapping: SMOOTH metal keeps the
-	// engine's bright reflection (our overlay adds the colour tint on top), while ROUGH metal's gloss is
-	// ~0 so it stays matte with no SSR artifact -- that, plus keeping its diffuse above, is the matte fix.
-	// (A metallic-wide gloss kill was tried and made smooth metal render black -- the engine reflection
-	// is what gives smooth metal its brightness.)
 	float  gloss    = saturate( 1.0h - rough );
 
 	O = pack_gbuffer(

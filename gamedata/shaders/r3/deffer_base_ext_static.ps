@@ -1,0 +1,51 @@
+// deffer_base_ext_static.ps : deferred G-buffer PS for external (GLTF/GLB) models with only a base-color
+// texture, rendered through the external flat VS (deffer_model_flat_vc.vs) so it can apply per-vertex
+// COLOR_0 (2.2) and per-map texCoord routing (3.5). The SKINNED path keeps deffer_base_ext_flat.ps +
+// the stock model VS (no vcolor / 2nd-UV there). Bind: s_base = albedo, sampler smp_base.
+
+#include "common.h"
+#include "external_common.h"
+
+// glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip is a no-op).
+float4 ext_alpha_cutoff;
+
+struct p_flat_x
+{
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	float4 tcdh     : TEXCOORD0;
+#else
+	float2 tcdh     : TEXCOORD0;
+#endif
+	float4 position : TEXCOORD1;
+	float3 N        : TEXCOORD2;
+	float2 tc1      : TEXCOORD3;
+	float4 vcolor   : TEXCOORD5;
+};
+
+f_deffer main( p_flat_x I )
+{
+	f_deffer O;
+
+	float2 uv0     = ext_uv( I.tcdh.xy );                       // KHR-transformed UV0
+	float2 base_uv = ext_uv_pick( uv0, I.tc1, ext_uv_set.x );   // route base map to its glTF texCoord
+	float4 base = s_base.Sample( smp_base, base_uv );
+	base.rgb   *= ext_base_color.rgb * I.vcolor.rgb;            // glTF baseColorFactor + COLOR_0 tint
+	base.a     *= ext_base_color.w * I.vcolor.a;               // baseColorFactor.a * COLOR_0.a (MASK alpha)
+
+	clip( base.a - ext_alpha_cutoff.x );
+
+	float ms = xmaterial;
+	float h  = I.position.w;
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	ms = I.tcdh.w;
+#endif
+
+	float4 Ne = float4( normalize((float3)I.N.xyz), h );
+
+	O = pack_gbuffer(
+			Ne,
+			float4( I.position.xyz, ms        ),
+			float4( base.rgb,       def_gloss ) );
+
+	return O;
+}

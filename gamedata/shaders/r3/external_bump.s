@@ -7,7 +7,7 @@
 -- one keep using external_static. Textures arrive as a comma list "albedo,normal" -> t_base/t_second.
 
 function normal		(shader, t_base, t_second, t_detail)
-	shader:begin	("deffer_model_bump","deffer_base_ext_bump")
+	shader:begin	("deffer_model_bump_vc","deffer_base_ext_bump")
 			: fog		(false)
 	shader:dx10texture	("s_base",	t_base)		-- albedo
 	shader:dx10texture	("s_bump",	t_second)	-- glTF tangent-space normal map

@@ -109,16 +109,17 @@
 // consumes P, N, tc; T/B are supplied so the layout is also valid for the bump model VS.
 //////////////////////////////////////////////////////////////////////
 
-static D3DVERTEXELEMENT9 dwDecl_External[] = // 72 bytes
+static D3DVERTEXELEMENT9 dwDecl_External[] = // 80 bytes
 {
 	{0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
 	{0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
 	{0, 24, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,  0},
 	{0, 36, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BINORMAL, 0},
-	{0, 48, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
-	// glTF COLOR_0 (per-vertex colour). Always present (default white); only the external_vc VS reads
-	// it -- the stock flat/bump VSes ignore this extra element, so OGF-style models are unaffected.
-	{0, 56, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0},
+	{0, 48, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0}, // UV0
+	{0, 56, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 1}, // UV1 (glTF TEXCOORD_1)
+	// glTF COLOR_0 (per-vertex colour). Always present (default white); the external VSes read it (the
+	// stock flat/bump VSes, if ever used, simply ignore this extra element).
+	{0, 64, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0},
 	D3DDECL_END()
 };
 
@@ -129,12 +130,14 @@ struct vertExternal
 	float N[3];
 	float T[3];
 	float B[3];
-	float tc[2];
-	float C[4]; // glTF COLOR_0 (RGBA), default white
+	float tc[2];  // UV0
+	float tc1[2]; // UV1 (glTF TEXCOORD_1); == UV0 when the mesh has no 2nd UV set
+	float C[4];   // glTF COLOR_0 (RGBA), default white
 };
 #pragma pack(pop)
 
-static IC void ext_set_vertex(vertExternal& dst, const Fvector& P, Fvector N, Fvector T, Fvector B, float u, float v, const float col[4])
+static IC void ext_set_vertex(vertExternal& dst, const Fvector& P, Fvector N, Fvector T, Fvector B,
+                              float u, float v, float u1, float v1, const float col[4])
 {
 	N.normalize_safe();
 	T.normalize_safe();
@@ -144,6 +147,7 @@ static IC void ext_set_vertex(vertExternal& dst, const Fvector& P, Fvector N, Fv
 	dst.T[0] = T.x;  dst.T[1] = T.y;  dst.T[2] = T.z;
 	dst.B[0] = B.x;  dst.B[1] = B.y;  dst.B[2] = B.z;
 	dst.tc[0] = u;   dst.tc[1] = v;
+	dst.tc1[0] = u1; dst.tc1[1] = v1;
 	dst.C[0] = col[0]; dst.C[1] = col[1]; dst.C[2] = col[2]; dst.C[3] = col[3];
 }
 
@@ -757,6 +761,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	bool  mat_has_pbr = false;                                              // material declares pbrMetallicRoughness (3.1)
 	float uv_scale[2] = {1.f, 1.f}, uv_offset[2] = {0.f, 0.f};               // KHR_texture_transform
 	float uv_rot = 0.f;                                                      // KHR_texture_transform rotation (radians)
+	int   uv_set[4] = {0, 0, 0, 0};                                         // per-map texCoord: base/normal/mr/ao (0=UV0,1=UV1) (3.5)
 	bool  have_vertex_color = false;                       // any primitive carries glTF COLOR_0
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
@@ -797,6 +802,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			const cgltf_accessor* a_pos = NULL;
 			const cgltf_accessor* a_nrm = NULL;
 			const cgltf_accessor* a_uv = NULL;
+			const cgltf_accessor* a_uv1 = NULL; // glTF TEXCOORD_1 (2nd UV set; 3.5 per-map routing)
 			const cgltf_accessor* a_tan = NULL;
 			const cgltf_accessor* a_col = NULL;
 			for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai)
@@ -806,7 +812,10 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				{
 				case cgltf_attribute_type_position: a_pos = at.data; break;
 				case cgltf_attribute_type_normal: a_nrm = at.data; break;
-				case cgltf_attribute_type_texcoord: if (at.index == 0) a_uv = at.data; break;
+				case cgltf_attribute_type_texcoord:
+					if      (at.index == 0) a_uv = at.data;
+					else if (at.index == 1) a_uv1 = at.data;
+					break;
 				case cgltf_attribute_type_tangent: a_tan = at.data; break;
 				case cgltf_attribute_type_color: if (at.index == 0) a_col = at.data; break;
 				default: break;
@@ -829,6 +838,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				N.set(0, 1, 0); // default up-normal if the mesh has no normals
 				T.set(1, 0, 0);
 				float uv[2] = {0, 0};
+				float uv1[2] = {0, 0};
 				float tan4[4] = {1, 0, 0, 1};
 				float col[4] = {1, 1, 1, 1}; // glTF COLOR_0 (default opaque white)
 
@@ -841,6 +851,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				}
 				if (a_nrm) cgltf_accessor_read_float(a_nrm, i, &N.x, 3);
 				if (a_uv) cgltf_accessor_read_float(a_uv, i, uv, 2);
+				if (a_uv1) cgltf_accessor_read_float(a_uv1, i, uv1, 2);
+				else { uv1[0] = uv[0]; uv1[1] = uv[1]; } // no 2nd UV set -> mirror UV0 (maps routed to UV1 still work)
 				if (a_tan)
 				{
 					cgltf_accessor_read_float(a_tan, i, tan4, 4);
@@ -864,7 +876,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				B.mul(tan4[3]); // glTF tangent handedness
 
 				vertExternal vx;
-				ext_set_vertex(vx, P, N, T, B, uv[0], uv[1], col);
+				ext_set_vertex(vx, P, N, T, B, uv[0], uv[1], uv1[0], uv1[1], col);
 				verts.push_back(vx);
 				bb.modify(P);
 			}
@@ -918,7 +930,9 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 					metallic_factor = pbr.metallic_factor;
 					roughness_factor = pbr.roughness_factor;
 					mat_has_pbr = true; // for factor-only metal detection (3.1)
-					// KHR_texture_transform (offset+scale) from the base-color texture, applied to all maps
+					uv_set[0] = pbr.base_color_texture.texcoord;         // 3.5 per-map texCoord
+					uv_set[2] = pbr.metallic_roughness_texture.texcoord;
+					// KHR_texture_transform (offset+scale+rotation) from the base-color texture, applied to all maps
 					if (pbr.base_color_texture.has_transform)
 					{
 						const cgltf_texture_transform& tt = pbr.base_color_texture.transform;
@@ -927,7 +941,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 						uv_rot = tt.rotation; // radians; converted to cos/sin in the member copy below
 					}
 				}
-				if (m->normal_texture.texture) normal_scale = m->normal_texture.scale; // glTF normalScale
+				if (m->normal_texture.texture) { normal_scale = m->normal_texture.scale; uv_set[1] = m->normal_texture.texcoord; } // glTF normalScale + texCoord
+				uv_set[3] = m->occlusion_texture.texcoord; // 3.5 AO texCoord
 				alpha_captured = true;
 			}
 
@@ -1127,6 +1142,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	m_uv_xform.set(uv_scale[0], uv_scale[1], uv_offset[0], uv_offset[1]);
 	m_uv_rot.set(cosf(uv_rot), sinf(uv_rot)); // KHR_texture_transform rotation (radians -> cos/sin)
 	m_base_alpha = base_alpha;                // glTF baseColorFactor.a (multiplies texel alpha before MASK clip)
+	m_uv_set.set((float)uv_set[0], (float)uv_set[1], (float)uv_set[2], (float)uv_set[3]); // 3.5 per-map texCoord
 
 	// --- emissive overlay pass ------------------------------------------------------
 	// Forward additive batch: bind only the emissive map and the external_emissive shader. If the
@@ -1736,6 +1752,7 @@ void FExternalVisual::Render(float)
 		// shared material params -- every lit/metal/blend child samples albedo/MR/normal through these
 		RCache.set_c("ext_uv_transform", m_uv_xform.x, m_uv_xform.y, m_uv_xform.z, m_uv_xform.w); // KHR_texture_transform
 		RCache.set_c("ext_uv_rot", m_uv_rot.x, m_uv_rot.y, 0.f, 0.f);                             // KHR_texture_transform rotation (cos,sin)
+		RCache.set_c("ext_uv_set", m_uv_set.x, m_uv_set.y, m_uv_set.z, m_uv_set.w);               // 3.5 per-map texCoord (base/normal/mr/ao)
 		RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, m_base_alpha); // baseColorFactor (a = MASK alpha)
 		RCache.set_c("ext_mr_factor", m_mr_factor.x, m_mr_factor.y, m_mr_factor.z, 1.f);          // metallic/roughness/normalScale
 		if (m_blend)
@@ -1797,4 +1814,5 @@ void FExternalVisual::Copy(dxRender_Visual* pSrc)
 	PCOPY(m_uv_xform);
 	PCOPY(m_uv_rot);
 	PCOPY(m_base_alpha);
+	PCOPY(m_uv_set);
 }

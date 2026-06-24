@@ -54,8 +54,8 @@ Last updated: 2026-06-23.
 | `NORMAL` | ✅ | Defaults to up-normal if absent. |
 | `TANGENT` | ✅ | Bitangent derived with the glTF handedness sign. |
 | `TEXCOORD_0` | ✅ | |
-| `TEXCOORD_1` (2nd UV set) | ❌ | Only UV0 is read; a texture's `texCoord` index is ignored (everything samples UV0). |
-| `COLOR_0` (vertex colours) | ⚠️ | Implemented, but only on the **flat / no-texture** path (e.g. BoxVertexColors). Textured+vertex-colour and bump+vertex-colour aren't combined yet. |
+| `TEXCOORD_1` (2nd UV set) | ✅ | UV1 is read and each map (base/normal/MR/AO) samples UV0 or UV1 by its glTF `texCoord` on the static lit paths. (KHR_texture_transform still applies to UV0 only; metal/blend/emissive overlays + skinned use UV0.) |
+| `COLOR_0` (vertex colours) | ✅ | Multiplied into albedo on the static lit paths (flat / MR / bump / bump+MR / vertex-colour). The skinned path and the metal/blend/emissive overlays still ignore it. |
 | `JOINTS_0` / `WEIGHTS_0` (skinning) | ❌ | No skinning — static bind pose only. |
 | Morph targets | ❌ | Not read. |
 | 16- and 32-bit indices | ✅ | 32-bit path added for >65535-vertex meshes (engine hardcodes R16, rebound to R32 per-draw). |
@@ -178,8 +178,8 @@ engine integration (spawn/physics/auto-scale/sun-shadows).
 **Implemented but not fully proper (⚠️):** metalness (own forward reflection, not tinted SSR; needs an MR
 texture), BLEND (simple forward lighting, not in SSR, no shadow), emissive (LDR, no bloom), texture-
 transform (one transform for all maps; rotation supported, per-map decoupling not yet), vertex colours
-(flat path only), AO (MR shaders only), texture samplers (wrap/filter ignored), 2nd UV set & per-texture
-`texCoord` (ignored), and dynamic-light shadows (deliberately off for props).
+(static lit paths; skinned/overlays not), AO (MR shaders only), texture samplers (wrap/filter ignored),
+and dynamic-light shadows (deliberately off for props).
 
 **Not implemented (❌):** **animation & skinning** (the biggest gap), morph targets, `doubleSided`,
 non-triangle primitives, base64 data-URI images, KTX2/Basis & Draco compression, and the advanced KHR

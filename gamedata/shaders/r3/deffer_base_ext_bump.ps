@@ -1,53 +1,59 @@
-// deffer_base_ext_bump.ps : deferred G-buffer pixel shader for external (GLTF/GLB) models that
-// carry a STANDARD tangent-space normal map.
-//
-// X-Ray's stock bump path (sload.h) expects its own two-texture split-precision encoding
-// (s_bump = gloss + normal-high, s_bumpX = normal-low + height). glTF ships plain tangent-space
-// normal maps (rgb = xyz*0.5+0.5 in one texture), so instead of converting them we sample the
-// normal map directly here. Everything else (eye-space transform via the VS's TBN matrix, G-buffer
-// packing, hemi/material) mirrors deffer_base_bump.ps so lighting/shadows behave identically.
-//
-// Paired with the stock vertex shader deffer_model_bump.vs (consumes v_model, emits p_bumped with
-// M1..M3 = 2*TBN in eye space; the 2x is removed by the normalize below). Bind:
-//   s_base = albedo (t_base),  s_bump = glTF normal map (t_second),  sampler smp_base.
+// deffer_base_ext_bump.ps : deferred G-buffer PS for external (GLTF/GLB) models with a STANDARD glTF
+// tangent-space normal map. Rendered through our self-contained external bump VS
+// (deffer_model_bump_vc.vs), which forwards the eye-space Te/Be/Ne basis + COLOR_0 + both UV sets.
+// Adds per-vertex COLOR_0 (2.2) and per-map texCoord routing (3.5). Bind: s_base = albedo (t_base),
+// s_bump = glTF normal map (t_second), sampler smp_base.
 
 #include "common.h"
 #include "external_common.h"
 
-// glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip is a no-op). Set
-// per-object in FExternalVisual::Render.
+// glTF alphaMode: .x = alphaCutoff for MASK; -1 for OPAQUE/BLEND (clip is a no-op).
 float4 ext_alpha_cutoff;
 
-f_deffer main( p_bumped I )
+struct p_bump_x
+{
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	float4 tcdh     : TEXCOORD0;
+#else
+	float2 tcdh     : TEXCOORD0;
+#endif
+	float4 position : TEXCOORD1;
+	float3 Te       : TEXCOORD2;     // eye-space tangent
+	float3 Be       : TEXCOORD3;     // eye-space binormal
+	float3 Ne       : TEXCOORD4;     // eye-space normal
+	float4 vcolor   : TEXCOORD5;
+	float2 tc1      : TEXCOORD6;
+};
+
+f_deffer main( p_bump_x I )
 {
 	f_deffer O;
 
-	// albedo
-	float2 uv   = ext_uv( I.tcdh.xy );          // KHR_texture_transform
-	float4 base = s_base.Sample( smp_base, uv );
-	base.rgb   *= ext_base_color.rgb;           // glTF baseColorFactor tint
-	base.a     *= ext_base_color.w;             // glTF baseColorFactor.a (alpha for the MASK test)
+	float2 uv0     = ext_uv( I.tcdh.xy );
+	float2 base_uv = ext_uv_pick( uv0, I.tc1, ext_uv_set.x );
+	float2 nrm_uv  = ext_uv_pick( uv0, I.tc1, ext_uv_set.y );
 
-	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
+	float4 base = s_base.Sample( smp_base, base_uv );
+	base.rgb   *= ext_base_color.rgb * I.vcolor.rgb;           // glTF baseColorFactor + COLOR_0 tint
+	base.a     *= ext_base_color.w * I.vcolor.a;              // baseColorFactor.a * COLOR_0.a (MASK alpha)
+
 	clip( base.a - ext_alpha_cutoff.x );
 
 	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1] (xy scaled by glTF normalScale)
 	// (glTF uses +Y/OpenGL convention; if bumps read as dents, negate n_ts.y here)
-	float3 n_ts = s_bump.Sample( smp_base, uv ).xyz * 2.0h - 1.0h;
+	float3 n_ts = s_bump.Sample( smp_base, nrm_uv ).xyz * 2.0h - 1.0h;
 	n_ts.xy    *= ext_mr_factor.z;
 
-	// tangent space -> eye space (M1..M3 carry 2*TBN; normalize cancels the scale)
-	float3 Ne = normalize( mul( float3x3(I.M1, I.M2, I.M3), n_ts ) );
+	// tangent space -> eye space via the interpolated eye-space TBN (normalize the result)
+	float3 Ne = normalize( I.Te * n_ts.x + I.Be * n_ts.y + I.Ne * n_ts.z );
 
-	// hemi + material id (mirror deffer_base_bump.ps)
 	float ms = xmaterial;
 	float h  = I.position.w;
 #if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
 	ms = I.tcdh.w;
 #endif
 
-	// gloss: constant for now; Phase 2b will derive it from the glTF metallic-roughness map
-	float gloss = 0.5h;
+	float gloss = 0.5h; // constant (the MR variant derives gloss from the metallic-roughness map)
 
 	O = pack_gbuffer(
 			float4( Ne,                 h     ),

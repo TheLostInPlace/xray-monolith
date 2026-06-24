@@ -13,6 +13,7 @@ struct v_model_vc
 	float3 T     : TANGENT;
 	float3 B     : BINORMAL;
 	float2 tc    : TEXCOORD0;
+	float2 tc1   : TEXCOORD1;     // glTF TEXCOORD_1 (2nd UV set)
 	float4 color : COLOR0;       // glTF COLOR_0 (our external vertex's extra element)
 };
 
@@ -25,6 +26,7 @@ struct v2p_flat_vc
 #endif
 	float4 position : TEXCOORD1;     // eye-space pos + hemi
 	float3 N        : TEXCOORD2;     // eye-space normal
+	float2 tc1      : TEXCOORD3;     // glTF 2nd UV set (raw)
 	float4 vcolor   : TEXCOORD5;     // vertex colour
 	float4 hpos     : SV_Position;
 };
@@ -39,6 +41,7 @@ v2p_flat_vc main( v_model_vc I )
 	O.N       = mul( (float3x3)m_WV, (float3)I.N );
 
 	O.tcdh    = float4( I.tc.xyyy );
+	O.tc1     = I.tc1;
 
 	// hemi-cube ambient (identical to deffer_model_flat.vs)
 	float3 Nw       = mul( (float3x3)m_W, (float3)I.N );
