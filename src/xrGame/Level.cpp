@@ -5,6 +5,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "ParticlesObject.h"
 #include "Level.h"
+#include "../Include/xrRender/Kinematics.h" // IKinematics/IBoneData/SBoneShape for g_dbg_draw_bounds
 #include "HUDManager.h"
 #include "xrServer.h"
 #include "NET_Queue.h"
@@ -1243,6 +1244,121 @@ extern void render_reshade_effects();
 
 extern int ps_r4_hdr10_pda; // NOTE: this is a hack to avoid double HDR tonemapping the PDA
 
+// Console: g_dbg_draw_bounds  (bit0=1 visual bbox+sphere, bit1=2 collision shapes, 3=both). Works in
+// release -- pushes lines to Level().debug_renderer() which is flushed by debug_renderer().render() in
+// CLevel::OnRender. Draws every object near the camera. Added to debug glTF/GLB model bounds/collision.
+int g_dbg_draw_bounds = 0;
+
+static void dbg_render_object_bounds()
+{
+	if (0 == g_dbg_draw_bounds || !g_pGameLevel)
+		return;
+
+	const Fvector eye = Device.vCameraPosition;
+	const float maxd2 = 150.f * 150.f; // only nearby objects (avoid drawing the whole level)
+	CDebugRenderer& dr = Level().debug_renderer();
+	CObjectList& objs = Level().Objects;
+
+	// The player (and the stuff attached to it -- held weapon/knife, etc.) is skipped by default; its
+	// bounds/collision smear all over the first-person view. Bit2 (value 4) opts it back in (4/5/6/7).
+	const bool include_self = (g_dbg_draw_bounds & 4) != 0;
+	CObject* view = Level().CurrentViewEntity();
+	CObject* actorO = (CObject*)Actor();
+
+	for (u32 i = 0; i < objs.o_count(); ++i)
+	{
+		CObject* O = objs.o_get_by_iterator(i);
+		if (!O)
+			continue;
+		if (!include_self)
+		{
+			CObject* p = O->H_Parent(); // attached items (held weapon) are parented to the actor
+			// skip the player itself (by pointer AND by type -- CurrentViewEntity can be null) + anything
+			// attached to it.
+			if (O == view || O == actorO || p == view || p == actorO || smart_cast<CActor*>(O))
+				continue;
+		}
+		IRenderVisual* v = O->Visual();
+		if (!v)
+			continue;
+		if (eye.distance_to_sqr(O->Position()) > maxd2)
+			continue;
+
+		// --- visual bounds: model-space AABB -> OBB at the object transform ---------------------------
+		if (g_dbg_draw_bounds & 1)
+		{
+			const vis_data& vd = v->getVisData();
+			Fvector c, h;
+			c.add(vd.box.min, vd.box.max).mul(0.5f);
+			h.sub(vd.box.max, vd.box.min).mul(0.5f);
+			Fmatrix Mb;
+			Mb.translate(c);
+			Fmatrix W;
+			W.mul(O->XFORM(), Mb);
+			dr.draw_obb(W, h, color_rgba(255, 255, 0, 255), false); // visual bbox = yellow
+		}
+
+		// --- collision shapes: per-bone box / sphere / cylinder from the kinematics (current transforms)
+		if (g_dbg_draw_bounds & 2)
+		{
+			IKinematics* K = smart_cast<IKinematics*>(v);
+			if (K)
+			{
+				const u16 bc = K->LL_BoneCount();
+				for (u16 b = 0; b < bc; ++b)
+				{
+					IBoneData& bd = K->LL_GetData(b);     // through the public interface (get_shape is
+					const SBoneShape& sh = bd.get_shape(); // private on the concrete CBoneData)
+					if (sh.type == SBoneShape::stNone)
+						continue;
+					Fmatrix boneW;
+					boneW.mul(O->XFORM(), K->LL_GetTransform(b)); // object * bone (model space)
+					switch (sh.type)
+					{
+					case SBoneShape::stBox:
+						{
+							Fmatrix bx;
+							sh.box.xform_get(bx);
+							Fmatrix W;
+							W.mul(boneW, bx);
+							dr.draw_obb(W, sh.box.m_halfsize, color_rgba(0, 255, 0, 255), false); // box = green
+						}
+						break;
+					case SBoneShape::stSphere:
+						{
+							Fmatrix S;
+							S.scale(sh.sphere.R, sh.sphere.R, sh.sphere.R);
+							Fvector sp;
+							boneW.transform_tiny(sp, sh.sphere.P);
+							S.translate_over(sp);
+							dr.draw_ellipse(S, color_rgba(0, 255, 128, 255), false); // sphere = lime
+						}
+						break;
+					case SBoneShape::stCylinder:
+						{
+							Fvector cw, dw;
+							boneW.transform_tiny(cw, sh.cylinder.m_center);
+							boneW.transform_dir(dw, sh.cylinder.m_direction);
+							dw.normalize_safe();
+							Fmatrix M;
+							M.identity();
+							M.k.set(dw);
+							Fvector::generate_orthonormal_basis(M.k, M.j, M.i);
+							M.c.set(cw);
+							Fvector hs;
+							hs.set(sh.cylinder.m_radius, sh.cylinder.m_radius, sh.cylinder.m_height * 0.5f);
+							dr.draw_obb(M, hs, color_rgba(0, 127, 255, 255), false); // cylinder ~ blue OBB
+						}
+						break;
+					default:
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+
 void CLevel::OnRender()
 {
 	// PDA
@@ -1318,6 +1434,8 @@ void CLevel::OnRender()
 	HUD().RenderUI();
 
 	ScriptDebugRender();
+
+	dbg_render_object_bounds(); // g_dbg_draw_bounds: outline visual bbox / collision shapes (release-safe)
 
 #ifdef DEBUG
     draw_wnds_rects();

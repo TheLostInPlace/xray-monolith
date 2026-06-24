@@ -22,20 +22,20 @@ function normal		(shader, t_base, t_second, t_detail)
 	shader:dx10stencil_ref	(1)
 end
 
-function l_special	(shader, t_base, t_second, t_detail)
-	-- Sun shadow-map caster. z-test + z-WRITE on (writes the shadow depth; z-write OFF => no cast
-	-- shadow), colour writes off.
-	-- Cast from BACK faces (cull front, D3DCULL_CW=2). With front-face casting (the engine default
-	-- for the near cascade) a lit front surface is the nearest depth in its OWN shadow map, so it
-	-- self-shadows -- visible as flickering acne in creases, especially on big smooth untextured
-	-- meshes like the duck. Storing the far-side depth instead means the lit surface is never
-	-- closest, killing the acne. Slight peter-panning is the trade and is imperceptible on a
-	-- grounded prop. The cull is baked into THIS pass, so it only affects external-model geometry.
-	shader:begin	("shadow_direct_model",	"dumb")
+-- Shadow-map caster for ALL light types. The engine renders every shadow map (sun cascade, point, spot)
+-- from E[SE_R2_SHADOW] = E[2] = l_point (rimp_select_sh_static/dynamic in r4.cpp); we fill E[2]/E[3]/E[4]
+-- (l_point/l_spot/l_special) with the SAME caster so whichever element a phase picks is populated.
+-- Matches the stock model shadow EXACTLY (shadow_direct_model/dumb, DEFAULT cull, ztest+zwrite, colour
+-- off) but swaps in shadow_ext_model.vs, which adds a normal-offset depth bias -- so neither smooth
+-- surfaces self-shadow (acne) nor thin geometry self-shadows under a close light. Our VS only; stock
+-- OGF keeps shadow_direct_model, so nothing stock changes.
+function l_point	(shader, t_base, t_second, t_detail)
+	shader:begin	("shadow_ext_model",	"dumb")
 			: zb		(true,true)
 			: fog		(false)
-			: dx10cullmode	(2)
 	shader:dx10texture	("s_base",	t_base)
 	shader:dx10sampler	("smp_base")
 	shader:dx10color_write_enable	(false, false, false, false)
 end
+l_spot    = l_point   -- E[3]: spot-light shadow caster (e.g. the headlamp/flashlight)
+l_special = l_point   -- E[4]: sun shadow caster

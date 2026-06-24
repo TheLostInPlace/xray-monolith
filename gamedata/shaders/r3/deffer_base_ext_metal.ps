@@ -17,6 +17,7 @@
 // Bind: s_base = albedo, s_bumpX = metallic-roughness (G=rough, B=metal), s_env0/s_env1 = sky cubes.
 
 #include "common.h"
+#include "external_common.h"
 
 TextureCube s_env0;     // current sky cube  ($user$sky0)
 TextureCube s_env1;     // target  sky cube  ($user$sky1)
@@ -24,10 +25,12 @@ float4      env_color;  // engine global (set at phase_combine): xyz = env inten
 
 float4 main( p_flat I ) : SV_Target
 {
-	float3 base     = s_base.Sample ( smp_base, I.tcdh.xy ).rgb;      // albedo = metal reflection colour (F0)
-	float2 mr       = s_bumpX.Sample( smp_base, I.tcdh.xy ).yz;       // glTF: G = roughness, B = metallic
-	float  rough    = mr.x;
-	float  metallic = mr.y;
+	float2 uv       = ext_uv( I.tcdh.xy );                            // KHR_texture_transform
+	float3 base     = s_base.Sample ( smp_base, uv ).rgb;            // albedo = metal reflection colour (F0)
+	base           *= ext_base_color.rgb;                            // glTF baseColorFactor tint
+	float2 mr       = s_bumpX.Sample( smp_base, uv ).yz;             // glTF: G = roughness, B = metallic
+	float  rough    = saturate( mr.x * ext_mr_factor.y );
+	float  metallic = saturate( mr.y * ext_mr_factor.x );
 
 	// view-space normal / position / view direction
 	float3 Nv = normalize( (float3)I.N.xyz );

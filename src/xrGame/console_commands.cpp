@@ -2848,6 +2848,12 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "g_legs_attach_to_camera", &legs_attach_to_camera, 0, 1);
     CMD4(CCC_Integer, "g_legs_render_attachments_shadow", &legs_render_attachments_shadow, 0, 1);
 
+    // Debug: outline object visual bounds / collision shapes. bit0(1)=visual bbox+sphere (yellow),
+    // bit1(2)=collision box/sphere/cylinder (green/lime/blue), bit2(4)=include the player (skipped by
+    // default so it doesn't smear the first-person view). e.g. 3=both/no-self, 7=both+self. Release-safe.
+    extern int g_dbg_draw_bounds;
+    CMD4(CCC_Integer, "g_dbg_draw_bounds", &g_dbg_draw_bounds, 0, 7);
+
     CMD4(CCC_Integer, "r__actor_shadow_in_demo_record", &r__actor_shadow_in_demo_record, 0, 1);
 
     CMD4(CCC_Integer, "g_enemy_manager_useful_cache_time", &enemy_manager_useful_cache_time, -1, 500);

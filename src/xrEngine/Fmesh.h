@@ -27,7 +27,7 @@ enum MT
 	// file's u8 `type` field (OGF content predates them), so the OGF dispatch in
 	// CModelPool::Instance_Create is unaffected. See docs/GLTF_GLB_Integration_Research.md.
 	MT_EXTERNAL_STATIC = 13, // GLTF/GLB static mesh (FExternalVisual)
-	MT_EXTERNAL_SKELETAL = 14, // reserved for Phase 3 (FExternalKinematics)
+	MT_EXTERNAL_SKINNED = 14, // GLTF/GLB skinned mesh child (FExternalSkinned); cloned via Instance_Create
 };
 
 enum OGF_Chuncks

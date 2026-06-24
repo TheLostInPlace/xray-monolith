@@ -4,7 +4,7 @@
 // FExternalVisual is a drop-in sibling of Fvisual: a self-contained renderable mesh
 // owning its own VB/IB. It is created and populated by
 // CModelPool::Instance_Create_External (NOT through the OGF dxRender_Visual::Load
-// path), so the OGF/OMF pipeline is completely untouched.
+// path); stock OGF/OMF behavior is unchanged -- the glTF integration is additive and gated.
 //
 //////////////////////////////////////////////////////////////////////
 #ifndef FExternalVisualH
@@ -12,6 +12,7 @@
 #pragma once
 
 #include "fbasicvisual.h"
+#include "FSkinned.h" // CSkeletonX_ST (base for the skinned external visual)
 
 class FExternalVisual : public dxRender_Visual, public IRender_Mesh
 {
@@ -49,6 +50,34 @@ public:
 	// order). Used by FExternalKinematics to decide how many per-material child visuals to build.
 	static bool GetMaterialIndices(const char* full_path, xr_vector<MatInfo>& out);
 
+	// One bone of a parsed glTF skin, expressed in X-Ray skeleton terms. The bone array is kept in
+	// glTF skin.joints order, so glTF JOINTS_0 indices map straight onto bone ids (no remap table
+	// when building the skinned VB). World bind transforms are absolute (cgltf_node_transform_world),
+	// so the array need NOT be topologically sorted -- X-Ray's Bone_Calculate recurses over children.
+	struct ExtBone
+	{
+		shared_str name;        // joint node name (or synthesized "$bone_N$")
+		int        parent;      // parent BONE index (into ExtSkinData::bones), -1 for the root
+		int        gltf_node;   // glTF node index of this joint (for animation-channel mapping later)
+		Fmatrix    bind_local;  // local bind: X-Ray convention world_i = parent_world * bind_local
+		Fmatrix    inv_bind;    // glTF inverseBindMatrix (model->bone); == CalculateM2B result (cross-check)
+	};
+
+	// Parsed glTF skin: the bone list + the single root bone index. valid()==false for non-skinned
+	// models (then the caller uses the static/rigid path). A synthetic identity root is appended when
+	// the glTF skeleton has multiple roots (X-Ray requires exactly one iRoot).
+	struct ExtSkinData
+	{
+		xr_vector<ExtBone> bones;
+		int                root = -1;
+		bool valid() const { return !bones.empty() && root >= 0; }
+	};
+
+	// Parse the first glTF skin into ExtSkinData (joints, hierarchy, local bind, inverse-bind).
+	// Returns false if the model carries no skin. Buffers are resolved (inverseBindMatrices live in a
+	// buffer accessor). See FExternalKinematics for how this becomes a multi-bone CKinematics.
+	static bool GetSkinData(const char* full_path, ExtSkinData& out);
+
 	FExternalVisual();
 	virtual ~FExternalVisual();
 
@@ -82,6 +111,52 @@ public:
 	// This child renders forward/alpha-blended INSTEAD of writing the deferred G-buffer. Copied.
 	bool m_blend = false;
 	float m_blend_alpha = 1.f;
+
+	// Shared per-material factors / texture transform (set for every lit/metal/blend child via set_c;
+	// shaders include external_common.h and apply them). Defaults are identity so untouched materials
+	// render unchanged. Copied for instancing.
+	Fvector  m_base_color = {1.f, 1.f, 1.f};        // glTF baseColorFactor.rgb (albedo/F0 tint)
+	Fvector  m_mr_factor  = {1.f, 1.f, 1.f};        // x=metallicFactor, y=roughnessFactor, z=normalScale
+	Fvector4 m_uv_xform   = {1.f, 1.f, 0.f, 0.f};   // KHR_texture_transform: xy=scale, zw=offset
+};
+
+// Skinned external (GLTF/GLB) render visual. A child of FExternalKinematics that deforms with the
+// glTF skin via X-Ray's stock GPU skinning. It reuses CSkeletonX_ST whole -- the inherited Render()
+// (-> CSkeletonX::_Render uploads the bone matrices to sbones_array and draws) and _Load_hw (packs
+// our vertBoned4W source into the engine HW skinned vertex with correct normal quantization). We only
+// add a glTF loader that builds the vertBoned4W stream (positions/normals/uv + JOINTS_0/WEIGHTS_0
+// remapped to bone ids) and creates the shader with skinning mode 4 active (so the SAME external .s +
+// stock model VS compile as the SKIN_4 variant -- skinning is VS-only, no new shader). OGF's
+// CSkeletonX_ST is untouched. The matching skeleton is built by FExternalVisual::GetSkinData +
+// FExternalKinematics; this class is the geometry half. Phase A renders bind pose (identity bone
+// matrices); animation drives the bones in a later phase.
+class FExternalSkinned : public CSkeletonX_ST
+{
+public:
+	// OGF entry point -- never used (built via LoadExternal); guards the vtable.
+	virtual void Load(const char* N, IReader* data, u32 dwFlags);
+
+	// Sets the deferred-ext material constants (ext_base_color/ext_uv_transform/...) the PS needs, then
+	// runs the inherited skinned render (sbones_array upload + draw). The base CSkeletonX_ST::Render does
+	// NOT set those constants -- without this the shader reads stale/zero registers and the mesh goes
+	// black/wrong. (FExternalVisual::Render does the equivalent for static children.)
+	virtual void Render(float LOD);
+
+	// Build the skinned render mesh from the glTF at `full_path`. `material_filter` matches
+	// FExternalVisual (-1 merge / >=0 that material / -2 no-material). `skin` is the parsed skeleton
+	// (bone ids that JOINTS_0 indexes). Returns false if the filter selects no skinned geometry.
+	bool LoadExternal(const char* short_name, const char* full_path, int material_filter,
+	                  const FExternalVisual::ExtSkinData& skin);
+
+	// Bounding box of the mesh in its current (e.g. bind) pose -- each vertex skinned by Parent's bone
+	// render-transforms. Used to set vis.box/physics from the RENDERED pose instead of the raw mesh
+	// bbox (which is in a different space for Z-up-authored models). Requires Parent set + bones
+	// calculated. No-op (returns invalid box) if either is missing.
+	void CalcPoseBBox(Fbox& bb);
+
+	// glTF baseColorFactor.rgb of this child's material (albedo tint); pushed as ext_base_color in
+	// Render(). Default white = no tint. Copied for instancing via the inherited Copy (POD member).
+	Fvector m_base_color = {1.f, 1.f, 1.f};
 };
 
 #endif // FExternalVisualH

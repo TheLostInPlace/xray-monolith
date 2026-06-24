@@ -7,6 +7,7 @@
 // Bind: s_base = albedo (with alpha in .a), sampler smp_base. Paired with deffer_model_flat.vs (p_flat).
 
 #include "common.h"
+#include "external_common.h"
 
 // glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip becomes a no-op).
 // Set per-object in FExternalVisual::Render (RCache.set_c). Defaults harmlessly to 0 if never set.
@@ -16,7 +17,9 @@ f_deffer main( p_flat I )
 {
 	f_deffer O;
 
-	float4 base = s_base.Sample( smp_base, I.tcdh.xy );
+	float2 uv   = ext_uv( I.tcdh.xy );          // KHR_texture_transform
+	float4 base = s_base.Sample( smp_base, uv );
+	base.rgb   *= ext_base_color.rgb;           // glTF baseColorFactor tint
 
 	// glTF MASK: discard texels with alpha below the cutoff. OPAQUE/BLEND pass -1 so nothing is clipped.
 	clip( base.a - ext_alpha_cutoff.x );

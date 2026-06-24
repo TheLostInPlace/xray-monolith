@@ -7,6 +7,7 @@
 // Bind: s_base = albedo, s_bump = metallic-roughness map (G = roughness, B = metallic).
 
 #include "common.h"
+#include "external_common.h"
 
 // glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip is a no-op). Set
 // per-object in FExternalVisual::Render.
@@ -25,7 +26,9 @@ f_deffer main( p_flat I )
 {
 	f_deffer O;
 
-	float4 D = s_base.Sample( smp_base, I.tcdh.xy );	// albedo (+ alpha in .a)
+	float2 uv = ext_uv( I.tcdh.xy );                 // KHR_texture_transform (shared by all maps)
+	float4 D  = s_base.Sample( smp_base, uv );	// albedo (+ alpha in .a)
+	D.rgb    *= ext_base_color.rgb;                  // glTF baseColorFactor tint
 
 	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
 	clip( D.a - ext_alpha_cutoff.x );
@@ -36,14 +39,14 @@ f_deffer main( p_flat I )
 	ms = I.tcdh.w;
 #endif
 
-	// glTF metallic-roughness: G = roughness, B = metallic.
-	float2 mr       = s_bump.Sample( smp_base, I.tcdh.xy ).yz;
-	float  rough    = mr.x;
-	float  metallic = mr.y;
+	// glTF metallic-roughness (G=rough, B=metal), each scaled by its glTF factor.
+	float2 mr       = s_bump.Sample( smp_base, uv ).yz;
+	float  rough    = saturate( mr.x * ext_mr_factor.y );
+	float  metallic = saturate( mr.y * ext_mr_factor.x );
 
 	// glTF occlusion: darken the ambient/hemi term by the AO in the occlusion map's R channel.
 	// ext_ao_strength.x = the material's occlusionTexture.strength (0 = no occlusion -> no change).
-	float  ao = s_ao.Sample( smp_base, I.tcdh.xy ).r;
+	float  ao = s_ao.Sample( smp_base, uv ).r;
 	h *= lerp( 1.0h, ao, ext_ao_strength.x );
 
 	float4 Ne = float4( normalize((float3)I.N.xyz), h );	// interpolated vertex normal (hemi in .w)
@@ -52,7 +55,9 @@ f_deffer main( p_flat I )
 	// as a stable matte base -- otherwise its whole look becomes the forward reflection, which swings
 	// bright<->dark with view angle (matte paint must not do that). Weight the kill by smoothness:
 	//   smooth metal -> albedo*0 (mirror);  rough metal -> albedo*1 (matte);  dielectric -> albedo.
-	float  smooth_m = metallic * ( 1.0h - rough );          // metalness * smoothness
+	// metalness * smoothness, scaled by EXT_METAL_DIFFUSE_KILL so metals keep a diffuse floor (visible
+	// under the flashlight in a dark scene; pure-PBR diffuse=0 metals go black there).
+	float  smooth_m = metallic * ( 1.0h - rough ) * EXT_METAL_DIFFUSE_KILL;
 	float3 albedo   = D.rgb * ( 1.0h - smooth_m );
 
 	// gloss drives the engine's deferred reflection. Plain roughness mapping: SMOOTH metal keeps the

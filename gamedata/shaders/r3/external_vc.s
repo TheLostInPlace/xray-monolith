@@ -1,16 +1,13 @@
--- external_mr.s : lit + albedo + METALLIC-ROUGHNESS (no normal map) shader for external models.
---
--- For models that carry a glTF metallic-roughness map but no normal map (e.g. the MetalRoughSpheres
--- test grid). Uses the stock flat model vertex shader (deffer_model_flat -> vertex normal, no TBN)
--- with a custom pixel shader (deffer_base_ext_mr) that feeds roughness into gloss. Only two textures
--- are needed (albedo, metal-rough), so they're passed straight through as t_base / t_second.
+-- external_vc.s : vertex-coloured (glTF COLOR_0) shader for external (GLTF/GLB) models that have no
+-- base-colour texture -- the per-vertex colour IS the surface colour (e.g. BoxVertexColors). Uses a
+-- custom VS (deffer_model_flat_vc) that passes COLOR0 through, and a PS that reads it as the albedo.
+-- s_base is still bound for the shadow caster (depth only). Same deferred/stencil/shadow setup as
+-- external_static.
 
-function normal		(shader, t_base, t_second, t_detail, t_ao)
-	shader:begin	("deffer_model_flat","deffer_base_ext_mr")
+function normal		(shader, t_base, t_second, t_detail)
+	shader:begin	("deffer_model_flat_vc","deffer_base_ext_vc")
 			: fog		(false)
-	shader:dx10texture	("s_base",	t_base)		-- albedo
-	shader:dx10texture	("s_bump",	t_second)	-- glTF metallic-roughness map (G=rough, B=metal)
-	shader:dx10texture	("s_ao",	t_ao)		-- glTF occlusion (R); = MR tex for ORM, else separate AO
+	shader:dx10texture	("s_base",	t_base)
 	shader:dx10sampler	("smp_base")
 	shader:dx10stencil	(true, 8, 255, 127, 1, 3, 1)  -- lit-geometry stencil mark (skybox fix)
 	shader:dx10stencil_ref	(1)

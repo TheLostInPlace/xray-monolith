@@ -1,0 +1,47 @@
+// deffer_base_ext_vc.ps : deferred G-buffer PS for external (GLTF/GLB) models that carry per-vertex
+// colours (glTF COLOR_0) and no base-colour texture (e.g. BoxVertexColors -- the vertex colour IS the
+// surface colour). Albedo = baseColorFactor * vertex colour. Paired with deffer_model_flat_vc.vs; the
+// PS input struct must match that VS's output interpolators exactly.
+
+#include "common.h"
+#include "external_common.h"
+
+// glTF alphaMode (vertex-colour models are normally OPAQUE -> cutoff -1, clip is a no-op).
+float4 ext_alpha_cutoff;
+
+struct p_flat_vc
+{
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	float4 tcdh     : TEXCOORD0;
+#else
+	float2 tcdh     : TEXCOORD0;
+#endif
+	float4 position : TEXCOORD1;
+	float3 N        : TEXCOORD2;
+	float4 vcolor   : TEXCOORD5;
+};
+
+f_deffer main( p_flat_vc I )
+{
+	f_deffer O;
+
+	// albedo = glTF baseColorFactor * per-vertex colour (no base texture for vertex-colour models)
+	float4 base = float4( ext_base_color.rgb * I.vcolor.rgb, I.vcolor.a );
+
+	clip( base.a - ext_alpha_cutoff.x );
+
+	float ms = xmaterial;
+	float h  = I.position.w;
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	ms = I.tcdh.w;
+#endif
+
+	float4 Ne = float4( normalize((float3)I.N.xyz), h );
+
+	O = pack_gbuffer(
+			Ne,
+			float4( I.position.xyz, ms        ),
+			float4( base.rgb,       def_gloss ) );
+
+	return O;
+}

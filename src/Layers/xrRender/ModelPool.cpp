@@ -81,6 +81,12 @@ dxRender_Visual* CModelPool::Instance_Create(u32 type)
 		// dispatches on V->Type) can clone an already-loaded external visual.
 		V = xr_new<FExternalVisual>();
 		break;
+	case MT_EXTERNAL_SKINNED:
+		// External (GLTF/GLB) skinned mesh child. Same reason: FHierrarhyVisual::Copy duplicates each
+		// child via model_Duplicate -> Instance_Create(child->Type), so a skinned child must map to its
+		// own class (CKinematics::Copy then re-parents it to the clone).
+		V = xr_new<FExternalSkinned>();
+		break;
 	default:
 		FATAL("Unknown visual type");
 		break;
@@ -190,7 +196,7 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 	// External (non-OGF) formats: dispatch to the dedicated loader instead of reading an
 	// OGF header. `fn` is the resolved OS path; `name` carries the original extension. This
 	// branch is reached only when the name kept a .gltf/.glb extension (see Create()), so the
-	// OGF path below is untouched for all existing content.
+	// OGF path below runs unchanged for all existing content (additive, gated).
 	if (is_external_format(name))
 	{
 		V = Instance_Create_External(name, fn, assert);

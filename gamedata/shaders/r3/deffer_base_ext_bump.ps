@@ -12,6 +12,7 @@
 //   s_base = albedo (t_base),  s_bump = glTF normal map (t_second),  sampler smp_base.
 
 #include "common.h"
+#include "external_common.h"
 
 // glTF alphaMode: .x = alphaCutoff for MASK materials; -1 for OPAQUE/BLEND (clip is a no-op). Set
 // per-object in FExternalVisual::Render.
@@ -22,14 +23,17 @@ f_deffer main( p_bumped I )
 	f_deffer O;
 
 	// albedo
-	float4 base = s_base.Sample( smp_base, I.tcdh.xy );
+	float2 uv   = ext_uv( I.tcdh.xy );          // KHR_texture_transform
+	float4 base = s_base.Sample( smp_base, uv );
+	base.rgb   *= ext_base_color.rgb;           // glTF baseColorFactor tint
 
 	// glTF MASK: discard texels with alpha below the cutoff (OPAQUE/BLEND pass -1 -> never clips)
 	clip( base.a - ext_alpha_cutoff.x );
 
-	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1]
+	// standard glTF tangent-space normal map: rgb [0,1] -> [-1,1] (xy scaled by glTF normalScale)
 	// (glTF uses +Y/OpenGL convention; if bumps read as dents, negate n_ts.y here)
-	float3 n_ts = s_bump.Sample( smp_base, I.tcdh.xy ).xyz * 2.0h - 1.0h;
+	float3 n_ts = s_bump.Sample( smp_base, uv ).xyz * 2.0h - 1.0h;
+	n_ts.xy    *= ext_mr_factor.z;
 
 	// tangent space -> eye space (M1..M3 carry 2*TBN; normalize cancels the scale)
 	float3 Ne = normalize( mul( float3x3(I.M1, I.M2, I.M3), n_ts ) );

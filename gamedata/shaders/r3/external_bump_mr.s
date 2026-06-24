@@ -17,13 +17,18 @@ function normal		(shader, t_base, t_second, t_detail, t_metalrough, t_ao)
 	shader:dx10stencil_ref	(1)
 end
 
-function l_special	(shader, t_base, t_second, t_detail, t_metalrough)
-	-- Sun shadow caster: depth only, back-face cast (no self-shadow acne). Identical to external_bump.
-	shader:begin	("shadow_direct_model",	"dumb")
+-- Shadow-map caster for ALL light types (sun E[4] / point E[2] / spot E[3]); the engine renders every
+-- shadow map from E[SE_R2_SHADOW]=E[2]=l_point, so we fill all three. Matches the stock model shadow
+-- (default cull, ztest+zwrite, colour off) but uses shadow_ext_model.vs (normal-offset depth bias) so
+-- neither smooth surfaces self-shadow nor thin geometry self-shadows under a close light. See
+-- external_static.s for the full why.
+function l_point	(shader, t_base, t_second, t_detail, t_metalrough)
+	shader:begin	("shadow_ext_model",	"dumb")
 			: zb		(true,true)
 			: fog		(false)
-			: dx10cullmode	(2)
 	shader:dx10texture	("s_base",	t_base)
 	shader:dx10sampler	("smp_base")
 	shader:dx10color_write_enable	(false, false, false, false)
 end
+l_spot    = l_point
+l_special = l_point

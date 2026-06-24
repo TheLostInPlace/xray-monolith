@@ -55,6 +55,17 @@
 // scene lighting -- ideal for confirming geometry/UVs. Phase 2 swaps in a lit pbr_external.
 #define EXTERNAL_DEFAULT_SHADER "external_static"
 
+// Skinned variant of EXTERNAL_DEFAULT_SHADER. Identical bindings, but a SEPARATE .s name so it isn't
+// reused from the static path's cached SKIN_NONE compile -- the compiled .s/VS is cached by name and the
+// skin mode is baked in at first compile. FExternalSkinned loads this (always with SetSkinningMode(4)) so
+// it compiles SKIN_4 and the model VS actually reads sbones_array. See gamedata\shaders\r3\external_skinned.s.
+#define EXTERNAL_SKINNED_SHADER "external_skinned"
+
+// Vertex-coloured variant (glTF COLOR_0, no base texture): uses a custom VS that passes the per-vertex
+// colour and a PS that uses it as albedo. Selected when a material has vertex colours but no normal/MR
+// texture (e.g. BoxVertexColors). See external_vc.s / deffer_base_ext_vc.ps / deffer_model_flat_vc.vs.
+#define EXTERNAL_VC_SHADER "external_vc"
+
 // Lit + normal-mapped variant, used instead of EXTERNAL_DEFAULT_SHADER when the glTF material has a
 // normal texture. Receives a "albedo,normal" texture list (t_base = albedo, t_second = normal map).
 #define EXTERNAL_BUMP_SHADER "external_bump"
@@ -98,13 +109,16 @@
 // consumes P, N, tc; T/B are supplied so the layout is also valid for the bump model VS.
 //////////////////////////////////////////////////////////////////////
 
-static D3DVERTEXELEMENT9 dwDecl_External[] = // 56 bytes
+static D3DVERTEXELEMENT9 dwDecl_External[] = // 72 bytes
 {
 	{0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
 	{0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
 	{0, 24, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,  0},
 	{0, 36, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BINORMAL, 0},
 	{0, 48, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+	// glTF COLOR_0 (per-vertex colour). Always present (default white); only the external_vc VS reads
+	// it -- the stock flat/bump VSes ignore this extra element, so OGF-style models are unaffected.
+	{0, 56, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0},
 	D3DDECL_END()
 };
 
@@ -116,10 +130,11 @@ struct vertExternal
 	float T[3];
 	float B[3];
 	float tc[2];
+	float C[4]; // glTF COLOR_0 (RGBA), default white
 };
 #pragma pack(pop)
 
-static IC void ext_set_vertex(vertExternal& dst, const Fvector& P, Fvector N, Fvector T, Fvector B, float u, float v)
+static IC void ext_set_vertex(vertExternal& dst, const Fvector& P, Fvector N, Fvector T, Fvector B, float u, float v, const float col[4])
 {
 	N.normalize_safe();
 	T.normalize_safe();
@@ -129,6 +144,7 @@ static IC void ext_set_vertex(vertExternal& dst, const Fvector& P, Fvector N, Fv
 	dst.T[0] = T.x;  dst.T[1] = T.y;  dst.T[2] = T.z;
 	dst.B[0] = B.x;  dst.B[1] = B.y;  dst.B[2] = B.z;
 	dst.tc[0] = u;   dst.tc[1] = v;
+	dst.C[0] = col[0]; dst.C[1] = col[1]; dst.C[2] = col[2]; dst.C[3] = col[3];
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -204,6 +220,44 @@ static ID3DBaseTexture* ext_create_texture_from_memory(const void* data, size_t 
 static void ext_make_user_name(string_path out, const char* short_name)
 {
 	strconcat(sizeof(string_path), out, "$user$gltf\\", short_name ? short_name : "unnamed");
+}
+
+// Shared 1x1 WHITE texture (in-memory BMP) for materials with NO base-color texture (factor-only, e.g.
+// BrainStem's 59 flat-colored parts). The deferred ext PS computes albedo = s_base * ext_base_color, so
+// binding WHITE makes albedo == baseColorFactor -- instead of multiplying by the dark missing-texture
+// placeholder, which muddies every flat color. Created once + deduped by the texture pool. Returns the
+// resource name, or NULL if it couldn't be created (DX9 / decode failure) so the caller uses the placeholder.
+static const char* ext_white_texture_name()
+{
+	static const char* kName = "$user$gltf\\__white__";
+	static int state = 0; // 0=untried, 1=created, 2=failed
+	if (state == 0)
+	{
+		// minimal 1x1 24bpp BMP, single white pixel
+		static const unsigned char bmp[58] = {
+			'B', 'M', 0x3A, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0,             // BITMAPFILEHEADER (14)
+			0x28, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, // BITMAPINFOHEADER ...
+			4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,     // ... (40 bytes)
+			0xFF, 0xFF, 0xFF, 0x00                                          // pixel BGR + pad (4)
+		};
+		ID3DBaseTexture* tex = ext_create_texture_from_memory(bmp, sizeof(bmp), "gltf_white");
+		if (tex)
+		{
+			ref_texture rt;
+			rt.create(kName);
+			if (rt._get())
+			{
+				rt->surface_set(tex);
+				state = 1;
+			}
+			else
+				state = 2;
+			_RELEASE(tex);
+		}
+		else
+			state = 2;
+	}
+	return (state == 1) ? kName : NULL;
 }
 
 // Synthetic resource name for a model's decoded normal map (distinct namespace from the albedo).
@@ -377,6 +431,166 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInf
 	return true;
 }
 
+bool FExternalVisual::GetSkinData(const char* full_path, ExtSkinData& out)
+{
+	out.bones.clear();
+	out.root = -1;
+
+	IReader* rd = FS.r_open(full_path);
+	if (!rd)
+		return false;
+	const size_t blob_size = (size_t)rd->length();
+	void* blob = xr_malloc(blob_size);
+	CopyMemory(blob, rd->pointer(), blob_size);
+	FS.r_close(rd);
+
+	cgltf_options options = {};
+	cgltf_data* gltf = NULL;
+	cgltf_result res = cgltf_parse(&options, blob, blob_size, &gltf);
+	if (res != cgltf_result_success)
+	{
+		xr_free(blob);
+		return false;
+	}
+	// inverseBindMatrices live in a buffer accessor -> buffers must be resolved
+	res = cgltf_load_buffers(&options, gltf, full_path);
+	if (res != cgltf_result_success)
+	{
+		cgltf_free(gltf);
+		xr_free(blob);
+		return false;
+	}
+
+	if (gltf->skins_count == 0)
+	{
+		cgltf_free(gltf); // not a skinned model -> caller falls back to the static/rigid path
+		xr_free(blob);
+		return false;
+	}
+
+	const cgltf_skin& skin = gltf->skins[0]; // Phase A: first skin only
+	const cgltf_size  n = skin.joints_count;
+	if (n == 0)
+	{
+		cgltf_free(gltf);
+		xr_free(blob);
+		return false;
+	}
+
+	// glTF RH -> engine LH coordinate conversion (Z-flip), an involution. MUST match the conversion the
+	// skinned geometry loader applies to its vertices, so bones and verts stay in the same space. (Model
+	// orientation is carried by the joint transforms + IBMs -- no per-asset axis fixups needed.)
+	Fmatrix C;
+	C.identity();
+	C._33 = -1.f;
+
+	// Absolute world bind transform of each joint. glTF is column-major / column-vector, X-Ray is
+	// row-major / row-vector; the two transposes cancel, so the 16 floats memcpy straight onto the
+	// row-major Fmatrix and apply the same transform as p*M (exactly the static path's convention).
+	xr_vector<Fmatrix> world;
+	world.resize(n);
+	for (cgltf_size i = 0; i < n; ++i)
+	{
+		cgltf_float w[16];
+		cgltf_node_transform_world(skin.joints[i], w);
+		CopyMemory(&world[i], w, sizeof(w));
+		// Conjugate the world bind by C (the same conversion applied to the verts) so the skinning stays
+		// consistent in engine space: C*M*C (C is an involution -> C^-1 == C).
+		{
+			Fmatrix t; t.mul_43(C, world[i]); world[i].mul_43(t, C);
+		}
+	}
+
+	const cgltf_accessor* ibm = skin.inverse_bind_matrices; // optional (model->bone), for cross-check
+
+	out.bones.resize(n);
+	int root_count = 0;
+	for (cgltf_size i = 0; i < n; ++i)
+	{
+		ExtBone& b = out.bones[i];
+		const cgltf_node* jn = skin.joints[i];
+		b.gltf_node = (int)(jn - gltf->nodes);
+		if (jn->name && jn->name[0])
+			b.name = jn->name;
+		else
+		{
+			string64 nm;
+			xr_sprintf(nm, "$bone_%u$", (u32)i);
+			b.name = nm;
+		}
+
+		// parent BONE = nearest ancestor node that is also a joint of THIS skin (walk node->parent up)
+		int parent_bone = -1;
+		for (const cgltf_node* p = jn->parent; p; p = p->parent)
+		{
+			for (cgltf_size j = 0; j < n; ++j)
+				if (skin.joints[j] == p) { parent_bone = (int)j; break; }
+			if (parent_bone >= 0)
+				break;
+		}
+		b.parent = parent_bone;
+		if (parent_bone < 0)
+		{
+			++root_count;
+			out.root = (int)i;
+		}
+
+		// local bind: world_i = parent_world * bind_local  =>  bind_local = inv(parent_world) * world_i
+		if (parent_bone < 0)
+			b.bind_local = world[i];
+		else
+		{
+			Fmatrix invP;
+			invP.invert(world[parent_bone]);
+			b.bind_local.mul_43(invP, world[i]);
+		}
+
+		// glTF inverseBindMatrix (model->bone). This is AUTHORITATIVE and is used directly as the bone's
+		// m2b: it may encode a skeleton-root / bind-shape offset that inverse(joint world) does NOT (e.g.
+		// a skin whose IBMs are relative to a skeleton root under an oriented armature -- CesiumMan). The
+		// hierarchy inverse would mis-orient/deform such skins.
+		if (ibm && i < ibm->count)
+		{
+			cgltf_float m[16];
+			cgltf_accessor_read_float(ibm, i, m, 16);
+			CopyMemory(&b.inv_bind, m, sizeof(m));
+			// IBM is raw glTF space; conjugate by C (m2b^engine = C * IBM * C) to match the converted verts
+			// + conjugated world bind, so mRenderTransform stays consistent in engine space.
+			{
+				Fmatrix t; t.mul_43(C, b.inv_bind); b.inv_bind.mul_43(t, C);
+			}
+		}
+		else
+			b.inv_bind.invert(world[i]); // no IBM: fall back to inverse(world bind); world[i] already conjugated
+	}
+
+	// X-Ray needs exactly one root. If the glTF skeleton has several joint roots, append a synthetic
+	// identity root and reparent the orphans to it. bind_local of an orphan was world (parent=identity)
+	// which stays correct under an identity synth root. JOINTS_0 never indexes the appended bone.
+	if (root_count != 1)
+	{
+		const int synth_id = (int)out.bones.size();
+		for (cgltf_size i = 0; i < n; ++i)
+			if (out.bones[i].parent < 0)
+				out.bones[i].parent = synth_id;
+		ExtBone synth;
+		synth.name = "$external_skel_root$";
+		synth.parent = -1;
+		synth.gltf_node = -1;
+		synth.bind_local.identity();
+		synth.inv_bind.identity();
+		out.bones.push_back(synth);
+		out.root = synth_id;
+	}
+
+	Msg("* [gltf] skin '%s': %u joints%s, root=%d", full_path, (u32)n,
+		(root_count != 1) ? " (+1 synth root)" : "", out.root);
+
+	cgltf_free(gltf);
+	xr_free(blob);
+	return true;
+}
+
 bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path, int material_filter, EExtPass pass)
 {
 	dbg_name = short_name;
@@ -447,6 +661,10 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	float            alpha_cutoff = 0.5f;                  // glTF alphaCutoff (default 0.5)
 	float            base_alpha = 1.f;                     // glTF baseColorFactor.a (opacity for BLEND)
 	bool             alpha_captured = false;
+	float base_color_factor[3] = {1.f, 1.f, 1.f};         // glTF baseColorFactor.rgb (albedo/F0 tint)
+	float metallic_factor = 1.f, roughness_factor = 1.f, normal_scale = 1.f; // glTF scalar factors
+	float uv_scale[2] = {1.f, 1.f}, uv_offset[2] = {0.f, 0.f};               // KHR_texture_transform
+	bool  have_vertex_color = false;                       // any primitive carries glTF COLOR_0
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
 	// geometry. Real exported models position meshes via nodes; ignoring them mis-places/scales
@@ -487,6 +705,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			const cgltf_accessor* a_nrm = NULL;
 			const cgltf_accessor* a_uv = NULL;
 			const cgltf_accessor* a_tan = NULL;
+			const cgltf_accessor* a_col = NULL;
 			for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai)
 			{
 				const cgltf_attribute& at = prim.attributes[ai];
@@ -496,11 +715,14 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				case cgltf_attribute_type_normal: a_nrm = at.data; break;
 				case cgltf_attribute_type_texcoord: if (at.index == 0) a_uv = at.data; break;
 				case cgltf_attribute_type_tangent: a_tan = at.data; break;
+				case cgltf_attribute_type_color: if (at.index == 0) a_col = at.data; break;
 				default: break;
 				}
 			}
 			if (!a_pos)
 				continue;
+			if (a_col)
+				have_vertex_color = true;
 
 			const u32 v_base = (u32)verts.size();
 			const cgltf_size v_count = a_pos->count;
@@ -514,6 +736,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				T.set(1, 0, 0);
 				float uv[2] = {0, 0};
 				float tan4[4] = {1, 0, 0, 1};
+				float col[4] = {1, 1, 1, 1}; // glTF COLOR_0 (default opaque white)
 
 				cgltf_accessor_read_float(a_pos, i, &P.x, 3);
 				if (a_nrm) cgltf_accessor_read_float(a_nrm, i, &N.x, 3);
@@ -523,6 +746,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 					cgltf_accessor_read_float(a_tan, i, tan4, 4);
 					T.set(tan4[0], tan4[1], tan4[2]);
 				}
+				if (a_col) // COLOR_0 is VEC3 or VEC4; read the right count so alpha stays 1 for VEC3
+					cgltf_accessor_read_float(a_col, i, col, (a_col->type == cgltf_type_vec4) ? 4 : 3);
 
 				// bake the node world transform (glTF space): position full, normal/tangent as dirs
 				{ Fvector t; Mw.transform_tiny(t, P); P = t; }
@@ -539,7 +764,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				B.mul(tan4[3]); // glTF tangent handedness
 
 				vertExternal vx;
-				ext_set_vertex(vx, P, N, T, B, uv[0], uv[1]);
+				ext_set_vertex(vx, P, N, T, B, uv[0], uv[1], col);
 				verts.push_back(vx);
 				bb.modify(P);
 			}
@@ -565,10 +790,27 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			// glTF alphaMode/cutoff of this child's material (first one in the filtered primitive set)
 			if (!alpha_captured && prim.material)
 			{
-				alpha_mode = prim.material->alpha_mode;
-				alpha_cutoff = prim.material->alpha_cutoff;
-				if (prim.material->has_pbr_metallic_roughness)
-					base_alpha = prim.material->pbr_metallic_roughness.base_color_factor[3];
+				const cgltf_material* m = prim.material;
+				alpha_mode = m->alpha_mode;
+				alpha_cutoff = m->alpha_cutoff;
+				if (m->has_pbr_metallic_roughness)
+				{
+					const cgltf_pbr_metallic_roughness& pbr = m->pbr_metallic_roughness;
+					base_color_factor[0] = pbr.base_color_factor[0];
+					base_color_factor[1] = pbr.base_color_factor[1];
+					base_color_factor[2] = pbr.base_color_factor[2];
+					base_alpha = pbr.base_color_factor[3];
+					metallic_factor = pbr.metallic_factor;
+					roughness_factor = pbr.roughness_factor;
+					// KHR_texture_transform (offset+scale) from the base-color texture, applied to all maps
+					if (pbr.base_color_texture.has_transform)
+					{
+						const cgltf_texture_transform& tt = pbr.base_color_texture.transform;
+						uv_scale[0] = tt.scale[0];   uv_scale[1] = tt.scale[1];
+						uv_offset[0] = tt.offset[0]; uv_offset[1] = tt.offset[1];
+					}
+				}
+				if (m->normal_texture.texture) normal_scale = m->normal_texture.scale; // glTF normalScale
 				alpha_captured = true;
 			}
 
@@ -761,6 +1003,12 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	half.sub(bb.max, bb.min).mul(0.5f);
 	vis.sphere.set(c, half.magnitude());
 
+	// Shared per-material factors + texture transform (used by every lit/metal/blend child's shader via
+	// external_common.h). Identity defaults mean materials that set none of these render unchanged.
+	m_base_color.set(base_color_factor[0], base_color_factor[1], base_color_factor[2]);
+	m_mr_factor.set(metallic_factor, roughness_factor, normal_scale);
+	m_uv_xform.set(uv_scale[0], uv_scale[1], uv_offset[0], uv_offset[1]);
+
 	// --- emissive overlay pass ------------------------------------------------------
 	// Forward additive batch: bind only the emissive map and the external_emissive shader. If the
 	// selected material has no emissive map this child is pointless, so fail (FExternalKinematics
@@ -859,8 +1107,18 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	if (!resolved)
 	{
 		if (have_tex)
+		{
+			// a texture was intended but didn't resolve -> visible placeholder (signals the error)
 			Msg("~ [gltf] base texture '%s' not found; using placeholder for '%s'", tex_name, full_path);
-		xr_strcpy(tex_name, sizeof(tex_name), EXTERNAL_FALLBACK_TEXTURE);
+			xr_strcpy(tex_name, sizeof(tex_name), EXTERNAL_FALLBACK_TEXTURE);
+		}
+		else
+		{
+			// factor-only material (no base texture): bind WHITE so albedo == baseColorFactor (not the
+			// dark missing-texture placeholder). Falls back to the placeholder if white can't be created.
+			const char* w = ext_white_texture_name();
+			xr_strcpy(tex_name, sizeof(tex_name), w ? w : EXTERNAL_FALLBACK_TEXTURE);
+		}
 	}
 
 	// --- forward BLEND surface -----------------------------------------------------
@@ -948,12 +1206,339 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 		xr_sprintf(tlist, "%s,%s,%s", tex_name, mr_name, ao_name);
 		SetShaderTexture(EXTERNAL_MR_SHADER, tlist);
 	}
+	else if (have_vertex_color)
+	{
+		// per-vertex colours, no normal/MR/base texture (e.g. BoxVertexColors): vertex colour is albedo
+		SetShaderTexture(EXTERNAL_VC_SHADER, tex_name);
+	}
 	else
 	{
 		SetShaderTexture(EXTERNAL_DEFAULT_SHADER, tex_name);
 	}
 
 	Type = MT_EXTERNAL_STATIC;
+	return true;
+}
+
+//////////////////////////////////////////////////////////////////////
+// FExternalSkinned : skinned (vertBoned4W) external visual
+//////////////////////////////////////////////////////////////////////
+
+void FExternalSkinned::Load(const char* N, IReader* /*data*/, u32 /*dwFlags*/)
+{
+	// External skinned visuals are built by LoadExternal(), never through the OGF path.
+	Msg("! FExternalSkinned::Load() called unexpectedly for [%s] - built via LoadExternal()", N);
+}
+
+void FExternalSkinned::Render(float LOD)
+{
+	PROF_EVENT("FExternalSkinned::Render");
+	// Ensure the bones are evaluated before the sbones_array upload. A spawned object is a CLONE with
+	// fresh, UNcalculated bone instances, and nothing re-runs CalculateBones for a rigid skeleton -> the
+	// skinning would read identity transforms and the mesh would render in raw (un-posed, Z-up) vertex
+	// space (== lying down). Forcing it here puts the skeleton in its bind/animated pose every frame.
+	if (Parent)
+		Parent->CalculateBones(TRUE);
+
+	// The deferred ext flat PS (external_common.h) multiplies albedo by these constants. The skinned
+	// child renders through the inherited path (which doesn't set them), so set safe Phase-A values here:
+	// captured base-color tint + identity UV/MR, no alpha clip (opaque), no AO. Without this the shader
+	// reads stale registers -> black / order-dependent output.
+	RCache.set_c("ext_uv_transform", 1.f, 1.f, 0.f, 0.f);
+	RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, 1.f);
+	RCache.set_c("ext_mr_factor", 1.f, 1.f, 1.f, 1.f);
+	RCache.set_c("ext_alpha_cutoff", -1.f, 0.f, 0.f, 0.f); // opaque (no MASK clip on skinned yet)
+	RCache.set_c("ext_ao_strength", 0.f, 0.f, 0.f, 0.f);
+	CSkeletonX_ST::Render(LOD); // sbones_array upload + draw
+}
+
+void FExternalSkinned::CalcPoseBBox(Fbox& bb)
+{
+	bb.invalidate();
+	if (!Parent)
+		return;
+	const vertBoned4W* V = *Vertices4W; // CPU vertex backup built by _Load_hw
+	if (!V)
+		return;
+	for (u32 i = 0; i < vCount; ++i)
+	{
+		const vertBoned4W& v = V[i];
+		const float w3 = 1.f - v.w[0] - v.w[1] - v.w[2];
+		const float w[4] = {v.w[0], v.w[1], v.w[2], w3};
+		Fvector p;
+		p.set(0.f, 0.f, 0.f);
+		for (int k = 0; k < 4; ++k)
+		{
+			if (w[k] == 0.f)
+				continue;
+			Fvector t;
+			Parent->LL_GetTransform_R(v.m[k]).transform_tiny(t, v.P); // bone render transform * vertex
+			p.x += t.x * w[k];
+			p.y += t.y * w[k];
+			p.z += t.z * w[k];
+		}
+		bb.modify(p);
+	}
+}
+
+bool FExternalSkinned::LoadExternal(const char* short_name, const char* full_path, int material_filter,
+                                    const FExternalVisual::ExtSkinData& skin)
+{
+	dbg_name = short_name;
+	dbg_id = 1;
+	hud = false;
+	skinning = 4; // SKIN_4: dxRender_Visual::SetShaderTexture pushes this to SetSkinningMode at shader-compile,
+	              // so the model VS compiles as the 4-bone skinned variant (reads sbones_array). (Static sets -1.)
+
+	// per-material $user$ texture key (matches FExternalVisual)
+	string_path tex_key;
+	if (material_filter != -1)
+		xr_sprintf(tex_key, "%s_m%d", short_name, material_filter);
+	else
+		xr_strcpy(tex_key, sizeof(tex_key), short_name);
+
+	IReader* rd = FS.r_open(full_path);
+	if (!rd) { Msg("! [gltf] skinned: can't open '%s'", full_path); return false; }
+	const size_t blob_size = (size_t)rd->length();
+	void* blob = xr_malloc(blob_size);
+	CopyMemory(blob, rd->pointer(), blob_size);
+	FS.r_close(rd);
+
+	cgltf_options options = {};
+	cgltf_data* gltf = NULL;
+	if (cgltf_parse(&options, blob, blob_size, &gltf) != cgltf_result_success) { xr_free(blob); return false; }
+	if (cgltf_load_buffers(&options, gltf, full_path) != cgltf_result_success)
+	{
+		cgltf_free(gltf);
+		xr_free(blob);
+		return false;
+	}
+
+	const u16 nb = (u16)skin.bones.size();
+
+	// glTF RH -> engine LH coordinate conversion (Z-flip). MUST match GetSkinData (which conjugates the
+	// bones by the same C) so verts and bones share one space.
+	Fmatrix C;
+	C.identity();
+	C._33 = -1.f;
+
+	// --- accumulate skinned vertices (vertBoned4W: pos/normal/tangent/uv + bone ids + weights) -------
+	xr_vector<vertBoned4W> verts;
+	xr_vector<u32> indices;
+	Fbox bb;
+	bb.invalidate();
+	const cgltf_image* base_img = NULL;
+	bool base_color_captured = false; // capture baseColorFactor once (first material in the filtered set)
+
+	for (cgltf_size ni = 0; ni < gltf->nodes_count; ++ni)
+	{
+		const cgltf_node& node = gltf->nodes[ni];
+		if (!node.mesh)
+			continue;
+		// NOTE: skinned meshes are positioned by their JOINTS, not the mesh node transform (glTF spec),
+		// so -- unlike the static path -- we do NOT bake cgltf_node_transform_world into the vertices.
+		const cgltf_mesh& mesh = *node.mesh;
+		for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
+		{
+			const cgltf_primitive& prim = mesh.primitives[pi];
+			if (prim.type != cgltf_primitive_type_triangles)
+				continue;
+
+			const int prim_mat = prim.material ? (int)(prim.material - gltf->materials) : -1;
+			if (material_filter == -2) { if (prim_mat != -1) continue; }
+			else if (material_filter >= 0) { if (prim_mat != material_filter) continue; }
+
+			const cgltf_accessor* a_pos = NULL; const cgltf_accessor* a_nrm = NULL;
+			const cgltf_accessor* a_uv = NULL;  const cgltf_accessor* a_tan = NULL;
+			const cgltf_accessor* a_joints = NULL; const cgltf_accessor* a_weights = NULL;
+			for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai)
+			{
+				const cgltf_attribute& at = prim.attributes[ai];
+				switch (at.type)
+				{
+				case cgltf_attribute_type_position: a_pos = at.data; break;
+				case cgltf_attribute_type_normal:   a_nrm = at.data; break;
+				case cgltf_attribute_type_texcoord: if (at.index == 0) a_uv = at.data; break;
+				case cgltf_attribute_type_tangent:  a_tan = at.data; break;
+				case cgltf_attribute_type_joints:   if (at.index == 0) a_joints = at.data; break;
+				case cgltf_attribute_type_weights:  if (at.index == 0) a_weights = at.data; break;
+				default: break;
+				}
+			}
+			if (!a_pos)
+				continue;
+
+			if (!base_color_captured && prim.material && prim.material->has_pbr_metallic_roughness)
+			{
+				const cgltf_pbr_metallic_roughness& pbr = prim.material->pbr_metallic_roughness;
+				if (!base_img && pbr.base_color_texture.texture && pbr.base_color_texture.texture->image)
+					base_img = pbr.base_color_texture.texture->image;
+				m_base_color.set(pbr.base_color_factor[0], pbr.base_color_factor[1], pbr.base_color_factor[2]);
+				base_color_captured = true;
+			}
+
+			const u32 v_base = (u32)verts.size();
+			const cgltf_size v_count = a_pos->count;
+			verts.reserve(verts.size() + v_count);
+			for (cgltf_size i = 0; i < v_count; ++i)
+			{
+				Fvector P, N, T; P.set(0, 0, 0); N.set(0, 1, 0); T.set(1, 0, 0);
+				float uv[2] = {0, 0}; float tan4[4] = {1, 0, 0, 1};
+				cgltf_accessor_read_float(a_pos, i, &P.x, 3);
+				if (a_nrm) cgltf_accessor_read_float(a_nrm, i, &N.x, 3);
+				if (a_uv) cgltf_accessor_read_float(a_uv, i, uv, 2);
+				if (a_tan) { cgltf_accessor_read_float(a_tan, i, tan4, 4); T.set(tan4[0], tan4[1], tan4[2]); }
+
+				cgltf_uint ji[4] = {0, 0, 0, 0};
+				float wt[4] = {1, 0, 0, 0};
+				if (a_joints)  cgltf_accessor_read_uint(a_joints, i, ji, 4);
+				if (a_weights) cgltf_accessor_read_float(a_weights, i, wt, 4);
+				if (!a_joints || !a_weights) { ji[0] = ji[1] = ji[2] = ji[3] = 0; wt[0] = 1; wt[1] = wt[2] = wt[3] = 0; }
+
+				// glTF RH -> engine LH coordinate conversion (bones conjugated by the same C in GetSkinData)
+				{ Fvector t; C.transform_tiny(t, P); P = t; }
+				{ Fvector t; C.transform_dir(t, N); N = t; }
+				{ Fvector t; C.transform_dir(t, T); T = t; }
+				Fvector B; B.crossproduct(N, T); B.mul(tan4[3]);
+
+				// normalize the 4 weights to sum 1 (the skinning VS derives w3 = 1-w0-w1-w2)
+				float wsum = wt[0] + wt[1] + wt[2] + wt[3];
+				if (wsum > 1e-6f) { float inv = 1.f / wsum; wt[0] *= inv; wt[1] *= inv; wt[2] *= inv; wt[3] *= inv; }
+				else { wt[0] = 1; wt[1] = wt[2] = wt[3] = 0; }
+
+				vertBoned4W vx;
+				vx.P = P; vx.N = N; vx.T = T; vx.B = B; vx.u = uv[0]; vx.v = uv[1];
+				for (int k = 0; k < 4; ++k)
+				{
+					// glTF JOINTS_0 indexes skin.joints, which == our bone array order, so it's the bone id
+					u16 bid = (u16)ji[k];
+					if (bid >= nb) bid = 0; // defensive clamp (out-of-range joint -> root)
+					vx.m[k] = bid;
+				}
+				vx.w[0] = wt[0]; vx.w[1] = wt[1]; vx.w[2] = wt[2];
+				verts.push_back(vx);
+				bb.modify(P);
+			}
+
+			const cgltf_size n = prim.indices ? prim.indices->count : v_count;
+			indices.reserve(indices.size() + n);
+			for (cgltf_size i = 0; i + 3 <= n; i += 3)
+			{
+				const u32 a = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 0) : i + 0));
+				const u32 b = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1));
+				const u32 c = (u32)(v_base + (prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2));
+#if EXTERNAL_FLIP_WINDING
+				indices.push_back(a); indices.push_back(c); indices.push_back(b);
+#else
+				indices.push_back(a); indices.push_back(b); indices.push_back(c);
+#endif
+			}
+		}
+	}
+
+	// decode the base-color image BEFORE cgltf_free (its bytes live in gltf-owned buffer memory)
+	ID3DBaseTexture* decoded_tex = base_img ? ext_decode_gltf_image(base_img, full_path) : NULL;
+
+	cgltf_free(gltf);
+	xr_free(blob);
+
+	if (verts.empty() || indices.empty())
+	{
+		_RELEASE(decoded_tex);
+		Msg("! [gltf] skinned '%s' (filter %d) selected no triangle geometry", full_path, material_filter);
+		return false;
+	}
+	if (verts.size() > 65535)
+	{
+		// _Render draws via RCache (16-bit IB); the 32-bit rebind trick the static path uses isn't wired
+		// into the inherited skinned render. Skinned meshes this large are rare -> Phase A limitation.
+		_RELEASE(decoded_tex);
+		Msg("! [gltf] skinned '%s' has %u verts (>65535) -- not supported yet", full_path, (u32)verts.size());
+		return false;
+	}
+
+	// --- index buffer (16-bit; the engine builds the skinned VB from our vertBoned4W via _Load_hw) ----
+	vBase = 0; vCount = (u32)verts.size(); iBase = 0; iCount = (u32)indices.size(); dwPrimitives = iCount / 3;
+	{
+		xr_vector<u16> i16; i16.resize(iCount);
+		for (u32 k = 0; k < iCount; ++k) i16[k] = (u16)indices[k];
+		VERIFY(NULL == p_rm_Indices);
+#if defined(USE_DX10) || defined(USE_DX11)
+		R_CHK(dx10BufferUtils::CreateIndexBuffer(&p_rm_Indices, i16.data(), iCount * 2));
+		HW.stats_manager.increment_stats_ib(p_rm_Indices);
+		// CPU index replica (DX10/11 can't read the GPU IB) -- mirrors CSkeletonX::_DuplicateIndices.
+		// REQUIRED by _CollectBoneFaces (bone-face build) and _PickBone (IK foot collider raycast); without
+		// it the pick path dereferences a null index buffer and crashes.
+		m_Indices.create(crc32(i16.data(), iCount * sizeof(u16)), iCount, i16.data());
+#else // DX9
+		const BOOL bSoft = HW.Caps.geometry.bSoftware;
+		const u32 dwUsage = (bSoft ? D3DUSAGE_SOFTWAREPROCESSING : 0);
+		BYTE* bytes = 0;
+		R_CHK(HW.pDevice->CreateIndexBuffer(iCount * 2, dwUsage, D3DFMT_INDEX16, D3DPOOL_MANAGED, &p_rm_Indices, 0));
+		HW.stats_manager.increment_stats_ib(p_rm_Indices);
+		R_CHK(p_rm_Indices->Lock(0, 0, (void**)&bytes, 0));
+		CopyMemory(bytes, i16.data(), iCount * 2);
+		p_rm_Indices->Unlock();
+#endif
+	}
+
+	// --- skinning state (read by the inherited CSkeletonX::_Render) ------------------------------------
+	RenderMode = RM_SKINNING_4B;
+	RMS_bonecount = nb; // upload every bone (incl synth root) into sbones_array; nb<=65 fits the 78-bone array
+	{
+		// BonesUsed drives has_visible_bones (culling). Collect the unique referenced bone ids.
+		xr_vector<u16> used;
+		for (u32 vi = 0; vi < verts.size(); ++vi)
+			for (int k = 0; k < 4; ++k)
+			{
+				const u16 bid = verts[vi].m[k];
+				if (used.end() == std::find(used.begin(), used.end(), bid)) used.push_back(bid);
+			}
+		const u32 crc = crc32(used.data(), used.size() * sizeof(u16));
+		BonesUsed.create(crc, used.size(), used.data());
+	}
+
+	// --- albedo + shader (compile as SKIN_4) ----------------------------------------------------------
+	// Resolve the base-color texture (decoded $user$ or the fallback), then create the shader with skinning
+	// mode 4 ACTIVE so external_static.s's stock model VS (and our shadow VS) compile as the SKIN_4 variant.
+	// Skinning is VS-only, so the same .s + deferred PS work unchanged. Reset the mode after (like OGF _Load).
+	string_path tex_name;
+	ref_texture user_tex; // must outlive SetShaderTexture
+	bool resolved = false;
+	if (decoded_tex)
+	{
+		ext_make_user_name(tex_name, tex_key);
+		user_tex.create(tex_name);
+		if (user_tex._get()) { user_tex->surface_set(decoded_tex); resolved = true; }
+		_RELEASE(decoded_tex);
+	}
+	if (!resolved)
+	{
+		// factor-only material (no base_img) -> WHITE so albedo == baseColorFactor (BrainStem's flat
+		// per-part colors); a real-but-failed texture -> the placeholder.
+		const char* w = (!base_img) ? ext_white_texture_name() : NULL;
+		xr_strcpy(tex_name, sizeof(tex_name), w ? w : EXTERNAL_FALLBACK_TEXTURE);
+	}
+
+	// SetShaderTexture internally does SetSkinningMode(this->skinning) (== 4, set above), so the dedicated
+	// external_skinned.s compiles its model VS as SKIN_4. (The separate .s name also avoids reusing the
+	// static path's cached SKIN_NONE compile of external_static.)
+	SetShaderTexture(EXTERNAL_SKINNED_SHADER, tex_name);
+
+	// --- HW vertex buffer: the engine packs vertBoned4W -> vertHW_4W (normal quantization + bone*3 index)
+	// and creates rm_geom with dwDecl_4W. Needs RenderMode + vCount + p_rm_Indices already set (above).
+	_Load_hw(*this, verts.data());
+
+	// --- bounds ---------------------------------------------------------------------------------------
+	vis.box.set(bb.min, bb.max);
+	Fvector c, half;
+	c.add(bb.min, bb.max).mul(0.5f);
+	half.sub(bb.max, bb.min).mul(0.5f);
+	vis.sphere.set(c, half.magnitude());
+
+	Type = MT_EXTERNAL_SKINNED; // own type so Instance_Duplicate clones this as FExternalSkinned
+	Msg("* [gltf] skinned child '%s' filter=%d: %u verts / %u tris, bones<=%u", short_name, material_filter,
+		vCount, dwPrimitives, nb);
 	return true;
 }
 
@@ -970,13 +1555,23 @@ void FExternalVisual::Render(float)
 	// this keeps it clear). Child kinds are mutually exclusive: emissive overlay / blend surface / metal
 	// overlay / lit deferred batch.
 	if (m_emissive)
-		RCache.set_c("ext_emissive_scale", m_emissive_scale.x, m_emissive_scale.y, m_emissive_scale.z, 1.f);
-	else if (m_blend)
-		RCache.set_c("ext_blend_alpha", m_blend_alpha, 0.f, 0.f, 0.f); // glTF baseColorFactor.a (opacity)
-	else if (!m_metal) // lit deferred batch
 	{
-		RCache.set_c("ext_alpha_cutoff", m_alpha_cutoff, 0.f, 0.f, 0.f); // MASK cutoff (-1 = no clip)
-		RCache.set_c("ext_ao_strength", m_ao_strength, 0.f, 0.f, 0.f);   // glTF occlusion (ORM in MR.r)
+		RCache.set_c("ext_emissive_scale", m_emissive_scale.x, m_emissive_scale.y, m_emissive_scale.z, 1.f);
+	}
+	else
+	{
+		// shared material params -- every lit/metal/blend child samples albedo/MR/normal through these
+		RCache.set_c("ext_uv_transform", m_uv_xform.x, m_uv_xform.y, m_uv_xform.z, m_uv_xform.w); // KHR_texture_transform
+		RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, 1.f);      // baseColorFactor tint
+		RCache.set_c("ext_mr_factor", m_mr_factor.x, m_mr_factor.y, m_mr_factor.z, 1.f);          // metallic/roughness/normalScale
+		if (m_blend)
+			RCache.set_c("ext_blend_alpha", m_blend_alpha, 0.f, 0.f, 0.f); // glTF baseColorFactor.a (opacity)
+		else if (!m_metal) // lit deferred batch
+		{
+			RCache.set_c("ext_alpha_cutoff", m_alpha_cutoff, 0.f, 0.f, 0.f); // MASK cutoff (-1 = no clip)
+			RCache.set_c("ext_ao_strength", m_ao_strength, 0.f, 0.f, 0.f);   // glTF occlusion (ORM in MR.r)
+		}
+		// metal overlay: only the shared params above
 	}
 	RCache.set_Geometry(rm_geom);
 #if defined(USE_DX11) || defined(USE_DX10)
@@ -1023,4 +1618,7 @@ void FExternalVisual::Copy(dxRender_Visual* pSrc)
 	PCOPY(m_ao_strength);
 	PCOPY(m_blend);
 	PCOPY(m_blend_alpha);
+	PCOPY(m_base_color);
+	PCOPY(m_mr_factor);
+	PCOPY(m_uv_xform);
 }
