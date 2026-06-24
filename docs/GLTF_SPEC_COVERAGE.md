@@ -72,7 +72,7 @@ Last updated: 2026-06-23.
 | `baseColorFactor.a` | ✅ | BLEND opacity multiplier **and** applied to the MASK alpha test (texel alpha `*= baseColorFactor.a` before `clip`). |
 | `metallicRoughnessTexture` | ✅ | G→roughness, B→metallic. |
 | `metallicFactor` / `roughnessFactor` | ✅ | Multiply the sampled values. |
-| **Real metalness** (colored reflection, ~no diffuse) | ⚠️ | Implemented in our **own** forward pass (reflects the engine sky cubes, tinted by albedo, roughness-aware). Stock-safe but **not** physically-tinted SSR, and needs an MR *texture* — `metallicFactor`-only metals aren't treated as metal. See `GLTF_REVISIT.md` A2/B2. |
+| **Real metalness** (colored reflection, ~no diffuse) | ⚠️ | Implemented in our **own** forward pass (reflects the engine sky cubes, tinted by albedo, roughness-aware). Stock-safe but **not** physically-tinted SSR. `metallicFactor`-only metals (no MR texture) now render metallic via a 1×1 white MR stand-in (constant metalness from the factor). See `GLTF_REVISIT.md` A2/B2. |
 | `normalTexture` | ✅ | Standard tangent-space normal map. |
 | `normalTexture.scale` (normalScale) | ✅ | Scales the tangent XY. |
 | `occlusionTexture` + `strength` | ✅ | Modulates the ambient/hemi term. Handles **ORM** (occlusion in the MR texture's R) **and** a separate AO texture. |

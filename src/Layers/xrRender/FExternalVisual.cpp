@@ -494,9 +494,10 @@ bool FExternalVisual::GetMaterialIndices(const char* full_path, xr_vector<MatInf
 				if (prim.material && prim.material->has_pbr_metallic_roughness)
 				{
 					const cgltf_pbr_metallic_roughness& pbr = prim.material->pbr_metallic_roughness;
-					const bool has_mr_tex = pbr.metallic_roughness_texture.texture
-						&& pbr.metallic_roughness_texture.texture->image;
-					metal = has_mr_tex && (pbr.metallic_factor > 0.01f);
+					// metallicFactor defaults to 1.0 (the glTF default), so an untextured default-PBR
+					// material reads as metal -- spec-correct. Factor-only metals (no MR texture) get a 1x1
+					// white MR stand-in in LoadExternal so they render metallic instead of plastic. (3.1)
+					metal = (pbr.metallic_factor > 0.01f);
 				}
 				// transparent surface (renders forward/blended instead of the deferred batch)
 				const bool blend = prim.material && prim.material->alpha_mode == cgltf_alpha_mode_blend;
@@ -547,6 +548,8 @@ bool FExternalVisual::GetSkinData(const char* full_path, ExtSkinData& out)
 		return false;
 	}
 
+	if (gltf->skins_count > 1) // finding F: only the first skin is built; make multi-skin models non-silent
+		Msg("! [gltf] '%s' has %u skins; using the first (multi-skin not supported)", full_path, (u32)gltf->skins_count);
 	const cgltf_skin& skin = gltf->skins[0]; // Phase A: first skin only
 	const cgltf_size  n = skin.joints_count;
 	if (n == 0)
@@ -751,6 +754,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	bool             alpha_captured = false;
 	float base_color_factor[3] = {1.f, 1.f, 1.f};         // glTF baseColorFactor.rgb (albedo/F0 tint)
 	float metallic_factor = 1.f, roughness_factor = 1.f, normal_scale = 1.f; // glTF scalar factors
+	bool  mat_has_pbr = false;                                              // material declares pbrMetallicRoughness (3.1)
 	float uv_scale[2] = {1.f, 1.f}, uv_offset[2] = {0.f, 0.f};               // KHR_texture_transform
 	float uv_rot = 0.f;                                                      // KHR_texture_transform rotation (radians)
 	bool  have_vertex_color = false;                       // any primitive carries glTF COLOR_0
@@ -913,6 +917,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 					base_alpha = pbr.base_color_factor[3];
 					metallic_factor = pbr.metallic_factor;
 					roughness_factor = pbr.roughness_factor;
+					mat_has_pbr = true; // for factor-only metal detection (3.1)
 					// KHR_texture_transform (offset+scale) from the base-color texture, applied to all maps
 					if (pbr.base_color_texture.has_transform)
 					{
@@ -1153,7 +1158,11 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	// albedo/MR (both children parse the same material independently).
 	if (metal_pass)
 	{
-		if (!decoded_tex || !decoded_mr)
+		// 3.1: factor-only metals (metallicFactor>0, no MR texture) use a 1x1 white MR stand-in for the
+		// reflection mask, as long as there's an albedo to tint the reflection. Textureless factor-only
+		// metals skip the overlay -- their lit MR child still carries the metallic look.
+		const bool white_mr = !decoded_mr && mat_has_pbr && !mr_img && metallic_factor > 0.01f;
+		if (!decoded_tex || (!decoded_mr && !white_mr))
 		{
 			_RELEASE(decoded_tex);
 			_RELEASE(decoded_mr);
@@ -1170,14 +1179,25 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			user_tex_m->surface_set(decoded_tex);
 		_RELEASE(decoded_tex);
 
-		ext_make_user_name_mr(mrm_name, mkey);
-		user_mr_m.create(mrm_name);
-		if (user_mr_m._get())
-			user_mr_m->surface_set(decoded_mr);
-		_RELEASE(decoded_mr);
+		const char* mr_bind;
+		if (decoded_mr)
+		{
+			ext_make_user_name_mr(mrm_name, mkey);
+			user_mr_m.create(mrm_name);
+			if (user_mr_m._get())
+				user_mr_m->surface_set(decoded_mr);
+			mr_bind = mrm_name;
+			_RELEASE(decoded_mr);
+		}
+		else // factor-only metal: 1x1 white MR stand-in (constant metalness from the factor)
+		{
+			const char* w = ext_white_texture_name();
+			if (!w) return false; // no mask available -> skip the overlay (lit MR still metallic)
+			mr_bind = w;
+		}
 
 		string_path tlist_m;
-		strconcat(sizeof(tlist_m), tlist_m, albedo_name, ",", mrm_name); // albedo + metal-rough
+		strconcat(sizeof(tlist_m), tlist_m, albedo_name, ",", mr_bind); // albedo + metal-rough
 		SetShaderTexture(EXTERNAL_METAL_SHADER, tlist_m);
 		m_metal = true;
 		Type = MT_EXTERNAL_STATIC;
@@ -1280,6 +1300,16 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 			have_mr = true;
 		}
 		_RELEASE(decoded_mr);
+	}
+
+	// 3.1 factor-only metals: a pbr material with metallicFactor > 0 but NO metallic-roughness texture.
+	// Bind a 1x1 WHITE MR stand-in so the deferred MR shader reads metallic = white.B * metallicFactor and
+	// roughness = white.G * roughnessFactor -- i.e. constant metalness from the factor -- instead of
+	// falling to the plastic flat shader. ext_mr_factor (pushed in Render) carries the actual factors.
+	if (!have_mr && mat_has_pbr && !mr_img && metallic_factor > 0.01f)
+	{
+		const char* w = ext_white_texture_name();
+		if (w) { xr_strcpy(mr_name, sizeof(mr_name), w); have_mr = true; }
 	}
 
 	// SEPARATE occlusion map -> its own $user$ texture (linear decode). Only decoded when occlusion is a
