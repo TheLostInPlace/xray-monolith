@@ -94,7 +94,7 @@ Last updated: 2026-06-23.
 | Image from bufferView (GLB-embedded) | ✅ | Decoded from memory via D3DX11 (PNG/JPG/etc. + mips). |
 | Image from base64 `data:` URI | ❌ | Not decoded (falls back to placeholder). Rare in shipped assets. |
 | sRGB vs linear color space | ✅ | Resolved: X-Ray is a gamma pipeline, so base/emissive are correctly left UNORM (forcing sRGB would darken vs stock). |
-| Texture sampler wrap modes (repeat/clamp/mirror) | ⚠️ | We bind a default linear/repeat sampler; per-texture wrap/filter from the glTF `sampler` isn't read. |
+| Texture sampler wrap modes (repeat/clamp/mirror) | ⚠️ | A base-color sampler with `CLAMP_TO_EDGE` on **both** axes selects a clamp shader variant on the single-sided lit paths (4.2). `MIRRORED_REPEAT`, per-axis / per-map wrap, doubleSided+clamp, and filter modes fall back to the default (repeat/linear) — the `.s` API only exposes `:clamp()`. |
 | Texture sampler filter / mip settings | ⚠️ | Default linear + mips from the decoder; the glTF sampler's min/mag/mip filters aren't honored. |
 | `KHR_texture_transform` | ⚠️ | Offset + scale + **rotation**; one transform (the base-color texture's) applied to **all** maps rather than per-texture. |
 | `KHR_texture_basisu` (KTX2 / Basis) | ❌ | Basis-compressed textures won't decode. |
@@ -180,8 +180,8 @@ engine integration (spawn/physics/auto-scale/sun-shadows).
 **Implemented but not fully proper (⚠️):** metalness (own forward reflection, not tinted SSR; needs an MR
 texture), BLEND (simple forward lighting, not in SSR, no shadow), emissive (LDR, no bloom), texture-
 transform (one transform for all maps; rotation supported, per-map decoupling not yet), vertex colours
-(static lit paths; skinned/overlays not), AO (MR shaders only), texture samplers (wrap/filter ignored),
-and dynamic-light shadows (deliberately off for props).
+(static lit paths; skinned/overlays not), AO (MR shaders only), texture samplers (CLAMP wrap on
+single-sided lit paths; mirror/per-map/filter not), and dynamic-light shadows (deliberately off for props).
 
 **Not implemented (❌):** **animation & skinning** (the biggest gap), morph targets,
 non-triangle primitives, base64 data-URI images, KTX2/Basis & Draco compression, and the advanced KHR

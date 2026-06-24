@@ -86,6 +86,15 @@
 #define EXTERNAL_BUMP_DS_SHADER    "external_bump_ds"
 #define EXTERNAL_BUMP_MR_DS_SHADER "external_bump_mr_ds"
 
+// CLAMP-sampler variants, selected when the base-color texture's glTF sampler wraps CLAMP_TO_EDGE on both
+// axes (4.2). Single-sided only -- doubleSided takes precedence (uses the _ds variant, repeat). The .s API
+// only exposes :clamp() (no wrap/mirror), so MIRRORED_REPEAT falls back to the default (repeat) variant,
+// and the one sampler applies to every map (per-map / per-axis wrap isn't expressible).
+#define EXTERNAL_DEFAULT_CLAMP_SHADER "external_static_clamp"
+#define EXTERNAL_MR_CLAMP_SHADER      "external_mr_clamp"
+#define EXTERNAL_BUMP_CLAMP_SHADER    "external_bump_clamp"
+#define EXTERNAL_BUMP_MR_CLAMP_SHADER "external_bump_mr_clamp"
+
 // Forward additive emissive OVERLAY (rendered in addition to the lit batch, post-deferred). Gets the
 // emissive map as t_base. See external_emissive.s / deffer_base_ext_emissive.ps.
 #define EXTERNAL_EMISSIVE_SHADER "external_emissive"
@@ -832,6 +841,7 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	float uv_rot = 0.f;                                                      // KHR_texture_transform rotation (radians)
 	int   uv_set[4] = {0, 0, 0, 0};                                         // per-map texCoord: base/normal/mr/ao (0=UV0,1=UV1) (3.5)
 	bool  double_sided = false;                                            // glTF material doubleSided (3.2)
+	bool  clamp_sampler = false;                                           // base-color sampler wraps CLAMP both axes (4.2)
 	bool  have_vertex_color = false;                       // any primitive carries glTF COLOR_0
 
 	// Iterate the scene graph so node transforms (translate/rotate/scale) are baked into the
@@ -1041,6 +1051,14 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 				alpha_mode = m->alpha_mode;
 				alpha_cutoff = m->alpha_cutoff;
 				double_sided = m->double_sided; // glTF doubleSided -> no-cull shader variant (3.2)
+				// 4.2 -- base-color sampler wrap: CLAMP variant when both axes clamp (one sampler for all maps)
+				{
+					const cgltf_texture* bt = m->has_pbr_metallic_roughness
+						? m->pbr_metallic_roughness.base_color_texture.texture : NULL;
+					const cgltf_sampler* sm = bt ? bt->sampler : NULL;
+					clamp_sampler = sm && sm->wrap_s == cgltf_wrap_mode_clamp_to_edge
+						&& sm->wrap_t == cgltf_wrap_mode_clamp_to_edge;
+				}
 				if (m->has_pbr_metallic_roughness)
 				{
 					const cgltf_pbr_metallic_roughness& pbr = m->pbr_metallic_roughness;
@@ -1482,18 +1500,21 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	{
 		// albedo,normal,metalrough,ao -> t_base / t_second / t_metalrough / t_ao (engine forwards 3rd+4th)
 		xr_sprintf(tlist, "%s,%s,%s,%s", tex_name, normal_name, mr_name, ao_name);
-		SetShaderTexture(double_sided ? EXTERNAL_BUMP_MR_DS_SHADER : EXTERNAL_BUMP_MR_SHADER, tlist);
+		SetShaderTexture(double_sided ? EXTERNAL_BUMP_MR_DS_SHADER
+			: (clamp_sampler ? EXTERNAL_BUMP_MR_CLAMP_SHADER : EXTERNAL_BUMP_MR_SHADER), tlist);
 	}
 	else if (have_normal)
 	{
 		strconcat(sizeof(tlist), tlist, tex_name, ",", normal_name);
-		SetShaderTexture(double_sided ? EXTERNAL_BUMP_DS_SHADER : EXTERNAL_BUMP_SHADER, tlist);
+		SetShaderTexture(double_sided ? EXTERNAL_BUMP_DS_SHADER
+			: (clamp_sampler ? EXTERNAL_BUMP_CLAMP_SHADER : EXTERNAL_BUMP_SHADER), tlist);
 	}
 	else if (have_mr)
 	{
 		// albedo,metalrough,ao (no normal) -> t_base / t_second / t_ao
 		xr_sprintf(tlist, "%s,%s,%s", tex_name, mr_name, ao_name);
-		SetShaderTexture(double_sided ? EXTERNAL_MR_DS_SHADER : EXTERNAL_MR_SHADER, tlist);
+		SetShaderTexture(double_sided ? EXTERNAL_MR_DS_SHADER
+			: (clamp_sampler ? EXTERNAL_MR_CLAMP_SHADER : EXTERNAL_MR_SHADER), tlist);
 	}
 	else if (have_vertex_color)
 	{
@@ -1503,7 +1524,8 @@ bool FExternalVisual::LoadExternal(const char* short_name, const char* full_path
 	}
 	else
 	{
-		SetShaderTexture(double_sided ? EXTERNAL_DEFAULT_DS_SHADER : EXTERNAL_DEFAULT_SHADER, tex_name);
+		SetShaderTexture(double_sided ? EXTERNAL_DEFAULT_DS_SHADER
+			: (clamp_sampler ? EXTERNAL_DEFAULT_CLAMP_SHADER : EXTERNAL_DEFAULT_SHADER), tex_name);
 	}
 
 	Type = MT_EXTERNAL_STATIC;
