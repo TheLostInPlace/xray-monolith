@@ -157,9 +157,15 @@ public:
 	// calculated. No-op (returns invalid box) if either is missing.
 	void CalcPoseBBox(Fbox& bb);
 
-	// glTF baseColorFactor.rgb of this child's material (albedo tint); pushed as ext_base_color in
-	// Render(). Default white = no tint. Copied for instancing via the inherited Copy (POD member).
-	Fvector m_base_color = {1.f, 1.f, 1.f};
+	// glTF material params pushed as shader constants in Render(); copied to clones by Copy() below
+	// (CSkeletonX_ST::Copy only handles the base-class skin data, not these subclass members).
+	Fvector m_base_color   = {1.f, 1.f, 1.f}; // baseColorFactor.rgb (albedo tint)
+	float   m_alpha_cutoff = -1.f;            // glTF MASK alphaCutoff (-1 = OPAQUE/BLEND, no clip) (4.3)
+	float   m_base_alpha   = 1.f;             // glTF baseColorFactor.a (MASK alpha multiplier) (4.3)
+
+	// Copy the subclass material members to a clone; without this, spawned skinned models lose their
+	// baseColorFactor tint + MASK cutoff (the engine clones children via model_Duplicate -> Copy).
+	virtual void Copy(dxRender_Visual* pFrom);
 };
 
 #endif // FExternalVisualH

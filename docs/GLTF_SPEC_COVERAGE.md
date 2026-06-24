@@ -80,7 +80,7 @@ Last updated: 2026-06-23.
 | `emissiveTexture` + `emissiveFactor` | ✅ | Forward additive overlay (added on top of the lit surface). |
 | Emissive HDR bloom | ⚠️ | LDR additive only — values clamp at 1, no bloom halo (engine limitation, `GLTF_REVISIT.md` B1). |
 | `alphaMode = OPAQUE` | ✅ | |
-| `alphaMode = MASK` + `alphaCutoff` | ✅ | Per-material cutoff, deferred alpha-test (`clip`). Verified exact at .25/.50/.75. |
+| `alphaMode = MASK` + `alphaCutoff` | ✅ | Per-material cutoff, deferred alpha-test (`clip`). Verified exact at .25/.50/.75 on the static path; also wired on the **skinned** path (4.3). |
 | `alphaMode = BLEND` | ⚠️ | Forward, back-to-front, src-alpha pass with simple sun+ambient lighting. Caveats: no point lights/shadows *on* the surface, per-object (not per-triangle) sort, doesn't cast shadows, not in SSR. |
 | `doubleSided` | ✅ | doubleSided materials use a no-cull `.s` variant (G-buffer **and** shadow) and the PS flips the shading normal on back faces via `SV_IsFrontFace`, on the deferred lit paths (static/MR/bump/bump+MR). The vertex-colour path renders single-sided. |
 
@@ -155,7 +155,8 @@ Things we add to make glTF assets behave as first-class X-Ray objects (not glTF 
 "what's implemented"):
 
 - ✅ **Spawns + physics** — wrapped as a 1-bone rigid `CKinematics` with an `stBox` collision shape from
-  the bounding box, so glTF models spawn as `physic_object`s.
+  the bounding box, so glTF models spawn as `physic_object`s. Skinned models always carry the box on a
+  synthetic **identity** skeleton root, so it isn't offset by a non-identity skin root (4.5).
 - ✅ **Runtime texture decode from memory** (D3DX11) under synthetic `$user$` names — no disk round-trip.
 - ✅ **Auto-scale** — honours real metres by default; only rescales **absurdly**-sized assets (largest
   dimension >50u or <0.01u). The factor is computed from the **whole model's** bounds (not per-material

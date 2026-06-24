@@ -718,10 +718,12 @@ bool FExternalVisual::GetSkinData(const char* full_path, ExtSkinData& out)
 			b.inv_bind.invert(world[i]); // no IBM: fall back to inverse(world bind); world[i] already conjugated
 	}
 
-	// X-Ray needs exactly one root. If the glTF skeleton has several joint roots, append a synthetic
-	// identity root and reparent the orphans to it. bind_local of an orphan was world (parent=identity)
-	// which stays correct under an identity synth root. JOINTS_0 never indexes the appended bone.
-	if (root_count != 1)
+	// X-Ray needs exactly one root. We ALWAYS append a synthetic IDENTITY root and reparent every joint
+	// root to it (4.5). This guarantees the skeleton root is identity, so the model-space collision/OBB box
+	// that FExternalKinematics puts on the root bone isn't offset by a non-identity skin root (e.g.
+	// CesiumMan's armature, whose root has a baked orientation). bind_local of a root was its world
+	// (parent=identity in glTF), which stays correct under an identity parent -> the bind pose / rendering
+	// is unchanged. JOINTS_0 never indexes the appended bone (it is not a skin joint).
 	{
 		const int synth_id = (int)out.bones.size();
 		for (cgltf_size i = 0; i < n; ++i)
@@ -737,8 +739,7 @@ bool FExternalVisual::GetSkinData(const char* full_path, ExtSkinData& out)
 		out.root = synth_id;
 	}
 
-	Msg("* [gltf] skin '%s': %u joints%s, root=%d", full_path, (u32)n,
-		(root_count != 1) ? " (+1 synth root)" : "", out.root);
+	Msg("* [gltf] skin '%s': %u joints (+1 synth identity root), root=%d", full_path, (u32)n, out.root);
 
 	cgltf_free(gltf);
 	xr_free(blob);
@@ -1535,11 +1536,22 @@ void FExternalSkinned::Render(float LOD)
 	// reads stale registers -> black / order-dependent output.
 	RCache.set_c("ext_uv_transform", 1.f, 1.f, 0.f, 0.f);
 	RCache.set_c("ext_uv_rot", 1.f, 0.f, 0.f, 0.f); // identity rotation (no KHR_texture_transform on skinned yet)
-	RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, 1.f);
+	RCache.set_c("ext_base_color", m_base_color.x, m_base_color.y, m_base_color.z, m_base_alpha); // .w = MASK alpha (4.3)
 	RCache.set_c("ext_mr_factor", 1.f, 1.f, 1.f, 1.f);
-	RCache.set_c("ext_alpha_cutoff", -1.f, 0.f, 0.f, 0.f); // opaque (no MASK clip on skinned yet)
+	RCache.set_c("ext_alpha_cutoff", m_alpha_cutoff, 0.f, 0.f, 0.f); // glTF MASK cutoff (-1 = no clip) (4.3)
 	RCache.set_c("ext_ao_strength", 0.f, 0.f, 0.f, 0.f);
 	CSkeletonX_ST::Render(LOD); // sbones_array upload + draw
+}
+
+void FExternalSkinned::Copy(dxRender_Visual* pFrom)
+{
+	CSkeletonX_ST::Copy(pFrom); // base-class skin data (bones, HW buffers, shader)
+	// CSkeletonX_ST::Copy doesn't know about our subclass material members, so copy them here -- else a
+	// spawned/cloned skinned model loses its baseColorFactor tint + MASK cutoff.
+	FExternalSkinned* src = (FExternalSkinned*)pFrom;
+	m_base_color   = src->m_base_color;
+	m_alpha_cutoff = src->m_alpha_cutoff;
+	m_base_alpha   = src->m_base_alpha;
 }
 
 void FExternalSkinned::CalcPoseBBox(Fbox& bb)
@@ -1674,6 +1686,8 @@ bool FExternalSkinned::LoadExternal(const char* short_name, const char* full_pat
 				if (!base_img && pbr.base_color_texture.texture && pbr.base_color_texture.texture->image)
 					base_img = pbr.base_color_texture.texture->image;
 				m_base_color.set(pbr.base_color_factor[0], pbr.base_color_factor[1], pbr.base_color_factor[2]);
+				m_base_alpha = pbr.base_color_factor[3];                                          // 4.3 skinned MASK
+				m_alpha_cutoff = (prim.material->alpha_mode == cgltf_alpha_mode_mask) ? prim.material->alpha_cutoff : -1.f;
 				base_color_captured = true;
 			}
 
