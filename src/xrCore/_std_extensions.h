@@ -227,6 +227,30 @@ IC int xr_strcmp(const char* S1, const char* S2)
 }
 #endif
 
+// --- model/visual name normalization (one source of truth) -------------------------------------
+// Shared by CModelPool (xrRender) and CSE_Visual (xrServerEntities) -- both already include this
+// header. Keeping the policy here (instead of duplicated at each call site) is what removes the
+// silent-divergence risk between the render and server layers.
+
+// Recognized external (non-native) model-format extensions. The native OGF format collapses to a bare
+// cache key (so "foo" and "foo.ogf" dedup to one pool entry); these formats keep their extension so an
+// external model keys -- and resolves -- distinctly from a same-named .ogf.
+IC bool xr_is_external_model_ext(const char* ext)
+{
+	return ext && (0 == stricmp(ext, ".glb") || 0 == stricmp(ext, ".gltf"));
+}
+
+// In-place: lowercase `name`, then strip its extension UNLESS it is an external model format.
+// Reproduces the engine's stock key normalization for native content byte-for-byte (OGF/extensionless
+// names collapse to bare) while preserving external extensions so they survive into the loader.
+IC void xr_normalize_model_name(char* name)
+{
+	xr_strlwr(name);
+	if (char* ext = strext(name))
+		if (!xr_is_external_model_ext(ext))
+			*ext = 0;
+}
+
 #ifndef _EDITOR
 #ifndef MASTER_GOLD
 

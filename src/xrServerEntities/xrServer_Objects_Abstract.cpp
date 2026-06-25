@@ -22,12 +22,9 @@ CSE_Visual::CSE_Visual(LPCSTR name)
 	{
 		string_path tmp;
 		xr_strcpy(tmp, name);
-		xr_strlwr(tmp);
-		// Keep recognized external extensions (.glb/.gltf) so the external model loader is
-		// reachable; strip everything else (the engine re-appends .ogf for the OGF path).
-		if (char* e = strext(tmp))
-			if (0 != xr_strcmp(e, ".glb") && 0 != xr_strcmp(e, ".gltf"))
-				*e = 0;
+		// lowercase + strip ext (external .glb/.gltf keep theirs so the external loader is reachable);
+		// stock OGF identity preserved. One shared policy: xrCore/_std_extensions.h.
+		xr_normalize_model_name(tmp);
 		visual_name = tmp;
 	}
 	else
@@ -45,11 +42,7 @@ void CSE_Visual::set_visual(LPCSTR name, bool load)
 {
 	string_path tmp;
 	xr_strcpy(tmp, name);
-	xr_strlwr(tmp);
-	// Keep recognized external extensions (.glb/.gltf); strip everything else (OGF path).
-	if (char* e = strext(tmp))
-		if (0 != xr_strcmp(e, ".glb") && 0 != xr_strcmp(e, ".gltf"))
-			*e = 0;
+	xr_normalize_model_name(tmp); // lowercase + strip ext (external keep theirs); xrCore/_std_extensions.h
 	visual_name = tmp;
 }
 

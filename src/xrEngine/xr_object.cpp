@@ -241,9 +241,10 @@ void CObject::Load(LPCSTR section)
 	{
 		string_path tmp;
 		xr_strcpy(tmp, pSettings->r_string(section, "visual"));
-		if (strext(tmp))
-			*strext(tmp) = 0;
-		xr_strlwr(tmp);
+		// lowercase + strip extension, but PRESERVE external model formats (.glb/.gltf) so they reach the
+		// external loader instead of being turned into a missing ".ogf". Native/OGF names normalize
+		// byte-identically to the original strip+lowercase. Shared policy: xrCore/_std_extensions.h.
+		xr_normalize_model_name(tmp);
 
 		cNameVisual_set(tmp);
 	}

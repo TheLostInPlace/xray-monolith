@@ -366,6 +366,12 @@
     <ClInclude Include="..\xrRender\FExternalKinematics.h">
       <Filter>Models\Visuals</Filter>
     </ClInclude>
+    <ClInclude Include="..\xrRender\IModelImporter.h">
+      <Filter>Models\Visuals</Filter>
+    </ClInclude>
+    <ClInclude Include="..\xrRender\OGFImporter.h">
+      <Filter>Models\Visuals</Filter>
+    </ClInclude>
     <ClInclude Include="..\xrRender\cgltf.h">
       <Filter>Models\Visuals</Filter>
     </ClInclude>
@@ -1009,6 +1015,9 @@
       <Filter>Models\Visuals</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRender\FExternalKinematics.cpp">
+      <Filter>Models\Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="..\xrRender\OGFImporter.cpp">
       <Filter>Models\Visuals</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRender\cgltf_impl.cpp">

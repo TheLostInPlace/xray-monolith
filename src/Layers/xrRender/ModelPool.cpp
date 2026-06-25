@@ -17,11 +17,13 @@
 #include "ParticleEffect.h"
 #include "FExternalVisual.h"
 #include "FExternalKinematics.h"
+#include "OGFImporter.h"
 #else
     #include "fmesh.h"
     #include "fvisual.h"
     #include "FExternalVisual.h"
     #include "FExternalKinematics.h"
+    #include "OGFImporter.h"
     #include "fprogressive.h"
     #include "ParticleEffect.h"
     #include "ParticleGroup.h"
@@ -98,10 +100,8 @@ dxRender_Visual* CModelPool::Instance_Create(u32 type)
 
 bool CModelPool::is_external_format(const char* name)
 {
-	if (!name) return false;
-	const char* e = strext(name);
-	if (!e) return false;
-	return (0 == stricmp(e, ".gltf")) || (0 == stricmp(e, ".glb"));
+	// single source of truth for the external-extension policy (xrCore/_std_extensions.h)
+	return name && xr_is_external_model_ext(strext(name));
 }
 
 dxRender_Visual* CModelPool::Instance_Create_External(const char* short_name, const char* full_path, bool assert)
@@ -167,39 +167,18 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 	{
 		if (!FS.exist(fn, "$level$", name) && !FS.exist(fn, "$game_meshes$", name))
 		{
-			// Not found as OGF. Several places in the visual pipeline strip the extension off a
-			// visual name (CSE_Visual, the CGameObject spawn, ModelPool cache keys), so an external
-			// model referenced as "foo.glb" can arrive here as bare "foo" + ".ogf". When the caller
-			// gave no extension and no .ogf exists, probe for external formats with the same base
-			// before failing. Existing OGF content is unaffected (it resolves above).
-			bool ext_found = false;
-			if (0 == strext(N))
-			{
-				const char* try_exts[] = {".glb", ".gltf"};
-				for (const char* ee : try_exts)
-				{
-					string_path alt;
-					strconcat(sizeof(alt), alt, N, ee);
-					if (FS.exist(fn, "$game_meshes$", alt) || FS.exist(fn, "$level$", alt))
-					{
-						xr_strcpy(name, sizeof(name), alt);
-						ext_found = true;
-						break;
-					}
-				}
-			}
-			if (!ext_found)
-			{
+			// Resolution is deterministic: the cache-key normalizer (xr_normalize_model_name) preserves
+			// the .glb/.gltf extension, so an external model arrives here already carrying it and resolves
+			// directly above -- no extension probing needed. This is stock OGF resolution, unchanged.
 #ifdef _EDITOR
-				Msg("!Can't find model file '%s'.",name);
+			Msg("!Can't find model file '%s'.",name);
                 return 0;
 #else
-				if (assert)
-					Debug.fatal(DEBUG_INFO, "Can't find model file '%s'.", name);
-				else
-					return nullptr;
+			if (assert)
+				Debug.fatal(DEBUG_INFO, "Can't find model file '%s'.", name);
+			else
+				return nullptr;
 #endif
-			}
 		}
 	}
 	else
@@ -207,36 +186,45 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 		xr_strcpy(fn, N);
 	}
 
-	// External (non-OGF) formats: dispatch to the dedicated loader instead of reading an
-	// OGF header. `fn` is the resolved OS path; `name` carries the original extension. This
-	// branch is reached only when the name kept a .gltf/.glb extension (see Create()), so the
-	// OGF path below runs unchanged for all existing content (additive, gated).
-	if (is_external_format(name))
+	// Format routing. External (non-OGF) models go to the dedicated importer; native OGF is read here.
+	// The cache-key normalizer (xr_normalize_model_name) preserves the .glb/.gltf extension, so `name`
+	// still carries it -> deterministic extension route. A GLB whose extension was somehow lost is still
+	// caught by its binary 'glTF' magic below (content-authoritative). OGF content hits neither and reads
+	// exactly as stock.
+	bool external = is_external_format(name);
+
+	IReader* data = nullptr;
+	if (!external)
 	{
-		V = Instance_Create_External(name, fn, assert);
-		if (!V)
-			return nullptr;
-		g_pGamePersistent->RegisterModel(V); // no-op for MT_EXTERNAL_STATIC; keeps parity with OGF path
-		if (allow_register)
-			V = Instance_Register(N, V);
-		return V;
+		data = FS.r_open(fn);
+		if (data->length() >= 4)
+		{
+			const char* p = (const char*)data->pointer(); // peek 4 bytes; pointer() does not advance the reader
+			external = (p[0] == 'g' && p[1] == 'l' && p[2] == 'T' && p[3] == 'F');
+		}
 	}
 
-	// Actual loading
+	if (external)
+	{
+		if (data) FS.r_close(data);
+		V = Instance_Create_External(name, fn, assert);
+	}
+	else
+	{
 #ifdef DEBUG
-	if (bLogging)		Msg		("- Uncached model loading: %s",fn);
+		if (bLogging)		Msg		("- Uncached model loading: %s",fn);
 #endif // DEBUG
+		OGFImporter ogf(*this);
+		V = ogf.Import(data, N, assert); // OGF decode (header -> Instance_Create -> Load); see IModelImporter
+		FS.r_close(data);
+	}
 
-	IReader* data = FS.r_open(fn);
-	ogf_header H;
-	data->r_chunk_safe(OGF_HEADER, &H, sizeof(H));
-	V = Instance_Create(H.type);
-	V->Load(N, data, 0);
-	FS.r_close(data);
-	g_pGamePersistent->RegisterModel(V);
+	if (!V)
+		return nullptr;
+	g_pGamePersistent->RegisterModel(V); // no-op for MT_EXTERNAL_STATIC; keeps parity across both paths
 
 	// Registration
-	if (allow_register) 
+	if (allow_register)
 		V = Instance_Register(N, V);
 
 	return V;
@@ -244,15 +232,11 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register, b
 
 dxRender_Visual* CModelPool::Instance_Load(LPCSTR name, IReader* data, BOOL allow_register)
 {
-	dxRender_Visual* V;
-
-	ogf_header H;
-	data->r_chunk_safe(OGF_HEADER, &H, sizeof(H));
-	V = Instance_Create(H.type);
-	V->Load(name, data, 0);
+	OGFImporter ogf(*this);
+	dxRender_Visual* V = ogf.Import(data, name, true); // same OGF decode as the file-based overload
 
 	// Registration
-	if (allow_register) 
+	if (allow_register)
 		V = Instance_Register(name, V);
 	return V;
 }
@@ -366,14 +350,10 @@ dxRender_Visual* CModelPool::Create(const char* name, IReader* data, bool assert
 	string_path low_name;
 	VERIFY(xr_strlen(name)<sizeof(low_name));
 	xr_strcpy(low_name, name);
-	strlwr(low_name);
-	// Strip the extension to form the cache key, EXCEPT for recognized external formats
-	// (.gltf/.glb): keeping their extension lets the format survive into Instance_Load and
-	// gives external files a distinct cache key from a same-named .ogf. OGF behavior is
-	// unchanged (no extension or .ogf -> stripped -> ".ogf" re-appended in Instance_Load).
-	if (char* _ext = strext(low_name))
-		if (!is_external_format(low_name))
-			*_ext = 0;
+	// Cache key = lowercase + strip extension, EXCEPT recognized external formats (.gltf/.glb) keep
+	// theirs so they survive into Instance_Load and key distinctly from a same-named .ogf. OGF behaviour
+	// is byte-identical to stock (no-ext/.ogf -> stripped). One shared policy: xrCore/_std_extensions.h.
+	xr_normalize_model_name(low_name);
 	
 	// 0. Search POOL
 	POOL_IT it = Pool.find(low_name);
@@ -418,14 +398,10 @@ dxRender_Visual* CModelPool::CreateChild(LPCSTR name, IReader* data)
 	string256 low_name;
 	VERIFY(xr_strlen(name)<256);
 	xr_strcpy(low_name, name);
-	strlwr(low_name);
-	// Strip the extension to form the cache key, EXCEPT for recognized external formats
-	// (.gltf/.glb): keeping their extension lets the format survive into Instance_Load and
-	// gives external files a distinct cache key from a same-named .ogf. OGF behavior is
-	// unchanged (no extension or .ogf -> stripped -> ".ogf" re-appended in Instance_Load).
-	if (char* _ext = strext(low_name))
-		if (!is_external_format(low_name))
-			*_ext = 0;
+	// Cache key = lowercase + strip extension, EXCEPT recognized external formats (.gltf/.glb) keep
+	// theirs so they survive into Instance_Load and key distinctly from a same-named .ogf. OGF behaviour
+	// is byte-identical to stock (no-ext/.ogf -> stripped). One shared policy: xrCore/_std_extensions.h.
+	xr_normalize_model_name(low_name);
 
 	// 1. Search for already loaded model
 	dxRender_Visual* Base = Instance_Find(low_name);
@@ -601,14 +577,10 @@ bool CModelPool::Exists(LPCSTR N)
 	string_path low_name;
 	VERIFY(xr_strlen(N) < sizeof(low_name));
 	xr_strcpy(low_name, N);
-	strlwr(low_name);
-	// Strip the extension to form the cache key, EXCEPT for recognized external formats
-	// (.gltf/.glb): keeping their extension lets the format survive into Instance_Load and
-	// gives external files a distinct cache key from a same-named .ogf. OGF behavior is
-	// unchanged (no extension or .ogf -> stripped -> ".ogf" re-appended in Instance_Load).
-	if (char* _ext = strext(low_name))
-		if (!is_external_format(low_name))
-			*_ext = 0;
+	// Cache key = lowercase + strip extension, EXCEPT recognized external formats (.gltf/.glb) keep
+	// theirs so they survive into Instance_Load and key distinctly from a same-named .ogf. OGF behaviour
+	// is byte-identical to stock (no-ext/.ogf -> stripped). One shared policy: xrCore/_std_extensions.h.
+	xr_normalize_model_name(low_name);
 
 	// Search pool and return early if exists
 	POOL_IT it = Pool.find(low_name);

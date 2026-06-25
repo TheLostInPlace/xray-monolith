@@ -471,6 +471,8 @@
     <ClInclude Include="..\xrRender\FVisual.h" />
     <ClInclude Include="..\xrRender\FExternalVisual.h" />
     <ClInclude Include="..\xrRender\FExternalKinematics.h" />
+    <ClInclude Include="..\xrRender\IModelImporter.h" />
+    <ClInclude Include="..\xrRender\OGFImporter.h" />
     <ClInclude Include="..\xrRender\cgltf.h" />
     <ClInclude Include="..\xrRender\gifPlayer.h" />
     <ClInclude Include="..\xrRender\HOM.h" />
@@ -654,6 +656,7 @@
     <ClCompile Include="..\xrRender\FVisual.cpp" />
     <ClCompile Include="..\xrRender\FExternalVisual.cpp" />
     <ClCompile Include="..\xrRender\FExternalKinematics.cpp" />
+    <ClCompile Include="..\xrRender\OGFImporter.cpp" />
     <ClCompile Include="..\xrRender\cgltf_impl.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
