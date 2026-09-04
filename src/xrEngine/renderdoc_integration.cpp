@@ -483,21 +483,30 @@ namespace
 		s_rdc_state.valid = false;
 	}
 
-	void rdc_log_capture(u32 index)
+	bool rdc_capture_path(u32 index, xr_string& path, u64& timestamp)
 	{
 		u32 length = 0;
-		u64 timestamp = 0;
 		if (!s_rdc_api->GetCapture(index, nullptr, &length, &timestamp) || !length)
+			return false;
+
+		xr_vector<char> buffer(size_t(length) + 1, 0);
+		if (!s_rdc_api->GetCapture(index, buffer.data(), &length, &timestamp))
+			return false;
+
+		path = buffer.data();
+		return true;
+	}
+
+	void rdc_log_capture(u32 index)
+	{
+		xr_string path;
+		u64 timestamp = 0;
+		if (!rdc_capture_path(index, path, timestamp))
 			return;
 
-		xr_vector<char> path(size_t(length) + 1, 0);
-		if (!s_rdc_api->GetCapture(index, path.data(), &length, &timestamp))
-			return;
-
-		// GetCapture hands back the absolute path already
-		s_rdc_latest_capture = path.data();
-		rdc_write_sidecar(path.data(), timestamp);
-		Msg("* [RDC] capture written %s  timestamp %llu", path.data(), timestamp);
+		s_rdc_latest_capture = path;
+		rdc_write_sidecar(path.c_str(), timestamp);
+		Msg("* [RDC] capture written %s  timestamp %llu", path.c_str(), timestamp);
 	}
 }
 
@@ -568,12 +577,23 @@ void renderdoc_poll_captures()
 		rdc_log_capture(s_rdc_seen_captures);
 }
 
-void renderdoc_open_replay_ui()
+void renderdoc_open_replay_ui(int index)
 {
 	if (!rdc_available())
 		return;
 
-	if (rdc_ui_connected() && s_rdc_version >= eRENDERDOC_API_Version_1_5_0)
+	xr_string wanted = s_rdc_latest_capture;
+	if (index >= 0)
+	{
+		u64 timestamp = 0;
+		if (!rdc_capture_path(u32(index), wanted, timestamp))
+		{
+			Msg("! [RDC] capture index %d does not exist", index);
+			return;
+		}
+	}
+
+	if (index < 0 && rdc_ui_connected() && s_rdc_version >= eRENDERDOC_API_Version_1_5_0)
 	{
 		const u32 shown = s_rdc_api->ShowReplayUI();
 		Msg("%s [RDC] connected ui raise %s", shown ? "*" : "~", shown ? "accepted" : "refused");
@@ -581,15 +601,68 @@ void renderdoc_open_replay_ui()
 	}
 
 	// The path rides a command line so quotes keep a spaced folder in one argument
-	const xr_string quoted = s_rdc_latest_capture.empty()
-		? xr_string()
-		: xr_string("\"" + s_rdc_latest_capture + "\"");
+	const xr_string quoted = wanted.empty() ? xr_string() : xr_string("\"" + wanted + "\"");
 	const char* const capture = quoted.empty() ? nullptr : quoted.c_str();
 	const u32 pid = s_rdc_api->LaunchReplayUI(1, capture);
 	if (pid)
 		Msg("* [RDC] replay ui launched pid %u %s", pid, capture ? capture : "with no capture");
 	else
 		Msg("! [RDC] replay ui launch failed");
+}
+
+void renderdoc_status()
+{
+	if (!rdc_available())
+		return;
+
+	Msg("* [RDC] api %d.%d.%d, overlay %s, captures %u, ui %s",
+		s_rdc_api_major, s_rdc_api_minor, s_rdc_api_patch,
+		(s_rdc_api->GetOverlayBits() & eRENDERDOC_Overlay_Enabled) ? "on" : "off",
+		s_rdc_api->GetNumCaptures(), rdc_ui_connected() ? "connected" : "not connected");
+
+	Msg("* [RDC] path template %s", s_rdc_api->GetCaptureFilePathTemplate());
+
+	Msg("* [RDC] callstacks %u, only actions %u, reference all resources %u, all command lists %u",
+		s_rdc_api->GetCaptureOptionU32(eRENDERDOC_Option_CaptureCallstacks),
+		s_rdc_api->GetCaptureOptionU32(eRENDERDOC_Option_CaptureCallstacksOnlyActions),
+		s_rdc_api->GetCaptureOptionU32(eRENDERDOC_Option_RefAllResources),
+		s_rdc_api->GetCaptureOptionU32(eRENDERDOC_Option_CaptureAllCmdLists));
+
+	string128 arm = {};
+	switch (s_rdc_arm_mode)
+	{
+	case rdc_arm_spike: xr_sprintf(arm, "spike over %.2f ms", s_rdc_arm_spike_ms); break;
+	case rdc_arm_marker: xr_sprintf(arm, "marker %s", s_rdc_arm_label); break;
+	default: xr_strcpy(arm, rdc_arm_mode_name()); break;
+	}
+
+	Msg("* [RDC] arm %s, armed capture %s, pending region %s, last frame %.2f ms", arm,
+		s_rdc_arm_capturing ? "running" : "idle",
+		s_rdc_region_name[0] ? s_rdc_region_label : "none", s_rdc_frame_ms);
+
+	Msg("* [RDC] rdoc_capture cannot start while armed because a capture is always in progress");
+}
+
+void renderdoc_list_captures()
+{
+	if (!rdc_available())
+		return;
+
+	const u32 count = s_rdc_api->GetNumCaptures();
+	if (!count)
+	{
+		Msg("* [RDC] no captures yet");
+		return;
+	}
+
+	// A capture deleted in the ui keeps its slot, so a path here may already be gone
+	for (u32 index = 0; index < count; ++index)
+	{
+		xr_string path;
+		u64 timestamp = 0;
+		if (rdc_capture_path(index, path, timestamp))
+			Msg("  %u  %llu  %s", index, timestamp, path.c_str());
+	}
 }
 
 void renderdoc_set_overlay(bool visible)

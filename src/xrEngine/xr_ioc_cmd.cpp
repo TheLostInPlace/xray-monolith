@@ -203,7 +203,30 @@ class CCC_RenderDocOpen : public CCC_RenderDoc
 public:
 	CCC_RenderDocOpen(LPCSTR N) : CCC_RenderDoc(N) {};
 
-	virtual void Execute(LPCSTR args) { renderdoc_open_replay_ui(); }
+	virtual void Execute(LPCSTR args)
+	{
+		// A non numeric argument would read as index zero and open the wrong capture
+		if (args && args[0] && (args[0] < '0' || args[0] > '9')) InvalidSyntax();
+		else renderdoc_open_replay_ui(Value(args, -1));
+	}
+
+	virtual void Info(TInfo& I) { xr_strcpy(I, "capture index to open, empty raises the ui"); }
+};
+
+class CCC_RenderDocStatus : public CCC_RenderDoc
+{
+public:
+	CCC_RenderDocStatus(LPCSTR N) : CCC_RenderDoc(N) {};
+
+	virtual void Execute(LPCSTR args) { renderdoc_status(); }
+};
+
+class CCC_RenderDocList : public CCC_RenderDoc
+{
+public:
+	CCC_RenderDocList(LPCSTR N) : CCC_RenderDoc(N) {};
+
+	virtual void Execute(LPCSTR args) { renderdoc_list_captures(); }
 };
 
 class CCC_RenderDocOverlay : public CCC_RenderDoc
@@ -1149,6 +1172,8 @@ void CCC_Register()
 	CMD1(CCC_RenderDocArm, "rdoc_arm");
 	CMD1(CCC_RenderDocDisarm, "rdoc_disarm");
 	CMD1(CCC_RenderDocOpen, "rdoc_open");
+	CMD1(CCC_RenderDocStatus, "rdoc_status");
+	CMD1(CCC_RenderDocList, "rdoc_list");
 	CMD1(CCC_RenderDocOverlay, "rdoc_overlay");
 
 	CMD3(CCC_Mask, "mt_particles", &psDeviceFlags, mtParticles);
