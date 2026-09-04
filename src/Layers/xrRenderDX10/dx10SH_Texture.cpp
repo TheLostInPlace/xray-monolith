@@ -14,6 +14,7 @@
 #include "../xrRender/dxRenderDeviceRender.h"
 
 #include "StateManager/dx10ShaderResourceStateCache.h"
+#include "dx10DebugName.h"
 
 #define		PRIORITY_HIGH	12
 #define		PRIORITY_NORMAL	8
@@ -647,6 +648,7 @@ void CTexture::Load()
 					seqDATA.push_back(pSurface);
 					m_seqSRView.push_back(0);
 					HW.pDevice->CreateShaderResourceView(seqDATA.back(), NULL, &m_seqSRView.back());
+					dx10_set_debug_name(seqDATA.back(), buffer);
 					flags.MemoryUsage += mem;
 				}
 			}
@@ -697,6 +699,10 @@ void CTexture::Load()
 		if (pSurface && bCreateView)
 			CHK_DX(HW.pDevice->CreateShaderResourceView(pSurface, NULL, &m_pSRView));
 	}
+
+	// surfaces handed over by surface_set never reach here so render targets keep their own name
+	dx10_set_debug_name(pSurface, *cName);
+
 	PostLoad();
 	flags.bLoading = false;
 	flags.bLoaded = true;

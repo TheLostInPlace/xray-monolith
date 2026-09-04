@@ -19,6 +19,7 @@
 
 #include "StateManager\dx10SamplerStateCache.h"
 #include "StateManager\dx10StateCache.h"
+#include "dx10DebugName.h"
 
 #ifndef _EDITOR
 void fill_vid_mode_list(CHW* _hw);
@@ -1504,10 +1505,12 @@ void CHW::UpdateViews()
             &pDepthStencil); // [out] Texture
 
     R_CHK(R);
+    dx10_set_debug_name(pDepthStencil, "base depth");
 
     //	Create Depth/stencil view
     R = pDevice->CreateDepthStencilView(pDepthStencil, NULL, &pBaseZB);
     R_CHK(R);
+    dx10_set_debug_name(pBaseZB, "base depth view");
 
     pDepthStencil->Release();
 }

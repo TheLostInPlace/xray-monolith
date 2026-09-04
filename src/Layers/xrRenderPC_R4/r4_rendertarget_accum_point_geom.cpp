@@ -304,7 +304,7 @@ void CRenderTarget::accum_point_geom_create()
 		//		CopyMemory				(pData,du_sphere_vertices,vCount*vSize);
 		//		g_accum_point_vb->Unlock	();
 
-		R_CHK(dx10BufferUtils::CreateVertexBuffer( &g_accum_point_vb, du_sphere_vertices, vCount*vSize ));
+		R_CHK(dx10BufferUtils::CreateVertexBuffer( &g_accum_point_vb, du_sphere_vertices, vCount*vSize, true, "accum point vb" ));
 	}
 
 	// Indices
@@ -317,7 +317,7 @@ void CRenderTarget::accum_point_geom_create()
 		//CopyMemory		(pData,du_sphere_faces,iCount*2);
 		//g_accum_point_ib->Unlock	();
 
-		R_CHK(dx10BufferUtils::CreateIndexBuffer( &g_accum_point_ib, du_sphere_faces, iCount*2));
+		R_CHK(dx10BufferUtils::CreateIndexBuffer( &g_accum_point_ib, du_sphere_faces, iCount*2, true, "accum point ib" ));
 	}
 }
 

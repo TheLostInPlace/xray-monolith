@@ -5,6 +5,10 @@
 #include "R_DStreams.h"
 
 #include "../xrRender/dxRenderDeviceRender.h"
+
+#if defined(USE_DX10) || defined(USE_DX11)
+#include "../xrRenderDX10/dx10DebugName.h"
+#endif
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
@@ -28,6 +32,7 @@ void _VertexStream::Create()
 
 	R_CHK(HW.pDevice->CreateBuffer ( &bufferDesc, 0, &pVB ));
 	HW.stats_manager.increment_stats_vb(pVB);
+	dx10_set_debug_name(pVB, "dynamic vb");
 #else	//	USE_DX10
 	R_CHK(HW.pDevice->CreateVertexBuffer ( mSize, D3DUSAGE_WRITEONLY|D3DUSAGE_DYNAMIC, 0, D3DPOOL_DEFAULT, &pVB, NULL));
 	HW.stats_manager.increment_stats_vb(pVB);
@@ -187,6 +192,7 @@ void _IndexStream::Create()
 
 	R_CHK(HW.pDevice->CreateBuffer( &bufferDesc, 0, &pIB ));
 	HW.stats_manager.increment_stats_ib(pIB);
+	dx10_set_debug_name(pIB, "dynamic ib");
 #else	//	USE_DX10
 	R_CHK(HW.pDevice->CreateIndexBuffer( mSize, D3DUSAGE_WRITEONLY|D3DUSAGE_DYNAMIC, D3DFMT_INDEX16, D3DPOOL_DEFAULT, &
 		pIB, NULL));

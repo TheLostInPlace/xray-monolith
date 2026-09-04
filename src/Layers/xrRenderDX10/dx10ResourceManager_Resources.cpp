@@ -18,6 +18,7 @@
 
 #include "../xrRenderDX10/dx10BufferUtils.h"
 #include "../xrRenderDX10/dx10ConstantBuffer.h"
+#include "../xrRenderDX10/dx10DebugName.h"
 
 #include "../xrRender/ShaderResourceTraits.h"
 
@@ -227,6 +228,10 @@ SVS* CResourceManager::_CreateVS(LPCSTR _name)
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
 
+		string_path dbgName;
+		strconcat(sizeof(dbgName), dbgName, name, ".vs");
+		dx10_set_debug_name(_vs->vs, dbgName);
+
 		return _vs;
 	}
 }
@@ -357,6 +362,10 @@ SPS* CResourceManager::_CreatePS(LPCSTR _name)
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
 
+		string_path dbgName;
+		strconcat(sizeof(dbgName), dbgName, name, ".ps");
+		dx10_set_debug_name(_ps->ps, dbgName);
+
 		return _ps;
 	}
 }
@@ -430,6 +439,10 @@ SGS* CResourceManager::_CreateGS(LPCSTR name)
 			!FAILED(_hr),
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
+
+		string_path dbgName;
+		strconcat(sizeof(dbgName), dbgName, name, ".gs");
+		dx10_set_debug_name(_gs->gs, dbgName);
 
 		return _gs;
 	}

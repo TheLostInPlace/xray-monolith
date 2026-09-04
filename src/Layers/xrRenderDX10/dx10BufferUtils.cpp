@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "dx10BufferUtils.h"
+#include "dx10DebugName.h"
 
 namespace dx10BufferUtils
 {
@@ -21,14 +22,22 @@ namespace dx10BufferUtils
 		return res;
 	}
 
-	HRESULT CreateVertexBuffer(ID3DVertexBuffer** ppBuffer, const void* pData, UINT DataSize, bool bImmutable)
+	HRESULT CreateVertexBuffer(ID3DVertexBuffer** ppBuffer, const void* pData, UINT DataSize, bool bImmutable,
+	                           const char* name)
 	{
-		return CreateBuffer(ppBuffer, pData, DataSize, bImmutable, false);
+		HRESULT res = CreateBuffer(ppBuffer, pData, DataSize, bImmutable, false);
+		if (SUCCEEDED(res))
+			dx10_set_debug_name(*ppBuffer, name);
+		return res;
 	}
 
-	HRESULT CreateIndexBuffer(ID3DIndexBuffer** ppBuffer, const void* pData, UINT DataSize, bool bImmutable)
+	HRESULT CreateIndexBuffer(ID3DIndexBuffer** ppBuffer, const void* pData, UINT DataSize, bool bImmutable,
+	                          const char* name)
 	{
-		return CreateBuffer(ppBuffer, pData, DataSize, bImmutable, true);
+		HRESULT res = CreateBuffer(ppBuffer, pData, DataSize, bImmutable, true);
+		if (SUCCEEDED(res))
+			dx10_set_debug_name(*ppBuffer, name);
+		return res;
 	}
 
 	HRESULT    CreateConstantBuffer( ID3DBuffer** ppBuffer, UINT DataSize)

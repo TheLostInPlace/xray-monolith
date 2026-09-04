@@ -3,6 +3,7 @@
 #ifdef USE_DX11
 
 #	include "ResourceManager.h"
+#	include "../xrRenderDX10/dx10DebugName.h"
 
 template <typename T>
 struct ShaderTypeTraits;
@@ -126,6 +127,10 @@ inline T* CResourceManager::CreateShader(const char* name)
 			!FAILED(_hr),
 			make_string("Shader compilation failed, check your log file for additional information.")
 		);
+
+		string_path dbgName;
+		strconcat(sizeof(dbgName), dbgName, name, ShaderTypeTraits<T>::GetShaderExt());
+		dx10_set_debug_name(sh->sh, dbgName);
 
 		return sh;
 	}

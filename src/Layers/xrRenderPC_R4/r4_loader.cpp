@@ -245,7 +245,9 @@ void CRender::LoadBuffers(CStreamReader* base_fs, BOOL _alternative)
 			//	Check if buffer is less then 2048 kb
 			BYTE* pData = xr_alloc<BYTE>(vCount * vSize);
 			fs->r(pData, vCount * vSize);
-			dx10BufferUtils::CreateVertexBuffer(&_VB[i], pData, vCount * vSize);
+			string64 dbgName;
+			xr_sprintf(dbgName, "level vb %d", i);
+			dx10BufferUtils::CreateVertexBuffer(&_VB[i], pData, vCount * vSize, true, dbgName);
 			xr_free(pData);
 
 			//			fs->advance			(vCount*vSize);
@@ -275,7 +277,9 @@ void CRender::LoadBuffers(CStreamReader* base_fs, BOOL _alternative)
 			//	Check if buffer is less then 2048 kb
 			BYTE* pData = xr_alloc<BYTE>(iCount * 2);
 			fs->r(pData, iCount * 2);
-			dx10BufferUtils::CreateIndexBuffer(&_IB[i], pData, iCount * 2);
+			string64 dbgName;
+			xr_sprintf(dbgName, "level ib %d", i);
+			dx10BufferUtils::CreateIndexBuffer(&_IB[i], pData, iCount * 2, true, dbgName);
 			xr_free(pData);
 
 			//			fs().advance		(iCount*2);

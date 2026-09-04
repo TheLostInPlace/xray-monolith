@@ -2,6 +2,7 @@
 #include "dx10ConstantBuffer.h"
 
 #include "dx10BufferUtils.h"
+#include "dx10DebugName.h"
 #include "../xrRender/dxRenderDeviceRender.h"
 
 dx10ConstantBuffer::~dx10ConstantBuffer()
@@ -48,6 +49,7 @@ dx10ConstantBuffer::dx10ConstantBuffer(ID3DShaderReflectionConstantBuffer* pTabl
 
 	R_CHK(dx10BufferUtils::CreateConstantBuffer(&m_pBuffer, Desc.Size));
 	VERIFY(m_pBuffer);
+	dx10_set_debug_name(m_pBuffer, Desc.Name);
 	m_pBufferData = xr_malloc(Desc.Size);
 	VERIFY(m_pBufferData);
 }
