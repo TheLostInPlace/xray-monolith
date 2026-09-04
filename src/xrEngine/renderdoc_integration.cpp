@@ -175,6 +175,31 @@ namespace
 		}
 	}
 
+	void rdc_wait_for_ui()
+	{
+		if (!Core.ParamsData.test(ECoreParams::rdoc_wait))
+			return;
+
+		enum
+		{
+			wait_limit_ms = 60000,
+			wait_step_ms = 100
+		};
+
+		Msg("* [RDC] holding startup for up to %d seconds so the replay ui can attach", wait_limit_ms / 1000);
+
+		int waited = 0;
+		while (waited < wait_limit_ms && s_rdc_api->IsTargetControlConnected() != 1)
+		{
+			Sleep(wait_step_ms);
+			waited += wait_step_ms;
+		}
+
+		const bool connected = rdc_ui_connected();
+		Msg("%s [RDC] startup resumed after %d ms, ui %s", connected ? "*" : "~", waited,
+			connected ? "connected" : "never attached");
+	}
+
 	bool rdc_ensure_directory(const char* path)
 	{
 		VerifyPath(path);
@@ -527,6 +552,8 @@ void renderdoc_initialize()
 		Msg("! [RDC] API negotiation failed, capture disabled");
 		return;
 	}
+
+	rdc_wait_for_ui();
 
 	// The engine keeps its own crash handler and minidump pipeline
 	s_rdc_api->UnloadCrashHandler();
