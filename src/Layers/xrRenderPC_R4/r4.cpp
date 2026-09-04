@@ -1997,7 +1997,9 @@ HRESULT CRender::shader_compile(
 	if (useGeneratedShaderCache)
 		source_crc = getShaderSourceCrc32(pSrcData, SrcDataLen, ::Render->getShaderPath());
 
-	if (FS.exist(file_name))
+	const bool shader_debug = Core.ParamsData.test(ECoreParams::rdoc_shaderdebug);
+
+	if (!shader_debug && FS.exist(file_name))
 	{
 		IReader* file = FS.r_open(file_name);
 		if (useGeneratedShaderCache)
@@ -2048,23 +2050,26 @@ HRESULT CRender::shader_compile(
 				"", //NULL, //LPCSTR pFileName,	//	NVPerfHUD bug workaround.
 				defines, &Includer, pFunctionName,
 				pTarget,
-				Flags, 0,
+				Flags | (shader_debug ? D3DCOMPILE_DEBUG : 0), 0,
 				&pShaderBuf,
 				&pErrorBuf
 			);
 
 		if (SUCCEEDED(_result))
 		{
-			IWriter* file = FS.w_open(file_name);
+			if (!shader_debug)
+			{
+				IWriter* file = FS.w_open(file_name);
 
-			u32 const crc = crc32(pShaderBuf->GetBufferPointer(), pShaderBuf->GetBufferSize());
+				u32 const crc = crc32(pShaderBuf->GetBufferPointer(), pShaderBuf->GetBufferSize());
 
-			if (useGeneratedShaderCache)
-				file->w_u32(source_crc);
+				if (useGeneratedShaderCache)
+					file->w_u32(source_crc);
 
-			file->w_u32(crc);
-			file->w(pShaderBuf->GetBufferPointer(), (u32)pShaderBuf->GetBufferSize());
-			FS.w_close(file);
+				file->w_u32(crc);
+				file->w(pShaderBuf->GetBufferPointer(), (u32)pShaderBuf->GetBufferSize());
+				FS.w_close(file);
+			}
 
 			_result = create_shader(pTarget, (DWORD*)pShaderBuf->GetBufferPointer(), (u32)pShaderBuf->GetBufferSize(),
 			                        file_name, result, o.disasm);

@@ -42,6 +42,7 @@ enum class ECoreParams : u8
 	rdoc_refall,
 	rdoc_cmdlists,
 	rdoc_callstacks,
+	rdoc_shaderdebug,
 
 	// Anomaly
 	no_dialog_header,
