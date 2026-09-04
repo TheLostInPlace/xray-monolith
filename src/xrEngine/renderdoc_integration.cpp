@@ -17,6 +17,31 @@ namespace
 	string_path s_rdc_capture_template = {};
 	xr_string s_rdc_latest_capture;
 
+	RENDERDOC_DevicePointer s_rdc_device = nullptr;
+	RENDERDOC_WindowHandle s_rdc_window = nullptr;
+
+	wchar_t s_rdc_region_name[64] = {};
+	string64 s_rdc_region_label = {};
+	u32 s_rdc_region_depth = 0;
+	bool s_rdc_region_capturing = false;
+
+	const char* const rdc_marker_names[] = {
+		"CRender_Render", "render_menu", "DEFER_PART0_SPLIT", "DEFER_TEST_LIGHT_VIS", "DEFER_PART1_SPLIT",
+		"DEFER_WALLMARKS", "MARK_MSAA_EDGES", "DEFER_RAIN", "DEFER_SUN", "DEFER_SELF_ILLUM",
+		"DEFER_LIGHT_NO_OCCQ", "DEFER_LIGHT_OCCQ", "DEFER_LIGHT_COMBINE", "phase_scene_prepare",
+		"SHADOWED_LIGHTS", "PHASE_VIS_UPDATE", "PHASE_CALC_POOLS", "GENERATE_SHMAPS", "RENDER_SHADOWS",
+		"UNSHADOWED_LIGHTS", "POINT_LIGHTS_ACCUM_UNSH", "SPOT_LIGHTS_ACCUM_UNSH", "SE_SUN_NEAR",
+		"SE_SUN_NEAR_MINMAX_GENERATE", "SE_SUN_NEAR_sub_phase", "Perform_lighting", "accum_direct_blend",
+		"accum_direct_f", "accum_direct_lum", "accum_direct_volumetric", "render_rain", "phase_ssfx_ao",
+		"phase_bloom", "phase_ssfx_bloom", "phase_combine", "combine_1", "combine_2", "phase_pp",
+		"phase_ssfx_ssr", "Forward_rendering", "render_distort_objects", "phase_sunshafts",
+		"phase_ssfx_fog_scattering", "phase_ssfx_motion_blur", "phase_blur", "phase_dof", "phase_lut",
+		"SMAA", "phase_combine_volumetric", "simulate_fluid", "render_fluid", "AttachFluidData",
+		"DetachAndSwapFluidData", "AdvectColorBFECC", "AdvectColor", "AdvectVelocity",
+		"ApplyVorticityConfinement", "ApplyExternalForces", "ComputeVelocityDivergence", "ComputePressure",
+		"ProjectVelocity", "Fluid_update_obstacles", "ProcessObstacles", "RenderObstacle",
+		"RenderDynamicObstacle"};
+
 	HMODULE rdc_acquire_module()
 	{
 		HMODULE module = GetModuleHandleW(L"renderdoc.dll");
@@ -178,6 +203,39 @@ namespace
 		rdc_annotate(key, eRENDERDOC_Float, width, &value);
 	}
 
+	// Marker names are ascii identifiers so a widening loop covers every one of them
+	bool rdc_widen(const char* text, wchar_t* out, size_t count)
+	{
+		size_t index = 0;
+		for (; text[index] && index + 1 < count; ++index)
+			out[index] = wchar_t(u8(text[index]));
+
+		out[index] = 0;
+		return index != 0 && !text[index];
+	}
+
+	void rdc_print_marker_names()
+	{
+		Msg("* [RDC] marker regions available to rdoc_capture_region");
+
+		string512 line = {};
+		for (const char* const name : rdc_marker_names)
+		{
+			if (xr_strlen(line) + xr_strlen(name) + 2 >= 96)
+			{
+				Msg("  %s", line);
+				line[0] = 0;
+			}
+
+			if (line[0])
+				xr_strcat(line, "  ");
+			xr_strcat(line, name);
+		}
+
+		if (line[0])
+			Msg("  %s", line);
+	}
+
 	void rdc_log_capture(u32 index)
 	{
 		u32 length = 0;
@@ -334,4 +392,78 @@ void renderdoc_set_active_window(void* device, void* window)
 		return;
 
 	s_rdc_api->SetActiveWindow(device, window);
+
+	s_rdc_device = device;
+	s_rdc_window = window;
+}
+
+bool g_rdoc_marker_watch = false;
+
+void renderdoc_capture_region(const char* marker)
+{
+	if (!marker || !marker[0])
+	{
+		rdc_print_marker_names();
+		return;
+	}
+
+	if (!rdc_available())
+		return;
+
+	if (!s_rdc_device || !s_rdc_window)
+	{
+		Msg("! [RDC] the renderer has no device yet, region capture needs a running frame");
+		return;
+	}
+
+	// A second request mid capture would reset the depth and leave the open one unmatched
+	if (s_rdc_region_capturing)
+	{
+		Msg("! [RDC] region %s is capturing already, wait for it to finish", s_rdc_region_label);
+		return;
+	}
+
+	if (!rdc_widen(marker, s_rdc_region_name, std::size(s_rdc_region_name)))
+	{
+		s_rdc_region_name[0] = 0;
+		Msg("! [RDC] marker name %s does not fit", marker);
+		return;
+	}
+
+	xr_strcpy(s_rdc_region_label, marker);
+	s_rdc_region_depth = 0;
+	s_rdc_region_capturing = false;
+	g_rdoc_marker_watch = true;
+	Msg("* [RDC] armed on marker %s, the next outermost region writes one capture", marker);
+}
+
+bool renderdoc_marker_begin(const wchar_t* name)
+{
+	if (!s_rdc_region_name[0] || wcscmp(name, s_rdc_region_name))
+		return false;
+
+	// Only the outermost instance opens, the inner ones just carry the depth
+	if (s_rdc_region_depth++ || s_rdc_api->IsFrameCapturing())
+		return true;
+
+	s_rdc_api->StartFrameCapture(s_rdc_device, s_rdc_window);
+	s_rdc_region_capturing = true;
+	Msg("* [RDC] region %s capture started", s_rdc_region_label);
+	return true;
+}
+
+void renderdoc_marker_end()
+{
+	if (--s_rdc_region_depth || !s_rdc_region_capturing)
+		return;
+
+	s_rdc_region_capturing = false;
+	s_rdc_region_name[0] = 0;
+	g_rdoc_marker_watch = false;
+
+	const u32 ended = s_rdc_api->EndFrameCapture(s_rdc_device, s_rdc_window);
+	if (ended)
+		Msg("* [RDC] region %s capture ended, index %u", s_rdc_region_label, s_rdc_api->GetNumCaptures() - 1);
+	else
+		Msg("! [RDC] region %s capture ended with no file", s_rdc_region_label);
 }

@@ -151,6 +151,17 @@ public:
 	virtual void Info(TInfo& I) { xr_sprintf(I, sizeof(I), "frame count in range [1,%d], 1 when omitted", frames_max); }
 };
 
+class CCC_RenderDocCaptureRegion : public CCC_RenderDoc
+{
+public:
+	// Marker names carry upper case so the console has to hand the argument over untouched
+	CCC_RenderDocCaptureRegion(LPCSTR N) : CCC_RenderDoc(N) { bLowerCaseArgs = FALSE; };
+
+	virtual void Execute(LPCSTR args) { renderdoc_capture_region(args); }
+
+	virtual void Info(TInfo& I) { xr_strcpy(I, "marker name to capture, empty lists the names"); }
+};
+
 class CCC_RenderDocOpen : public CCC_RenderDoc
 {
 public:
@@ -1098,6 +1109,7 @@ void CCC_Register()
 	CMD1(CCC_LoadCFG, "cfg_load");
 	CMD1(CCC_DumpCVars, "dump_cvar");
 	CMD1(CCC_RenderDocCapture, "rdoc_capture");
+	CMD1(CCC_RenderDocCaptureRegion, "rdoc_capture_region");
 	CMD1(CCC_RenderDocOpen, "rdoc_open");
 	CMD1(CCC_RenderDocOverlay, "rdoc_overlay");
 

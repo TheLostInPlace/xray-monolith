@@ -21,6 +21,7 @@ class dxPixEventWrapper
 {
     ID3DUserDefinedAnnotation* annotation;
     bool perf_event;
+    bool region;
 
 public:
     dxPixEventWrapper(LPCWSTR wszName, u32 color = 0);

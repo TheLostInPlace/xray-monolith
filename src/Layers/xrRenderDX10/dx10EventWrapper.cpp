@@ -67,7 +67,8 @@ namespace
     }
 }
 
-dxPixEventWrapper::dxPixEventWrapper(LPCWSTR wszName, u32 color) : annotation(nullptr), perf_event(false)
+dxPixEventWrapper::dxPixEventWrapper(LPCWSTR wszName, u32 color)
+    : annotation(nullptr), perf_event(false), region(false)
 {
     ID3DUserDefinedAnnotation* const listener = HW.pAnnotation;
     if (!listener)
@@ -76,6 +77,9 @@ dxPixEventWrapper::dxPixEventWrapper(LPCWSTR wszName, u32 color) : annotation(nu
     const dx10_marker_sink sink = dx10_sink(listener);
     if (sink == dx10_sink_none)
         return;
+
+    if (g_rdoc_marker_watch)
+        region = renderdoc_marker_begin(wszName);
 
     if (color && sink == dx10_sink_perf && dx10_perf().begin(color, wszName) >= 0)
     {
@@ -93,6 +97,9 @@ dxPixEventWrapper::~dxPixEventWrapper()
         dx10_perf().end();
     else if (annotation)
         annotation->EndEvent();
+
+    if (region)
+        renderdoc_marker_end();
 }
 
 extern Fvector4 ps_dev_param_1;

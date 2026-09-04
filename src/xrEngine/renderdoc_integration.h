@@ -10,3 +10,8 @@ ENGINE_API bool renderdoc_overlay_enabled();
 ENGINE_API void renderdoc_set_active_window(void* device, void* window);
 
 ENGINE_API void renderdoc_annotate_frame(const Fvector4* shader_params, u32 count);
+
+ENGINE_API extern bool g_rdoc_marker_watch;
+ENGINE_API void renderdoc_capture_region(const char* marker);
+ENGINE_API bool renderdoc_marker_begin(const wchar_t* name);
+ENGINE_API void renderdoc_marker_end();
