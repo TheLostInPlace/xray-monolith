@@ -162,6 +162,42 @@ public:
 	virtual void Info(TInfo& I) { xr_strcpy(I, "marker name to capture, empty lists the names"); }
 };
 
+class CCC_RenderDocArm : public CCC_RenderDoc
+{
+public:
+	CCC_RenderDocArm(LPCSTR N) : CCC_RenderDoc(N) { bLowerCaseArgs = FALSE; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		string64 mode = {};
+		if (!args || !args[0] || sscanf(args, "%63s", mode) != 1)
+		{
+			InvalidSyntax();
+			return;
+		}
+
+		// Only the mode word is scanned off the front, the rest is the value spaces and all
+		LPCSTR value = strstr(args, mode) + xr_strlen(mode);
+		while (*value == ' ' || *value == '\t')
+			++value;
+
+		if (!_stricmp(mode, "spike") && value[0]) renderdoc_arm_spike(float(atof(value)));
+		else if (!_stricmp(mode, "marker") && value[0]) renderdoc_arm_marker(value);
+		else if (!_stricmp(mode, "svp") && !value[0]) renderdoc_arm_second_viewport();
+		else InvalidSyntax();
+	}
+
+	virtual void Info(TInfo& I) { xr_strcpy(I, "spike <ms>, marker <name> or svp"); }
+};
+
+class CCC_RenderDocDisarm : public CCC_RenderDoc
+{
+public:
+	CCC_RenderDocDisarm(LPCSTR N) : CCC_RenderDoc(N) {};
+
+	virtual void Execute(LPCSTR args) { renderdoc_disarm(); }
+};
+
 class CCC_RenderDocOpen : public CCC_RenderDoc
 {
 public:
@@ -1110,6 +1146,8 @@ void CCC_Register()
 	CMD1(CCC_DumpCVars, "dump_cvar");
 	CMD1(CCC_RenderDocCapture, "rdoc_capture");
 	CMD1(CCC_RenderDocCaptureRegion, "rdoc_capture_region");
+	CMD1(CCC_RenderDocArm, "rdoc_arm");
+	CMD1(CCC_RenderDocDisarm, "rdoc_disarm");
 	CMD1(CCC_RenderDocOpen, "rdoc_open");
 	CMD1(CCC_RenderDocOverlay, "rdoc_overlay");
 

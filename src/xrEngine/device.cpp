@@ -94,6 +94,7 @@ BOOL CRenderDevice::Begin()
 		R_ASSERT(0);
 	}
 
+	renderdoc_frame_begin();
 	m_pRender->Begin();
 
 	FPU::m24r();
@@ -169,6 +170,7 @@ void CRenderDevice::End(void)
 	if (g_SASH.IsBenchmarkRunning())
 		g_SASH.DisplayFrame(Device.fTimeGlobal);
 	m_pRender->End();
+	renderdoc_frame_end();
 
 # ifdef INGAME_EDITOR
     if (load_finished && m_editor)

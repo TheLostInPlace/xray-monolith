@@ -25,6 +25,28 @@ namespace
 	u32 s_rdc_region_depth = 0;
 	bool s_rdc_region_capturing = false;
 
+	enum rdc_arm_mode
+	{
+		rdc_arm_off,
+		rdc_arm_spike,
+		rdc_arm_marker,
+		rdc_arm_second_viewport,
+	};
+
+	rdc_arm_mode s_rdc_arm_mode = rdc_arm_off;
+	wchar_t s_rdc_arm_name[64] = {};
+	string64 s_rdc_arm_label = {};
+	float s_rdc_arm_spike_ms = 0.0f;
+	bool s_rdc_arm_capturing = false;
+	bool s_rdc_arm_marker_seen = false;
+	bool s_rdc_arm_viewport_prev = false;
+	bool s_rdc_arm_viewport_pending = false;
+
+	// The measured window runs from the poll in frame move through present
+	u64 s_rdc_frame_begin = 0;
+	u64 s_rdc_frame_frequency = 0;
+	float s_rdc_frame_ms = 0.0f;
+
 	const char* const rdc_marker_names[] = {
 		"CRender_Render", "render_menu", "DEFER_PART0_SPLIT", "DEFER_TEST_LIGHT_VIS", "DEFER_PART1_SPLIT",
 		"DEFER_WALLMARKS", "MARK_MSAA_EDGES", "DEFER_RAIN", "DEFER_SUN", "DEFER_SELF_ILLUM",
@@ -236,6 +258,96 @@ namespace
 			Msg("  %s", line);
 	}
 
+	void rdc_update_marker_watch()
+	{
+		g_rdoc_marker_watch = s_rdc_region_name[0] != 0 || s_rdc_arm_mode == rdc_arm_marker;
+	}
+
+	const char* rdc_arm_mode_name()
+	{
+		switch (s_rdc_arm_mode)
+		{
+		case rdc_arm_spike: return "spike";
+		case rdc_arm_marker: return "marker";
+		case rdc_arm_second_viewport: return "svp";
+		default: return "off";
+		}
+	}
+
+	void rdc_frame_clock_start()
+	{
+		if (!s_rdc_frame_frequency)
+			QueryPerformanceFrequency(reinterpret_cast<LARGE_INTEGER*>(&s_rdc_frame_frequency));
+
+		QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&s_rdc_frame_begin));
+	}
+
+	void rdc_frame_clock_stop()
+	{
+		if (!s_rdc_frame_begin || !s_rdc_frame_frequency)
+			return;
+
+		u64 now = 0;
+		QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&now));
+		s_rdc_frame_ms = float(double(now - s_rdc_frame_begin) * 1000.0 / double(s_rdc_frame_frequency));
+	}
+
+	bool rdc_arm_ready()
+	{
+		if (!rdc_available())
+			return false;
+
+		if (s_rdc_version < eRENDERDOC_API_Version_1_4_0)
+		{
+			Msg("! [RDC] host api is older than 1.4.0, an armed capture cannot discard a frame");
+			return false;
+		}
+
+		if (!s_rdc_device || !s_rdc_window)
+		{
+			Msg("! [RDC] the renderer has no device yet, an armed capture needs a running frame");
+			return false;
+		}
+
+		return true;
+	}
+
+	void rdc_arm_clear(const char* reason)
+	{
+		s_rdc_arm_mode = rdc_arm_off;
+		s_rdc_arm_name[0] = 0;
+		s_rdc_arm_capturing = false;
+		s_rdc_arm_viewport_pending = false;
+		rdc_update_marker_watch();
+		Msg("* [RDC] frame arm disarmed, %s", reason);
+	}
+
+	void rdc_arm_report()
+	{
+		s_rdc_arm_viewport_prev = Device.m_SecondViewport.IsSVPActive();
+		s_rdc_arm_viewport_pending = false;
+		rdc_update_marker_watch();
+		Msg("~ [RDC] every frame is now recorded until the condition hits, expect a much lower frame rate");
+	}
+
+	bool rdc_arm_condition(bool viewport)
+	{
+		switch (s_rdc_arm_mode)
+		{
+		case rdc_arm_spike:
+			return s_rdc_frame_ms > s_rdc_arm_spike_ms;
+
+		case rdc_arm_marker:
+			return s_rdc_arm_marker_seen;
+
+		case rdc_arm_second_viewport:
+			return viewport && s_rdc_arm_viewport_pending;
+
+		default:
+			return false;
+		}
+	}
+
 	void rdc_log_capture(u32 index)
 	{
 		u32 length = 0;
@@ -311,6 +423,8 @@ void renderdoc_poll_captures()
 {
 	if (!s_rdc_api)
 		return;
+
+	rdc_frame_clock_start();
 
 	const u32 count = s_rdc_api->GetNumCaptures();
 	for (; s_rdc_seen_captures < count; ++s_rdc_seen_captures)
@@ -433,13 +547,16 @@ void renderdoc_capture_region(const char* marker)
 	xr_strcpy(s_rdc_region_label, marker);
 	s_rdc_region_depth = 0;
 	s_rdc_region_capturing = false;
-	g_rdoc_marker_watch = true;
+	rdc_update_marker_watch();
 	Msg("* [RDC] armed on marker %s, the next outermost region writes one capture", marker);
 }
 
 bool renderdoc_marker_begin(const wchar_t* name)
 {
-	if (!s_rdc_region_name[0] || wcscmp(name, s_rdc_region_name))
+	if (s_rdc_arm_mode == rdc_arm_marker && !_wcsicmp(name, s_rdc_arm_name))
+		s_rdc_arm_marker_seen = true;
+
+	if (!s_rdc_region_name[0] || _wcsicmp(name, s_rdc_region_name))
 		return false;
 
 	// Only the outermost instance opens, the inner ones just carry the depth
@@ -459,11 +576,113 @@ void renderdoc_marker_end()
 
 	s_rdc_region_capturing = false;
 	s_rdc_region_name[0] = 0;
-	g_rdoc_marker_watch = false;
+	rdc_update_marker_watch();
 
 	const u32 ended = s_rdc_api->EndFrameCapture(s_rdc_device, s_rdc_window);
 	if (ended)
 		Msg("* [RDC] region %s capture ended, index %u", s_rdc_region_label, s_rdc_api->GetNumCaptures() - 1);
 	else
 		Msg("! [RDC] region %s capture ended with no file", s_rdc_region_label);
+}
+
+void renderdoc_arm_spike(float milliseconds)
+{
+	if (!rdc_arm_ready())
+		return;
+
+	s_rdc_arm_mode = rdc_arm_spike;
+	s_rdc_arm_spike_ms = milliseconds;
+	rdc_arm_report();
+	Msg("* [RDC] armed on a frame longer than %.2f ms measured from frame move through present", milliseconds);
+}
+
+void renderdoc_arm_marker(const char* name)
+{
+	if (!rdc_arm_ready())
+		return;
+
+	if (!rdc_widen(name, s_rdc_arm_name, std::size(s_rdc_arm_name)))
+	{
+		s_rdc_arm_name[0] = 0;
+		Msg("! [RDC] marker name %s does not fit", name);
+		return;
+	}
+
+	xr_strcpy(s_rdc_arm_label, name);
+	s_rdc_arm_mode = rdc_arm_marker;
+	rdc_arm_report();
+	Msg("* [RDC] armed on a frame that reaches marker %s", name);
+}
+
+void renderdoc_arm_second_viewport()
+{
+	if (!rdc_arm_ready())
+		return;
+
+	s_rdc_arm_mode = rdc_arm_second_viewport;
+	rdc_arm_report();
+	Msg("* [RDC] armed on the first rendered viewport frame after the second viewport turns on");
+}
+
+void renderdoc_disarm()
+{
+	if (s_rdc_arm_mode == rdc_arm_off)
+	{
+		Msg("* [RDC] no frame arm is set");
+		return;
+	}
+
+	if (s_rdc_arm_capturing)
+		s_rdc_api->DiscardFrameCapture(s_rdc_device, s_rdc_window);
+
+	rdc_arm_clear("by request");
+}
+
+void renderdoc_frame_begin()
+{
+	if (s_rdc_arm_mode == rdc_arm_off)
+		return;
+
+	s_rdc_arm_marker_seen = false;
+
+	// Overlapping captures are undefined so a region capture keeps this one out
+	if (s_rdc_api->IsFrameCapturing())
+		return;
+
+	s_rdc_api->StartFrameCapture(s_rdc_device, s_rdc_window);
+	s_rdc_arm_capturing = true;
+}
+
+void renderdoc_frame_end()
+{
+	rdc_frame_clock_stop();
+
+	if (s_rdc_arm_mode == rdc_arm_off)
+		return;
+
+	// The viewport turning on is the edge, the first frame it renders after that is the catch
+	const bool active = Device.m_SecondViewport.IsSVPActive();
+	if (active && !s_rdc_arm_viewport_prev)
+		s_rdc_arm_viewport_pending = true;
+	s_rdc_arm_viewport_prev = active;
+
+	const bool keep = rdc_arm_condition(Device.m_SecondViewport.IsSVPFrame());
+
+	if (!s_rdc_arm_capturing)
+		return;
+
+	s_rdc_arm_capturing = false;
+	if (!keep)
+	{
+		s_rdc_api->DiscardFrameCapture(s_rdc_device, s_rdc_window);
+		return;
+	}
+
+	const u32 ended = s_rdc_api->EndFrameCapture(s_rdc_device, s_rdc_window);
+	if (ended)
+		Msg("* [RDC] frame kept on %s, index %u", rdc_arm_mode_name(), s_rdc_api->GetNumCaptures() - 1);
+	else
+		Msg("! [RDC] frame kept on %s ended with no file", rdc_arm_mode_name());
+
+	rdc_arm_clear("the condition hit");
 }

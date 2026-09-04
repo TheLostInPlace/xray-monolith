@@ -15,3 +15,10 @@ ENGINE_API extern bool g_rdoc_marker_watch;
 ENGINE_API void renderdoc_capture_region(const char* marker);
 ENGINE_API bool renderdoc_marker_begin(const wchar_t* name);
 ENGINE_API void renderdoc_marker_end();
+
+ENGINE_API void renderdoc_arm_spike(float milliseconds);
+ENGINE_API void renderdoc_arm_marker(const char* name);
+ENGINE_API void renderdoc_arm_second_viewport();
+ENGINE_API void renderdoc_disarm();
+ENGINE_API void renderdoc_frame_begin();
+ENGINE_API void renderdoc_frame_end();
