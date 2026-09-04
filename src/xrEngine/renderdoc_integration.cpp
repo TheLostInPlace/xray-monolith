@@ -133,9 +133,13 @@ namespace
 			RENDERDOC_CaptureOption option;
 			const char* name;
 		};
+		// The only actions variant does nothing until callstacks are on, so it follows them
 		static const option_key keys[] = {
 			{ECoreParams::rdoc_refall, eRENDERDOC_Option_RefAllResources, "reference all resources"},
-			{ECoreParams::rdoc_cmdlists, eRENDERDOC_Option_CaptureAllCmdLists, "capture all command lists"}};
+			{ECoreParams::rdoc_cmdlists, eRENDERDOC_Option_CaptureAllCmdLists, "capture all command lists"},
+			{ECoreParams::rdoc_callstacks, eRENDERDOC_Option_CaptureCallstacks, "capture callstacks"},
+			{ECoreParams::rdoc_callstacks, eRENDERDOC_Option_CaptureCallstacksOnlyActions,
+				"capture callstacks only for actions"}};
 
 		for (const option_key& key : keys)
 		{
