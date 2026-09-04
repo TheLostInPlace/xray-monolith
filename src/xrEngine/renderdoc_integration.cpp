@@ -4,6 +4,8 @@
 #include "renderdoc_integration.h"
 #include "renderdoc_app.h"
 #include "IGame_Level.h"
+#include "IGame_Persistent.h"
+#include "Environment.h"
 
 namespace
 {
@@ -46,6 +48,28 @@ namespace
 	u64 s_rdc_frame_begin = 0;
 	u64 s_rdc_frame_frequency = 0;
 	float s_rdc_frame_ms = 0.0f;
+
+	struct rdc_frame_state
+	{
+		u32 frame;
+		float time;
+		Fvector position;
+		Fvector direction;
+		float fov;
+		float aspect;
+		u32 width;
+		u32 height;
+		u32 viewport;
+		string_path level;
+		Fvector4 shader_params[8];
+		u32 shader_param_count;
+		bool valid;
+	};
+
+	rdc_frame_state s_rdc_state = {};
+	int s_rdc_api_major = 0;
+	int s_rdc_api_minor = 0;
+	int s_rdc_api_patch = 0;
 
 	const char* const rdc_marker_names[] = {
 		"CRender_Render", "render_menu", "DEFER_PART0_SPLIT", "DEFER_TEST_LIGHT_VIS", "DEFER_PART1_SPLIT",
@@ -352,6 +376,113 @@ namespace
 		}
 	}
 
+	void rdc_record_state(const Fvector4* shader_params, u32 count)
+	{
+		s_rdc_state.frame = Device.dwFrame;
+		s_rdc_state.time = Device.fTimeGlobal;
+		s_rdc_state.position = Device.vCameraPosition;
+		s_rdc_state.direction = Device.vCameraDirection;
+		s_rdc_state.fov = Device.fFOV;
+		s_rdc_state.aspect = Device.fASPECT;
+		s_rdc_state.width = Device.dwWidth;
+		s_rdc_state.height = Device.dwHeight;
+		s_rdc_state.viewport = Device.m_SecondViewport.IsSVPFrame() ? 1u : 0u;
+		xr_strcpy(s_rdc_state.level, g_pGameLevel ? g_pGameLevel->name().c_str() : "");
+
+		s_rdc_state.shader_param_count = 0;
+		for (u32 index = 0; index < count && shader_params; ++index)
+		{
+			if (s_rdc_state.shader_param_count >= std::size(s_rdc_state.shader_params))
+				break;
+
+			s_rdc_state.shader_params[s_rdc_state.shader_param_count++] = shader_params[index];
+		}
+
+		s_rdc_state.valid = true;
+	}
+
+	// SetCaptureTitle needs a running capture and lands on the next one that ends
+	void rdc_set_capture_title()
+	{
+		if (s_rdc_version < eRENDERDOC_API_Version_1_6_0 || !g_pGamePersistent)
+			return;
+
+		CEnvironment& environment = g_pGamePersistent->Environment();
+		const float game_time = environment.GetGameTime();
+		const int hours = iFloor(game_time / 3600.0f) % 24;
+		const int minutes = iFloor(game_time / 60.0f) % 60;
+
+		string256 title = {};
+		xr_sprintf(title, "%s  %s  %02d:%02d  %.1f %.1f %.1f",
+			s_rdc_state.level[0] ? s_rdc_state.level : "no level",
+			environment.GetWeather().c_str() ? environment.GetWeather().c_str() : "no weather",
+			hours, minutes,
+			s_rdc_state.position.x, s_rdc_state.position.y, s_rdc_state.position.z);
+
+		s_rdc_api->SetCaptureTitle(title);
+	}
+
+	xr_string rdc_escape_json(const char* text)
+	{
+		xr_string escaped;
+		for (const char* cursor = text; *cursor; ++cursor)
+		{
+			if (*cursor == '\\' || *cursor == '"')
+				escaped += '\\';
+			escaped += *cursor;
+		}
+
+		return escaped;
+	}
+
+	// The engine writer lowercases and clamps a path, the capture path has to survive both
+	void rdc_write_sidecar(const char* path, u64 timestamp)
+	{
+		if (!s_rdc_state.valid)
+			return;
+
+		wchar_t sidecar[MAX_PATH * 4] = {};
+		const int widened =
+			MultiByteToWideChar(CP_UTF8, 0, path, -1, sidecar, int(std::size(sidecar)) - 8);
+
+		FILE* file = nullptr;
+		if (!widened || wcscat_s(sidecar, L".json") || _wfopen_s(&file, sidecar, L"wb") || !file)
+		{
+			Msg("~ [RDC] sidecar for %s could not be written", path);
+			return;
+		}
+
+		fprintf(file, "{\n");
+		fprintf(file, "  \"capture\": \"%s\",\n", rdc_escape_json(path).c_str());
+		fprintf(file, "  \"timestamp\": %llu,\n", timestamp);
+		fprintf(file, "  \"api\": \"%d.%d.%d\",\n", s_rdc_api_major, s_rdc_api_minor, s_rdc_api_patch);
+		fprintf(file, "  \"frame\": %u,\n", s_rdc_state.frame);
+		fprintf(file, "  \"time\": %f,\n", s_rdc_state.time);
+		fprintf(file, "  \"camera_position\": [%f, %f, %f],\n",
+			s_rdc_state.position.x, s_rdc_state.position.y, s_rdc_state.position.z);
+		fprintf(file, "  \"camera_direction\": [%f, %f, %f],\n",
+			s_rdc_state.direction.x, s_rdc_state.direction.y, s_rdc_state.direction.z);
+		fprintf(file, "  \"camera_fov\": %f,\n", s_rdc_state.fov);
+		fprintf(file, "  \"camera_aspect\": %f,\n", s_rdc_state.aspect);
+		fprintf(file, "  \"render_width\": %u,\n", s_rdc_state.width);
+		fprintf(file, "  \"render_height\": %u,\n", s_rdc_state.height);
+		fprintf(file, "  \"level\": \"%s\",\n", rdc_escape_json(s_rdc_state.level).c_str());
+		fprintf(file, "  \"svp\": %u,\n", s_rdc_state.viewport);
+		fprintf(file, "  \"shader_param\": [\n");
+
+		for (u32 index = 0; index < s_rdc_state.shader_param_count; ++index)
+		{
+			const Fvector4& value = s_rdc_state.shader_params[index];
+			fprintf(file, "    [%f, %f, %f, %f]%s\n", value.x, value.y, value.z, value.w,
+				index + 1 < s_rdc_state.shader_param_count ? "," : "");
+		}
+
+		fprintf(file, "  ]\n}\n");
+		fclose(file);
+
+		s_rdc_state.valid = false;
+	}
+
 	void rdc_log_capture(u32 index)
 	{
 		u32 length = 0;
@@ -365,6 +496,7 @@ namespace
 
 		// GetCapture hands back the absolute path already
 		s_rdc_latest_capture = path.data();
+		rdc_write_sidecar(path.data(), timestamp);
 		Msg("* [RDC] capture written %s  timestamp %llu", path.data(), timestamp);
 	}
 }
@@ -394,11 +526,9 @@ void renderdoc_initialize()
 	rdc_prepare_capture_path();
 	s_rdc_seen_captures = s_rdc_api->GetNumCaptures();
 
-	int major = 0;
-	int minor = 0;
-	int patch = 0;
-	s_rdc_api->GetAPIVersion(&major, &minor, &patch);
-	Msg("* [RDC] capture API %d.%d.%d ready, ui %s, annotations %s", major, minor, patch,
+	s_rdc_api->GetAPIVersion(&s_rdc_api_major, &s_rdc_api_minor, &s_rdc_api_patch);
+	Msg("* [RDC] capture API %d.%d.%d ready, ui %s, annotations %s",
+		s_rdc_api_major, s_rdc_api_minor, s_rdc_api_patch,
 		rdc_ui_connected() ? "connected" : "not connected",
 		s_rdc_annotations ? "available" : "unavailable");
 	Msg("* [RDC] captures land in %s_frameN.rdc", s_rdc_capture_template);
@@ -478,7 +608,22 @@ bool renderdoc_overlay_enabled()
 
 void renderdoc_annotate_frame(const Fvector4* shader_params, u32 count)
 {
-	if (!s_rdc_annotations || s_rdc_api->IsFrameCapturing() != 1)
+	if (!s_rdc_api)
+		return;
+
+	// A region capture opens later in the frame so an armed marker records the state up front
+	const bool capturing = s_rdc_api->IsFrameCapturing() == 1;
+	if (!capturing && !g_rdoc_marker_watch)
+		return;
+
+	rdc_record_state(shader_params, count);
+
+	if (!capturing)
+		return;
+
+	rdc_set_capture_title();
+
+	if (!s_rdc_annotations)
 		return;
 
 	rdc_annotate("xray.frame.number", Device.dwFrame);
@@ -569,6 +714,7 @@ bool renderdoc_marker_begin(const wchar_t* name)
 
 	s_rdc_api->StartFrameCapture(s_rdc_device, s_rdc_window);
 	s_rdc_region_capturing = true;
+	rdc_set_capture_title();
 	Msg("* [RDC] region %s capture started", s_rdc_region_label);
 	return true;
 }
