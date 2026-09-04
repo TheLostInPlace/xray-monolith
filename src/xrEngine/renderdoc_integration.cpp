@@ -522,6 +522,9 @@ void renderdoc_initialize()
 	// The engine keeps its own crash handler and minidump pipeline
 	s_rdc_api->UnloadCrashHandler();
 
+	s_rdc_api->SetCaptureKeys(nullptr, 0);
+	Msg("* [RDC] capture hotkeys disabled, F12 stays the engine screenshot and rdoc_capture is the trigger");
+
 	rdc_apply_capture_options();
 	rdc_prepare_capture_path();
 	s_rdc_seen_captures = s_rdc_api->GetNumCaptures();
