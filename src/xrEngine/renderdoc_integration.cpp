@@ -72,8 +72,10 @@ namespace
 	int s_rdc_api_patch = 0;
 
 	const char* const rdc_marker_names[] = {
-		"CRender_Render", "render_menu", "DEFER_PART0_SPLIT", "DEFER_TEST_LIGHT_VIS", "DEFER_PART1_SPLIT",
-		"DEFER_WALLMARKS", "MARK_MSAA_EDGES", "DEFER_RAIN", "DEFER_SUN", "DEFER_SELF_ILLUM",
+		"CRender_Render", "render_menu", "main viewport", "second viewport", "DEFER_PART0_SPLIT",
+		"static geometry", "dynamic geometry", "DEFER_TEST_LIGHT_VIS", "DEFER_PART1_SPLIT", "hud",
+		"lods", "details", "DEFER_WALLMARKS", "MARK_MSAA_EDGES", "DEFER_RAIN", "DEFER_SUN",
+		"sun cascade 0", "sun cascade 1", "sun cascade 2", "sun cascade", "DEFER_SELF_ILLUM", "lights",
 		"DEFER_LIGHT_NO_OCCQ", "DEFER_LIGHT_OCCQ", "DEFER_LIGHT_COMBINE", "phase_scene_prepare",
 		"SHADOWED_LIGHTS", "PHASE_VIS_UPDATE", "PHASE_CALC_POOLS", "GENERATE_SHMAPS", "RENDER_SHADOWS",
 		"UNSHADOWED_LIGHTS", "POINT_LIGHTS_ACCUM_UNSH", "SPOT_LIGHTS_ACCUM_UNSH", "SE_SUN_NEAR",

@@ -65,6 +65,10 @@ extern u32 g_r;
 void CRender::Render()
 {
 	PIX_EVENT_C(CRender_Render, dx10_marker_frame);
+
+	dxPixEventWrapper viewportEvent(
+		Device.m_SecondViewport.IsSVPFrame() ? L"second viewport" : L"main viewport", dx10_marker_frame);
+
 	dx10_annotate_frame();
 
 	rmNormal();
@@ -160,8 +164,14 @@ void CRender::Render()
 		PIX_EVENT_C(DEFER_PART0_SPLIT, dx10_marker_gbuffer);
 		// level, SPLIT
 		Target->phase_scene_begin();
-		GMBase.r_dsgraph_render_static(0);
-		GMBase.r_dsgraph_render_dynamic(0);
+		{
+			dxPixEventWrapper staticEvent(L"static geometry", dx10_marker_gbuffer);
+			GMBase.r_dsgraph_render_static(0);
+		}
+		{
+			dxPixEventWrapper dynamicEvent(L"dynamic geometry", dx10_marker_gbuffer);
+			GMBase.r_dsgraph_render_dynamic(0);
+		}
 		Target->disable_aniso();
 	}
 
@@ -190,10 +200,20 @@ void CRender::Render()
 		PIX_EVENT_C(DEFER_PART1_SPLIT, dx10_marker_gbuffer);
 		// level
 		Target->phase_scene_begin();
-		GMBase.r_dsgraph_capture_hud();
-		GMBase.r_dsgraph_render_hud();
-		GMBase.r_dsgraph_render_lods(true,true);
-		if (Details) Details->Render();
+		{
+			dxPixEventWrapper hudEvent(L"hud", dx10_marker_gbuffer);
+			GMBase.r_dsgraph_capture_hud();
+			GMBase.r_dsgraph_render_hud();
+		}
+		{
+			dxPixEventWrapper lodsEvent(L"lods", dx10_marker_gbuffer);
+			GMBase.r_dsgraph_render_lods(true,true);
+		}
+		if (Details)
+		{
+			dxPixEventWrapper detailsEvent(L"details", dx10_marker_gbuffer);
+			Details->Render();
+		}
 		Target->phase_scene_end();
 	}
 
@@ -314,17 +334,21 @@ void CRender::Render()
 		GMBase.r_dsgraph_render_emissive(true, false);
 	}
 
-	// Lighting, non dependant on OCCQ
 	{
-		PIX_EVENT_C(DEFER_LIGHT_NO_OCCQ, dx10_marker_lights);
-		Target->phase_accumulator();
-		render_lights(LP_normal);
-	}
+		PIX_EVENT_C(lights, dx10_marker_lights);
 
-	// Lighting, dependant on OCCQ
-	{
-		PIX_EVENT_C(DEFER_LIGHT_OCCQ, dx10_marker_lights);
-		render_lights(LP_pending);
+		// Lighting, non dependant on OCCQ
+		{
+			PIX_EVENT_C(DEFER_LIGHT_NO_OCCQ, dx10_marker_lights);
+			Target->phase_accumulator();
+			render_lights(LP_normal);
+		}
+
+		// Lighting, dependant on OCCQ
+		{
+			PIX_EVENT_C(DEFER_LIGHT_OCCQ, dx10_marker_lights);
+			render_lights(LP_pending);
+		}
 	}
 
 	{

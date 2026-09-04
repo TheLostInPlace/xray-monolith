@@ -72,7 +72,15 @@ void CRender::render_sun_cascades()
 		m_sun_cascades[m_sun_cascades.size() - 1].reset_chain = true;
 
 	for (u32 i = 0; i < m_sun_cascades.size(); ++i)
+	{
+#ifdef USE_DX11
+		// R2 and R3 share this file so the marker stays out of their build
+		static LPCWSTR const cascade_marker[] = {L"sun cascade 0", L"sun cascade 1", L"sun cascade 2"};
+		const u32 marker_count = sizeof(cascade_marker) / sizeof(cascade_marker[0]);
+		dxPixEventWrapper cascadeEvent(i < marker_count ? cascade_marker[i] : L"sun cascade", dx10_marker_lights);
+#endif
 		render_sun_cascade(i);
+	}
 
 	if (b_need_to_render_sunshafts)
 		m_sun_cascades[m_sun_cascades.size() - 1].reset_chain = last_cascade_chain_mode;
