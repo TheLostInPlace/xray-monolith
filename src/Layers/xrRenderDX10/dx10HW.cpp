@@ -645,6 +645,15 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
     // create swapchain
     R_CHK(m_pFactory->CreateSwapChainForHwnd(pDevice, m_hWnd, &sd, &sd_fullscreen, NULL, &m_pSwapChain));
 
+    // suppresses dxgi's own alt enter mode switch so only the engine screenmode path changes fullscreen
+    if (ps_r4_hdr10_on)
+    {
+        const HRESULT hr_mwa = m_pFactory->MakeWindowAssociation(m_hWnd, DXGI_MWA_NO_ALT_ENTER);
+        Msg("* hdr10: dxgi alt enter %s, hr 0x%08x",
+            SUCCEEDED(hr_mwa) ? "suppressed" : "left at the dxgi default",
+            (unsigned)hr_mwa);
+    }
+
     // setup colorspace
     // HDR10 (U10 output) -> DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
     // SDR   (U8 output)  -> DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709
@@ -652,34 +661,11 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
     IDXGISwapChain3* swapchain3;
     R_CHK(m_pSwapChain->QueryInterface(&swapchain3));
 
-    LPCSTR hdr10_reason = "disabled_by_cvar";
-    const bool hdr10_force_sdr = !!strstr(Core.Params, "--hdr10-force-sdr");
-
-    if (ps_r4_hdr10_on) {
-        UINT color_space_supported = 0;
-        R_CHK(swapchain3->CheckColorSpaceSupport(
-            DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
-            &color_space_supported));
-
-        if (!hdr10_force_sdr && (color_space_supported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT)) {
-            R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
-            m_HDR10Achieved = true;
-            hdr10_reason = "present_supported";
-            QueryHDR10Display();
-        } else {
-            Log("HDR10 color space unsupported, failed to enable HDR10 output");
-            R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709));
-            m_HDR10Achieved = false;
-            hdr10_reason = hdr10_force_sdr ? "forced_sdr" : "present_unsupported";
-        }
-    } else {
+    // the hdr arm is applied from update views instead so it survives the mode transition below
+    if (!ps_r4_hdr10_on) {
         R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709));
+        Msg("[HDR10] achieved=0 colourspace=G22_NONE_P709 reason=disabled_by_cvar");
     }
-
-    Msg("[HDR10] achieved=%d colourspace=%s reason=%s",
-        m_HDR10Achieved ? 1 : 0,
-        m_HDR10Achieved ? "G2084_NONE_P2020" : "G22_NONE_P709",
-        hdr10_reason);
 
     _RELEASE(swapchain3);
 
@@ -916,7 +902,9 @@ void CHW::Reset(HWND hwnd)
     mode.Height      = cd.Height;
     mode.Format      = cd.Format;
     mode.RefreshRate = cd_fs.RefreshRate;
-    CHK_DX(m_pSwapChain->ResizeTarget(&mode));
+    HRESULT hr_target = m_pSwapChain->ResizeTarget(&mode);
+    if (FAILED(hr_target))
+        Msg("! swapchain: ResizeTarget failed on reset, hr 0x%08x", (unsigned)hr_target);
 #elif defined(USE_DX10)
     CHK_DX(m_pSwapChain->ResizeTarget(&desc));
 #endif
@@ -937,12 +925,14 @@ void CHW::Reset(HWND hwnd)
         flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     }
 
-    CHK_DX(m_pSwapChain->ResizeBuffers(
+    HRESULT hr_resize = m_pSwapChain->ResizeBuffers(
         cd.BufferCount,
         cd.Width,
         cd.Height,
         cd.Format,
-        flags));
+        flags);
+    if (FAILED(hr_resize))
+        Msg("! swapchain: ResizeBuffers failed on reset, hr 0x%08x", (unsigned)hr_resize);
 #elif defined(USE_DX10)
 	CHK_DX(m_pSwapChain->ResizeBuffers(
 		cd.BufferCount,
@@ -1186,12 +1176,14 @@ void CHW::OnAppActivate()
             flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
         }
 
-        m_pSwapChain->ResizeBuffers(
+        HRESULT hr_resize = m_pSwapChain->ResizeBuffers(
             cd.BufferCount,
             cd.Width,
             cd.Height,
             cd.Format,
             flags);
+        if (FAILED(hr_resize))
+            Msg("! swapchain: ResizeBuffers failed on app activate, hr 0x%08x", (unsigned)hr_resize);
 
         UpdateViews();
 #endif
@@ -1232,12 +1224,14 @@ void CHW::OnAppDeactivate()
             flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
         }
 
-        m_pSwapChain->ResizeBuffers(
+        HRESULT hr_resize = m_pSwapChain->ResizeBuffers(
             cd.BufferCount,
             cd.Width,
             cd.Height,
             cd.Format,
             flags);
+        if (FAILED(hr_resize))
+            Msg("! swapchain: ResizeBuffers failed on app deactivate, hr 0x%08x", (unsigned)hr_resize);
 
         UpdateViews();
 #endif
@@ -1532,6 +1526,84 @@ void fill_vid_mode_list(CHW* _hw)
     */
 }
 
+void CHW::ApplyColorSpace(LPCSTR site)
+{
+#if defined(USE_DX11)
+    if (!m_pSwapChain || !ps_r4_hdr10_on)
+    {
+        m_HDR10Achieved = false;
+        return;
+    }
+
+    IDXGISwapChain3* swapchain3 = nullptr;
+    if (FAILED(m_pSwapChain->QueryInterface(&swapchain3)) || !swapchain3)
+    {
+        m_HDR10Achieved = false;
+        Msg("! hdr10: IDXGISwapChain3 unavailable on %s, output stays sdr", site);
+        return;
+    }
+
+    // forced fallback switch for exercising the refused path on hardware that accepts pq
+    const bool force_sdr = !!strstr(Core.Params, "--hdr10-force-sdr");
+
+    LPCSTR  reason   = force_sdr ? "forced_sdr" : "present_unsupported";
+    bool    achieved = false;
+
+    UINT color_space_supported = 0;
+    HRESULT hr = swapchain3->CheckColorSpaceSupport(
+        DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+        &color_space_supported);
+
+    if (FAILED(hr))
+    {
+        reason = "check_failed";
+        Msg("! hdr10: CheckColorSpaceSupport failed on %s, hr 0x%08x", site, (unsigned)hr);
+    }
+    else if (!force_sdr && (color_space_supported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))
+    {
+        hr = swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+        if (SUCCEEDED(hr))
+        {
+            achieved = true;
+            reason   = "present_supported";
+            QueryHDR10Display();
+        }
+        else
+        {
+            reason = "set_failed";
+            Msg("! hdr10: SetColorSpace1 PQ BT.2020 failed on %s, hr 0x%08x", site, (unsigned)hr);
+        }
+    }
+    else
+    {
+        Log("HDR10 color space unsupported, failed to enable HDR10 output");
+    }
+
+    if (!achieved)
+    {
+        hr = swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+        if (FAILED(hr))
+            Msg("! hdr10: SetColorSpace1 sdr fallback failed on %s, hr 0x%08x", site, (unsigned)hr);
+    }
+
+    _RELEASE(swapchain3);
+
+    m_HDR10Achieved = achieved;
+
+    Msg("* hdr10: color space %s %s on %s",
+        achieved ? "G2084 P2020" : "G22 P709",
+        achieved ? "granted" : "refused",
+        site);
+    Msg("[HDR10] achieved=%d colourspace=%s reason=%s",
+        achieved ? 1 : 0,
+        achieved ? "G2084_NONE_P2020" : "G22_NONE_P709",
+        reason);
+#else
+    (void)site;
+    m_HDR10Achieved = false;
+#endif
+}
+
 void CHW::UpdateViews()
 {
 #if defined(USE_DX11)
@@ -1586,5 +1658,7 @@ void CHW::UpdateViews()
     R_CHK(R);
 
     pDepthStencil->Release();
+
+    ApplyColorSpace("update views");
 }
 #endif

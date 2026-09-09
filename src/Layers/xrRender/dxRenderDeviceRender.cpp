@@ -345,6 +345,15 @@ u32 dxRenderDeviceRender::GetCacheStatPolys()
 	return RCache.stat.polys;
 }
 
+extern bool use_reshade;
+extern bool reshade_publish_color_space(bool hdr10);
+extern unsigned reshade_runtime_generation();
+
+// -1 nothing declared yet, 0 declared unknown, 1 declared hdr10_st2084
+static int s_reshade_color_space = -1;
+// runtime generation the declaration above was made against
+static unsigned s_reshade_runtime_gen = 0;
+
 void dxRenderDeviceRender::Begin()
 {
 #if !defined(USE_DX10) && !defined(USE_DX11)
@@ -355,6 +364,26 @@ void dxRenderDeviceRender::Begin()
 	RCache.set_CullMode(CULL_CW);
 	RCache.set_CullMode(CULL_CCW);
 	if (HW.Caps.SceneMode) overdrawBegin();
+
+	// the achieved colour space reaches reshade once its runtime is up and again after every reshade re init
+	if (use_reshade && (HW.m_HDR10Achieved || s_reshade_color_space > 0))
+	{
+		const unsigned gen  = reshade_runtime_generation();
+		const int      want = HW.m_HDR10Achieved ? 1 : 0;
+
+		if (gen && (gen != s_reshade_runtime_gen || want != s_reshade_color_space))
+		{
+			if (reshade_publish_color_space(want == 1))
+			{
+				s_reshade_color_space = want;
+				s_reshade_runtime_gen = gen;
+				if (want == 1)
+					Msg("* hdr10: reshade color space set to hdr10_st2084");
+				else
+					Msg("* hdr10: reshade color space released to unknown");
+			}
+		}
+	}
 }
 
 void dxRenderDeviceRender::Clear()
@@ -597,5 +626,12 @@ bool dxRenderDeviceRender::SwitchOutputMonitor(HMONITOR hTargetMon, HWND hWnd,
 
 #else
     return false;
+#endif
+}
+
+void dxRenderDeviceRender::OnDisplayChange()
+{
+#if defined(USE_DX10) || defined(USE_DX11)
+    HW.ApplyColorSpace("display change");
 #endif
 }

@@ -149,6 +149,8 @@ public:
 #endif
 #if defined(USE_DX10) || defined(USE_DX11)
 	void			UpdateViews();
+	// applies the requested colour space to the live swapchain and latches what was granted
+	void			ApplyColorSpace(LPCSTR site);
 	DXGI_RATIONAL	selectRefresh(u32 dwWidth, u32 dwHeight, DXGI_FORMAT fmt);
 
 	virtual	void	OnAppActivate();

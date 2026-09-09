@@ -38,7 +38,7 @@ float4 main( p_postpr I ) : SV_Target
 
 	// out
 
-	image = HDR10_ToDisplay_World(image);
+	image = HDR10_ToDisplay_World(image, I.Tex0 * screen_res.xy, true);
 
 	return  float4( image, 1.0h);					// +mov
 }

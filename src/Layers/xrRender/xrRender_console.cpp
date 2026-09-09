@@ -323,7 +323,7 @@ int   ps_r4_hdr10_tonemapper   		   = 9;    // r4-only, default = headroom
 int   ps_r4_hdr10_tonemap_mode 		   = 1;	   // r4-only, default = Color
 float ps_r4_hdr10_exposure     		   = 1.0f; // r4-only, default = 1.0x
 float ps_r4_hdr10_contrast     		   = 0.0f; // r4-only, default = +0%
-float ps_r4_hdr10_contrast_middle_gray = 0.5f; // r4-only, default = 0.5
+float ps_r4_hdr10_contrast_middle_gray = 0.391f; // r4-only, default = LogC mid gray
 float ps_r4_hdr10_saturation   		   = 0.1f; // r4-only, default = +0%
 float ps_r4_hdr10_brightness		   = 0.0f; // r4-only, default = +0
 float ps_r4_hdr10_gamma 			   = 1.0f; // r4-only, default = 1.0

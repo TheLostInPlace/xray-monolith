@@ -184,6 +184,64 @@ float3 HDR10_ApplyColorspaceTransform(float3 color, float3x3 xform)
 	return mul(xform, color);
 }
 
+// from Rec.709 to target colorspace
+float3 HDR10_TransformColorspace_ToTarget(float3 color)
+{
+	if (HDR10_USE_COLORSPACE_P3D65) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec709_To_P3D65);
+
+	} else if (HDR10_USE_COLORSPACE_REC2020) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec709_To_Rec2020);
+	}
+
+	// no transform since input is already in Rec.709
+	return color;
+}
+
+// from target colorspace to Rec.2020 (what Windows expects)
+float3 HDR10_TransformColorspace_ToDisplay(float3 color)
+{
+	if (HDR10_USE_COLORSPACE_P3D65) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_P3D65_To_Rec2020);
+
+	} else if (HDR10_USE_COLORSPACE_REC709) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec709_To_Rec2020);
+	}
+
+	// no transform for Rec.2020 since output is Rec.2020
+	return color;
+}
+
+// from target colorspace back to Rec.709
+float3 HDR10_TransformColorspace_ToRec709(float3 color)
+{
+	if (HDR10_USE_COLORSPACE_P3D65) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_P3D65_To_Rec709);
+
+	} else if (HDR10_USE_COLORSPACE_REC2020) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec2020_To_Rec709);
+	}
+
+	// no transform since input is already in Rec.709
+	return color;
+}
+
+// NOTE: see https://www.shadertoy.com/view/4djSRW
+float2 HDR10_Hash22(float2 p)
+{
+	float3 p3 = frac(p.xyx * float3(0.1031, 0.1030, 0.0973));
+	p3 += dot(p3, p3.yzx + 33.33);
+	return frac((p3.xx + p3.yz) * p3.zy);
+}
+
+// triangular noise of one 10 bit code, breaks the banding the PQ quantisation leaves in dark gradients
+float3 HDR10_DitherPQ(float3 color_pq, float2 pixel_pos)
+{
+	static const float lsb = 1.0 / 1023.0;
+	float2 n = HDR10_Hash22(pixel_pos);
+	return color_pq + (n.x - n.y) * 0.5 * lsb;
+}
+
 float3 HDR10_sRGBToLinear(float3 color)
 {
 	color = pow(color, 2.2);
@@ -329,6 +387,9 @@ float3 HDR10_Tonemap_ACES_Hill(float3 color)
 		{-0.00327, -0.07276,  1.07602}
 	};
 
+	// the AP1 matrices assume Rec.709 primaries so rotate in and back out around them
+	color = HDR10_TransformColorspace_ToRec709(color);
+
 	color = mul(input_mtx, color);
 
 	float3 numerator   = color * (color + 0.0245786) - 0.000090537;
@@ -337,6 +398,8 @@ float3 HDR10_Tonemap_ACES_Hill(float3 color)
 	color = numerator / denominator;
 
 	color = mul(output_mtx, color);
+
+	color = HDR10_TransformColorspace_ToTarget(color);
 
 	return saturate(color);
 }
@@ -457,13 +520,16 @@ float3 HDR10_Tonemap_AgX_EOTF(float3 color)
 	color = max(0, color);
 	color = pow(color, 2.2);
 
+	color = HDR10_TransformColorspace_ToTarget(color);
+
 	return color;
 }
 
 // NOTE: see https://www.shadertoy.com/view/cd3XWr
 float3 HDR10_Tonemap_AgX_Look(float3 color, float3 slope, float3 power, float saturation)
 {
-	float luma = HDR10_Luminance(color);
+	// the reference Look takes luma from fixed Rec.709 weights on the log encoded value
+	float luma = HDR10_Luminance_Rec709(color);
 
 	// ASC CDL
 	color = pow(color * slope, power);
@@ -487,6 +553,9 @@ float3 HDR10_Tonemap_AgX_Input(float3 color)
 
 	static const float min_ev = -12.47393;
 	static const float max_ev = 4.026069;
+
+	// the AgX inset assumes Rec.709 primaries
+	color = HDR10_TransformColorspace_ToRec709(color);
 
 	// input transform
 	color = mul(agx_input_xform, color);
@@ -592,35 +661,13 @@ float3 HDR10_Tonemap_Luminance(float3 color)
 {
 	float lum_in  = HDR10_Luminance(color);
 	float lum_out = HDR10_Tonemap_Color(lum_in.xxx).x;
-	return HDR10_ChangeLuminance(color, lum_in, lum_out);
-}
+	color = HDR10_ChangeLuminance(color, lum_in, lum_out);
 
-// from Rec.709 to target colorspace
-float3 HDR10_TransformColorspace_ToTarget(float3 color)
-{
-	if (HDR10_USE_COLORSPACE_P3D65) {
-		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec709_To_P3D65);
+	// pull the rescaled color toward its own luminance so no channel leaves the encode domain
+	float peak = max(max(color.r, color.g), color.b);
+	float mix  = (peak > 1.0) ? saturate((1.0 - lum_out) / max(peak - lum_out, 1e-5)) : 1.0;
 
-	} else if (HDR10_USE_COLORSPACE_REC2020) {
-		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec709_To_Rec2020);
-	}
-
-	// no transform since input is already in Rec.709
-	return color;
-}
-
-// from target colorspace to Rec.2020 (what Windows expects)
-float3 HDR10_TransformColorspace_ToDisplay(float3 color)
-{
-	if (HDR10_USE_COLORSPACE_P3D65) {
-		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_P3D65_To_Rec2020);
-
-	} else if (HDR10_USE_COLORSPACE_REC709) {
-		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec709_To_Rec2020);
-	}
-
-	// no transform for Rec.2020 since output is Rec.2020
-	return color;
+	return lerp(lum_out.xxx, color, mix);
 }
 
 /* --- Processing Functions --- */
@@ -630,8 +677,10 @@ float3 HDR10_ApplyColorGrading_Rec709(float3 color)
 {
 	// brightness (lift)
 	color += HDR10_BRIGHTNESS;
+	color = max(0, color);
 
 	// gamma
+	// runs on scene linear before exposure so this is a scene contrast control not a display transfer
 	color = pow(color, HDR10_GAMMA_RCP);
 
 	// exposure (gain)
@@ -651,7 +700,7 @@ float3 HDR10_ApplyColorGrading_Rec709(float3 color)
 
 // Convert from sRGB to HDR10
 // included tonemapping, color grading, colorspace transform, and PQ
-float3 HDR10_ToDisplay_World(float3 color)
+float3 HDR10_ToDisplay_World(float3 color, float2 pixel_pos, bool dither)
 {
     // just return the color if HDR is disabled
     if (!HDR10_IS_ENABLED) {
@@ -688,9 +737,22 @@ float3 HDR10_ToDisplay_World(float3 color)
 	// ST2084 curve operates on normalized luminance (unitless, but 1.0 from tonemapper -> HDR_WHITEPOINT_NITS (cd/m2), normalized by ST2084 peak cd/m2)
 	static const float st2084_max_nits = 10000.0;
 	color = HDR10_WORLD_SCALE_NITS * color / st2084_max_nits;
+
+	// ST2084 is defined on [0,1] and the gamut rotation can push a channel outside it
+	color = saturate(color);
 	color = HDR10_ApplyST2084_PQ(color);
 
+	if (dither) {
+		color = HDR10_DitherPQ(color, pixel_pos);
+	}
+
 	return color;
+}
+
+// keeps the single argument entry point third party shaders call
+float3 HDR10_ToDisplay_World(float3 color)
+{
+	return HDR10_ToDisplay_World(color, float2(0.0, 0.0), false);
 }
 
 // Convert from sRGB to HDR10
@@ -731,22 +793,11 @@ float3 HDR10_ToDisplay_UI(float3 color, float nits_scalar, float alpha)
 	// ST2084 curve operates on normalized luminance (unitless, but 1.0 from tonemapper -> HDR_WHITEPOINT_NITS (cd/m2), normalized by ST2084 peak cd/m2)
 	static const float st2084_max_nits = 10000.0;
 	color = HDR10_WORLD_SCALE_NITS * nits_scalar * color / st2084_max_nits;
+
+	// ST2084 is defined on [0,1] and the gamut rotation can push a channel outside it
+	color = saturate(color);
 	color = HDR10_ApplyST2084_PQ(color);
 
-	return color;
-}
-
-// from target colorspace back to Rec.709
-float3 HDR10_TransformColorspace_ToRec709(float3 color)
-{
-	if (HDR10_USE_COLORSPACE_P3D65) {
-		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_P3D65_To_Rec709);
-
-	} else if (HDR10_USE_COLORSPACE_REC2020) {
-		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec2020_To_Rec709);
-	}
-
-	// no transform since input is already in Rec.709
 	return color;
 }
 
