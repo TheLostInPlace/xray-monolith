@@ -222,6 +222,7 @@ extern ECORE_API int ps_r__ctable_check;    // count tables and lookups that dis
 /* --- HDR10 parameters --- */
 extern ECORE_API float ps_r4_hdr10_whitepoint_nits; // r4-only
 extern ECORE_API float ps_r4_hdr10_ui_nits; 		// r4-only
+extern ECORE_API float ps_r4_hdr10_paper_white_nits; // r4-only
 extern ECORE_API int   ps_r4_hdr10_pda;  			// r4-only (NOTE: this is a hack to not double HDR tonemap the 3D PDA)
 extern ECORE_API int   ps_r4_hdr10_on; 			  	// r4-only
 extern ECORE_API float ps_r4_hdr10_pda_intensity; 	// r4-only
@@ -264,6 +265,9 @@ extern ECORE_API float ps_r4_hdr10_sun_dawn_begin; // r4-only
 extern ECORE_API float ps_r4_hdr10_sun_dawn_end;   // r4-only
 extern ECORE_API float ps_r4_hdr10_sun_dusk_begin; // r4-only
 extern ECORE_API float ps_r4_hdr10_sun_dusk_end;   // r4-only
+
+extern ECORE_API float hdr10_world_scale_nits();
+extern ECORE_API float hdr10_headroom();
 /* --- HDR10 parameters --- */
 
 extern ECORE_API float ps_r2_img_exposure; // r2-only

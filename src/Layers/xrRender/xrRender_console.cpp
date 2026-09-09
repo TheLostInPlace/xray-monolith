@@ -306,6 +306,7 @@ int ps_r__ctable_check    = 0; // diagnostic counters, off by default
 // HDR10 parameters
 float ps_r4_hdr10_whitepoint_nits = 400.0f; // r4-only, default = 400 nits
 float ps_r4_hdr10_ui_nits         = 400.0f; // r4-only, default = 400 nits
+float ps_r4_hdr10_paper_white_nits = 203.0f; // r4-only, default = 203 nits
 float ps_r4_hdr10_pda_intensity   = 1.0f;   // r4-only, default = 1.0x
 int   ps_r4_hdr10_pda             = 0;	    // r4-only (NOTE: this is a hack to not double HDR tonemap the 3D PDA)
 int   ps_r4_hdr10_on              = 0;	    // r4-only, default = off
@@ -349,6 +350,22 @@ float ps_r4_hdr10_sun_dawn_begin   = 4.5f;  // r4-only, 24 hour format
 float ps_r4_hdr10_sun_dawn_end     = 6.0f;  // r4-only, 24 hour format
 float ps_r4_hdr10_sun_dusk_begin   = 18.5f; // r4-only, 24 hour format
 float ps_r4_hdr10_sun_dusk_end     = 21.0f; // r4-only, 24 hour format
+
+// tonemapper index of the headroom curve, matches the options list order
+static const int hdr10_tonemapper_headroom = 9;
+
+float hdr10_world_scale_nits()
+{
+	if (hdr10_tonemapper_headroom == ps_r4_hdr10_tonemapper)
+		return _max(80.0f, ps_r4_hdr10_paper_white_nits);
+
+	return _max(10.0f, ps_r4_hdr10_whitepoint_nits);
+}
+
+float hdr10_headroom()
+{
+	return _max(1.0f, _max(10.0f, ps_r4_hdr10_whitepoint_nits) / _max(80.0f, ps_r4_hdr10_paper_white_nits));
+}
 
 float ps_r2_img_exposure = 1.0f; // r2-only
 float ps_r2_img_gamma = 1.0f; // r2-only
@@ -1277,6 +1294,7 @@ void xrRender_initconsole()
 
     CMD4(CCC_Float,   "r4_hdr10_whitepoint_nits", &ps_r4_hdr10_whitepoint_nits,  10.0f, 10000.0f);
     CMD4(CCC_Float,   "r4_hdr10_ui_nits", 		  &ps_r4_hdr10_ui_nits, 	     10.0f, 10000.0f);
+    CMD4(CCC_Float,   "r4_hdr10_paper_white_nits", &ps_r4_hdr10_paper_white_nits, 80.0f, 1000.0f);
     CMD4(CCC_Float,   "r4_hdr10_pda_intensity",   &ps_r4_hdr10_pda_intensity,      0.1, 2);
 	CMD4(CCC_Integer, "r4_hdr10_on", 			  &ps_r4_hdr10_on, 				     0, 1);
 #if RENDER == R_R4
@@ -1284,7 +1302,7 @@ void xrRender_initconsole()
 #endif
     CMD4(CCC_Integer, "r4_hdr10_colorspace",	  &ps_r4_hdr10_colorspace, 		     0, 2);
 
-    CMD4(CCC_Integer, "r4_hdr10_tonemapper", 	  		&ps_r4_hdr10_tonemapper,      	      0, 8);
+    CMD4(CCC_Integer, "r4_hdr10_tonemapper", 	  		&ps_r4_hdr10_tonemapper,      	      0, 9);
 	CMD4(CCC_Integer, "r4_hdr10_tonemap_mode",    		&ps_r4_hdr10_tonemap_mode,    	      0, 1);
 	CMD4(CCC_Float,   "r4_hdr10_exposure",        		&ps_r4_hdr10_exposure, 		  	    0.1, 30);
 	CMD4(CCC_Float,   "r4_hdr10_contrast",        		&ps_r4_hdr10_contrast, 		  	     -1, 1);

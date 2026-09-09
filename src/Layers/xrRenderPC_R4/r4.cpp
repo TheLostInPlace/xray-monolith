@@ -540,6 +540,10 @@ void CRender::create()
 			else
 				Msg("* [HDR10] %s from %s %u bytes", pn, FS.m_archives[pf->vfs].path.c_str(), pf->size_real);
 		}
+
+		Msg("* HDR10 anchors: paper white %.0f nits, peak %.0f nits, headroom %.3f, world scale %.0f nits, tonemapper %d",
+		    ps_r4_hdr10_paper_white_nits, ps_r4_hdr10_whitepoint_nits, hdr10_headroom(),
+		    hdr10_world_scale_nits(), ps_r4_hdr10_tonemapper);
 	}
 
 	// constants
