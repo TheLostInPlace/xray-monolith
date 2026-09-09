@@ -148,10 +148,14 @@ void CRender::render_main(Fmatrix& m_ViewProjection, bool _fportals)
 		if (g_pGameLevel && (phase == PHASE_NORMAL))
 		{
 			g_hud->Render_Last(); // HUD
-			if (g_hud->RenderActiveItemUIQuery())
-				r_dsgraph_render_hud_ui();
-			if (g_hud->RenderCamAttachedUIQuery())
-				r_dsgraph_render_cam_ui();
+			// under hdr the item ui is composited after the combine instead
+			if (!RImplementation.o.dx11_hdr10)
+			{
+				if (g_hud->RenderActiveItemUIQuery())
+					r_dsgraph_render_hud_ui();
+				if (g_hud->RenderCamAttachedUIQuery())
+					r_dsgraph_render_cam_ui();
+			}
 		}
 	}
 	else
@@ -160,10 +164,14 @@ void CRender::render_main(Fmatrix& m_ViewProjection, bool _fportals)
 		if (g_pGameLevel && (phase == PHASE_NORMAL))
 		{
 			g_hud->Render_Last(); // HUD
-			if (g_hud->RenderActiveItemUIQuery())
-				r_dsgraph_render_hud_ui();
-			if (g_hud->RenderCamAttachedUIQuery())
-				r_dsgraph_render_cam_ui();
+			// under hdr the item ui is composited after the combine instead
+			if (!RImplementation.o.dx11_hdr10)
+			{
+				if (g_hud->RenderActiveItemUIQuery())
+					r_dsgraph_render_hud_ui();
+				if (g_hud->RenderCamAttachedUIQuery())
+					r_dsgraph_render_cam_ui();
+			}
 		}
 	}
 }
@@ -653,6 +661,31 @@ void CRender::Render()
 		Details->details_clear();
 
 	VERIFY(0 == mapDistort.size() + mapHUDDistort.size());
+
+	// hdr composites the item ui onto the encoded back buffer, matching the mt draw site
+	if (RImplementation.o.dx11_hdr10 && g_hud)
+	{
+		if (g_hud->RenderActiveItemUIQuery())
+		{
+			static bool s_said_item_ui = false;
+			if (!s_said_item_ui)
+			{
+				s_said_item_ui = true;
+				Msg("[HDR-P12] item ui after combine");
+			}
+			r_dsgraph_render_hud_ui();
+		}
+		if (g_hud->RenderCamAttachedUIQuery())
+		{
+			static bool s_said_cam_ui = false;
+			if (!s_said_cam_ui)
+			{
+				s_said_cam_ui = true;
+				Msg("[HDR-P12] cam ui after combine");
+			}
+			r_dsgraph_render_cam_ui();
+		}
+	}
 }
 
 void CRender::render_forward()

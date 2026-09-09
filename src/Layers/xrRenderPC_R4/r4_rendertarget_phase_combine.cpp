@@ -71,6 +71,29 @@ void CRenderTarget::phase_combine()
 		t_LUM_dest->surface_set(rt_LUM_pool[gpu_id * 2 + 1]->pSurface);
 	}
 
+	// reports which luminance pool pair the combine binds and which one the luminance pass writes
+	if (RImplementation.o.dx11_hdr10)
+	{
+		if (Device.m_SecondViewport.IsSVPActive())
+		{
+			static bool s_said_lum_svp = false;
+			if (!s_said_lum_svp)
+			{
+				s_said_lum_svp = true;
+				Msg("[HDR-P12] lum svp pairs %u bind %u write %u", HW.Caps.iGPUNum, gpu_id, Device.dwFrame % HW.Caps.iGPUNum);
+			}
+		}
+		else
+		{
+			static bool s_said_lum_main = false;
+			if (!s_said_lum_main)
+			{
+				s_said_lum_main = true;
+				Msg("[HDR-P12] lum main pairs %u bind %u write %u", HW.Caps.iGPUNum, gpu_id, Device.dwFrame % HW.Caps.iGPUNum);
+			}
+		}
+	}
+
 	if (RImplementation.o.ssao_hdao && RImplementation.o.ssao_ultra)
 	{
 		if (ps_r_ssao > 0)
