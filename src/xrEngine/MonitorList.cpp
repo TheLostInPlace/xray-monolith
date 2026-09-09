@@ -119,8 +119,25 @@ struct DISPLAYCONFIG_TARGET_DEVICE_NAME_LOCAL
     WCHAR  monitorDevicePath[128];
 };
 
+struct DISPLAYCONFIG_SDR_WHITE_LEVEL_LOCAL
+{
+    DISPLAYCONFIG_DEVICE_INFO_HEADER_LOCAL header;
+    ULONG SDRWhiteLevel;
+};
+
+// DisplayConfig target identity for one monitor, parallel to s_monitor_handles
+struct MonitorTargetId
+{
+    LUID_LOCAL adapterId = {};
+    UINT32     id        = 0;
+    bool       valid     = false;
+};
+
+static xr_vector<MonitorTargetId> s_monitor_targets;
+
 #define DCDI_GET_SOURCE_NAME  1
 #define DCDI_GET_TARGET_NAME  2
+#define DCDI_GET_SDR_WHITE_LEVEL 11
 
 typedef LONG (WINAPI* PFN_GetDisplayConfigBufferSizes)(UINT32, UINT32*, UINT32*);
 typedef LONG (WINAPI* PFN_QueryDisplayConfig)(UINT32, UINT32*, void*, UINT32*, void*, void*);
@@ -134,6 +151,8 @@ namespace
         xr_string friendly_name;
         u32       connector_instance = 0;
         u32       output_technology  = 0;
+        LUID_LOCAL target_adapter    = {};
+        u32        target_id         = 0;
     };
 
     using GdiToInfoMap = xr_map<xr_string, MonitorInfo>;
@@ -274,6 +293,8 @@ namespace
             }
             info.connector_instance = tgt.connectorInstance;
             info.output_technology  = tgt.outputTechnology;
+            info.target_adapter     = path.targetInfo.adapterId;
+            info.target_id          = path.targetInfo.id;
 
             char gdi[64] = {};
             WideCharToMultiByte(CP_ACP, 0, src.viewGdiDeviceName, -1,
@@ -357,6 +378,7 @@ void fill_vid_monitor_list()
     vid_monitor_token[0].name = xr_strdup("Auto");
     vid_monitor_token[0].id   = 0;
     s_monitor_handles.push_back(NULL);
+    s_monitor_targets.push_back(MonitorTargetId());
 
     for (u32 i = 0; i < N; ++i)
     {
@@ -373,6 +395,15 @@ void fill_vid_monitor_list()
         vid_monitor_token[i + 1].name = xr_strdup(final_label.c_str());
         vid_monitor_token[i + 1].id   = static_cast<int>(i + 1);
         s_monitor_handles.push_back(e.hmon);
+
+        MonitorTargetId tid;
+        if (it != friendly_map.end())
+        {
+            tid.adapterId = it->second.target_adapter;
+            tid.id        = it->second.target_id;
+            tid.valid     = true;
+        }
+        s_monitor_targets.push_back(tid);
     }
 
     vid_monitor_token[N + 1].name = nullptr;
@@ -392,6 +423,7 @@ void free_vid_monitor_list()
     xr_free(vid_monitor_token);
     vid_monitor_token = nullptr;
     s_monitor_handles.clear();
+    s_monitor_targets.clear();
 }
 
 HMONITOR ResolveSelectedMonitor()
@@ -422,4 +454,41 @@ void refresh_vid_monitor_list()
     Msg("* vid_monitor: live-refresh triggered");
     free_vid_monitor_list();
     fill_vid_monitor_list();
+}
+
+float GetMonitorSdrWhiteNits(HMONITOR hMon)
+{
+    if (!hMon)
+        return 0.0f;
+
+    for (u32 i = 1; i < s_monitor_handles.size(); ++i)
+    {
+        if (s_monitor_handles[i] != hMon || i >= s_monitor_targets.size())
+            continue;
+
+        const MonitorTargetId& tid = s_monitor_targets[i];
+        if (!tid.valid)
+            return 0.0f;
+
+        HMODULE hUser32 = GetModuleHandleA("user32.dll");
+        if (!hUser32)
+            return 0.0f;
+
+        auto pfnGetDevInfo = (PFN_DisplayConfigGetDeviceInfo)
+            GetProcAddress(hUser32, "DisplayConfigGetDeviceInfo");
+        if (!pfnGetDevInfo)
+            return 0.0f;
+
+        DISPLAYCONFIG_SDR_WHITE_LEVEL_LOCAL sdr = {};
+        sdr.header.type      = DCDI_GET_SDR_WHITE_LEVEL;
+        sdr.header.size      = sizeof(sdr);
+        sdr.header.adapterId = tid.adapterId;
+        sdr.header.id        = tid.id;
+        if (pfnGetDevInfo(&sdr) != ERROR_SUCCESS)
+            return 0.0f;
+
+        // Microsoft's documented conversion on the structure
+        return (float)sdr.SDRWhiteLevel / 1000.0f * 80.0f;
+    }
+    return 0.0f;
 }

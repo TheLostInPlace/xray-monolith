@@ -9,12 +9,14 @@
 #ifdef USE_DX11
 # include <d3d11_4.h>
 # include <dxgi1_5.h>
+# include <dxgi1_6.h>
 #endif
 #pragma warning(default:4995)
 #include "../xrRender/HW.h"
 #include "../../xrEngine/XR_IOConsole.h"
 #include "../../Include/xrAPI/xrAPI.h"
 #include "../xrRender/xrRender_console.h"
+#include "../../xrEngine/MonitorList.h"
 
 #include "StateManager\dx10SamplerStateCache.h"
 #include "StateManager\dx10StateCache.h"
@@ -132,6 +134,66 @@ void CHW::SelectAdapterAndOutput(HMONITOR hTargetMonitor)
     Msg("!HW: selected monitor not found on any adapter, falling back to default");
     R_CHK(m_pFactory->EnumAdapters1(0, &m_pAdapter));
     AcquireDefaultOutput();
+}
+#endif
+
+#if defined(USE_DX11)
+// Reads the display luminance range, colour space and primaries and seeds the whitepoint if it holds the auto sentinel
+void CHW::QueryHDR10Display()
+{
+    m_DisplayInfo = CHWDisplayInfo();
+
+    IDXGIOutput6* output6 = nullptr;
+    if (m_pOutput)
+        m_pOutput->QueryInterface(&output6);
+
+    if (output6) {
+        DXGI_OUTPUT_DESC1 desc = {};
+        if (SUCCEEDED(output6->GetDesc1(&desc))) {
+            m_DisplayInfo.valid               = true;
+            m_DisplayInfo.min_nits            = desc.MinLuminance;
+            m_DisplayInfo.max_nits            = desc.MaxLuminance;
+            m_DisplayInfo.max_full_frame_nits = desc.MaxFullFrameLuminance;
+            m_DisplayInfo.color_space         = (int)desc.ColorSpace;
+            m_DisplayInfo.red_primary[0]      = desc.RedPrimary[0];
+            m_DisplayInfo.red_primary[1]      = desc.RedPrimary[1];
+            m_DisplayInfo.green_primary[0]    = desc.GreenPrimary[0];
+            m_DisplayInfo.green_primary[1]    = desc.GreenPrimary[1];
+            m_DisplayInfo.blue_primary[0]     = desc.BluePrimary[0];
+            m_DisplayInfo.blue_primary[1]     = desc.BluePrimary[1];
+            m_DisplayInfo.white_point[0]      = desc.WhitePoint[0];
+            m_DisplayInfo.white_point[1]      = desc.WhitePoint[1];
+            m_DisplayInfo.sdr_white_nits      = GetMonitorSdrWhiteNits(desc.Monitor);
+        }
+        _RELEASE(output6);
+    }
+
+    if (m_DisplayInfo.valid) {
+        Msg("* HDR10 display: min %.4f nits, max %.1f nits, max full frame %.1f nits, colorspace %d, "
+            "primaries R(%.4f,%.4f) G(%.4f,%.4f) B(%.4f,%.4f) W(%.4f,%.4f), sdr white %.1f nits",
+            m_DisplayInfo.min_nits,
+            m_DisplayInfo.max_nits,
+            m_DisplayInfo.max_full_frame_nits,
+            m_DisplayInfo.color_space,
+            m_DisplayInfo.red_primary[0],   m_DisplayInfo.red_primary[1],
+            m_DisplayInfo.green_primary[0], m_DisplayInfo.green_primary[1],
+            m_DisplayInfo.blue_primary[0],  m_DisplayInfo.blue_primary[1],
+            m_DisplayInfo.white_point[0],   m_DisplayInfo.white_point[1],
+            m_DisplayInfo.sdr_white_nits);
+    } else {
+        Msg("! HDR10 display query unavailable, IDXGIOutput6 or GetDesc1 failed");
+    }
+
+    // 0 is the auto sentinel, a value the user set is left alone
+    if (ps_r4_hdr10_whitepoint_nits <= 0.0f) {
+        if (m_DisplayInfo.valid && m_DisplayInfo.max_nits >= 10.0f) {
+            ps_r4_hdr10_whitepoint_nits = (m_DisplayInfo.max_nits > 10000.0f) ? 10000.0f : m_DisplayInfo.max_nits;
+            Msg("* HDR10 whitepoint seeded from display max luminance %.1f nits", ps_r4_hdr10_whitepoint_nits);
+        } else {
+            ps_r4_hdr10_whitepoint_nits = 400.0f;
+            Msg("! HDR10 whitepoint auto seed unavailable, using %.1f nits", ps_r4_hdr10_whitepoint_nits);
+        }
+    }
 }
 #endif
 
@@ -605,6 +667,7 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
             R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
             m_HDR10Achieved = true;
             hdr10_reason = "present_supported";
+            QueryHDR10Display();
         } else {
             Log("HDR10 color space unsupported, failed to enable HDR10 output");
             R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709));
