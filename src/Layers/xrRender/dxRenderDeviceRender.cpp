@@ -593,3 +593,10 @@ bool dxRenderDeviceRender::SwitchOutputMonitor(HMONITOR hTargetMon, HWND hWnd,
     return false;
 #endif
 }
+
+void dxRenderDeviceRender::OnDisplayChange()
+{
+#if defined(USE_DX10) || defined(USE_DX11)
+    HW.ApplyColorSpace("display change");
+#endif
+}

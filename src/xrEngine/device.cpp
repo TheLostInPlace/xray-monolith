@@ -695,7 +695,10 @@ void CRenderDevice::FrameMove()
 	PROF_EVENT();
 
 	if (InterlockedExchange(&g_monitor_list_dirty, 0))
+	{
 		refresh_vid_monitor_list();
+		m_pRender->OnDisplayChange();
+	}
 
 	dwFrame++;
 	Core.dwFrame = dwFrame;

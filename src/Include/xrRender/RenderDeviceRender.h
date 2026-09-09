@@ -62,6 +62,8 @@ public:
 	virtual void OnAssetsChanged() = 0;
 
 	virtual bool SwitchOutputMonitor(HMONITOR hTargetMon, HWND hWnd, u32 g_screenmode, u32& vidModeW, u32& vidModeH) { return false; }
+	// the os reported a display change, re-evaluate anything tied to the output
+	virtual void OnDisplayChange() {}
 };
 
 #endif	//	RenderDeviceRender_included
