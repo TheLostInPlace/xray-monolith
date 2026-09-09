@@ -76,6 +76,29 @@ void CRenderTarget::phase_combine()
 			t_LUM_dest->surface_set(rt_LUM_pool[1]->pSurface);
 	}
 
+	// reports which luminance pool pair the combine binds and which one the luminance pass writes
+	if (RImplementation.o.dx11_hdr10)
+	{
+		if (Device.m_SecondViewport.IsSVPActive())
+		{
+			static bool s_said_lum_svp = false;
+			if (!s_said_lum_svp)
+			{
+				s_said_lum_svp = true;
+				Msg("[HDR-P12] lum svp pairs 1 bind 0 write 0");
+			}
+		}
+		else
+		{
+			static bool s_said_lum_main = false;
+			if (!s_said_lum_main)
+			{
+				s_said_lum_main = true;
+				Msg("[HDR-P12] lum main pairs 1 bind 0 write 0");
+			}
+		}
+	}
+
 	if (RImplementation.o.ssao_hdao && RImplementation.o.ssao_ultra)
 	{
 		if (ps_r_ssao > 0)
