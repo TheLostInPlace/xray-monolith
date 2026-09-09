@@ -12,6 +12,16 @@
 
 #include "../xrRender/dxRenderDeviceRender.h"
 
+#include <atomic>
+
+// diagnostics for the constant table sort and the lookup agreeing, armed by r__ctable_check
+static std::atomic<u32> g_ctable_parsed(0);
+static std::atomic<u32> g_ctable_unordered(0);
+static std::atomic<u32> g_ctable_dupes(0);
+static std::atomic<u32> g_ctable_miss_checks(0);
+static std::atomic<u32> g_ctable_order_misses(0);
+static std::atomic<u32> g_ctable_logged(0);
+
 // pool
 //.static	poolSS<R_constant,512>			g_constant_allocator;
 
@@ -45,6 +55,50 @@ IC bool p_sort_constants(const ref_constant& C1, const ref_constant& C2) noexcep
 	return C1->name < C2->name;
 }
 
+// a parsed table that is not in lookup order makes every name based get unreliable
+void R_constant_table_check_order(const R_constant_table::c_table& T)
+{
+	++g_ctable_parsed;
+	bool bOrderReported = false;
+	for (u32 it = 1; it < T.size(); it++)
+	{
+		if (T[it - 1]->name.equal(T[it]->name))
+		{
+			++g_ctable_dupes;
+			if (g_ctable_logged++ < 8)
+				Msg("! [CTABLE] parsed table holds a duplicate name %s at slot %u of %u", T[it]->name.c_str(), it, (u32)T.size());
+			continue;
+		}
+		if (T[it - 1]->name < T[it]->name) continue;
+		if (bOrderReported) continue;
+		bOrderReported = true;
+		++g_ctable_unordered;
+		if (g_ctable_logged++ < 8)
+			Msg("! [CTABLE] parsed table out of lookup order at slot %u of %u name %s", it, (u32)T.size(), T[it]->name.c_str());
+	}
+}
+
+// a miss the binary search made that a linear scan resolves is a dropped set_c
+void R_constant_table_check_miss(const R_constant_table::c_table& T, const shared_str& S)
+{
+	++g_ctable_miss_checks;
+	for (u32 it = 0; it < T.size(); it++)
+	{
+		if (!T[it]->name.equal(S)) continue;
+		++g_ctable_order_misses;
+		if (g_ctable_logged++ < 8)
+			Msg("! [CTABLE] lookup missed %s present at slot %u of %u", S.c_str(), it, (u32)T.size());
+		return;
+	}
+}
+
+void R_constant_table_check_report()
+{
+	Msg("* [CTABLE] check %d ptr_sort %d parsed %u unordered %u dupes %u miss-checks %u order-misses %u",
+		ps_r__ctable_check, ps_r__ctable_ptr_sort, g_ctable_parsed.load(), g_ctable_unordered.load(),
+		g_ctable_dupes.load(), g_ctable_miss_checks.load(), g_ctable_order_misses.load());
+}
+
 R_constant* R_constant_table::get(LPCSTR S)
 {
 	PROF_EVENT("R_constant_table::get LPCSTR");
@@ -62,6 +116,8 @@ R_constant* R_constant_table::get(shared_str& S)
     auto it = std::lower_bound(table.begin(), table.end(), S, sortFunc);
     if (it != table.end() && (*it)->name.equal(S))
         return &**it;
+	if (ps_r__ctable_check)
+		R_constant_table_check_miss(table, S);
 	return nullptr;
 }
 

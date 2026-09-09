@@ -28,6 +28,7 @@
 // HDR10
 #include "blender_hdr10_bloom.h"
 #include "blender_hdr10_lens_flare.h"
+#include "blender_hdr10_sdr_resolve.h"
 
 #include "../xrRender/dxRenderDeviceRender.h"
 #include "../xrRender/xrRender_console.h"
@@ -426,6 +427,7 @@ CRenderTarget::CRenderTarget()
 	b_hdr10_lens_flare_fgen 	  = xr_new<CBlender_hdr10_lens_flare_fgen>();
 	b_hdr10_lens_flare_blur       = xr_new<CBlender_hdr10_lens_flare_blur>();
 	b_hdr10_lens_flare_upsample   = xr_new<CBlender_hdr10_lens_flare_upsample>();
+	b_hdr10_sdr_resolve = xr_new<CBlender_hdr10_sdr_resolve>();
 
 	// Screen Space Shaders Stuff
 	b_ssfx_fog_scattering = xr_new<CBlender_ssfx_fog_scattering>();
@@ -553,7 +555,8 @@ CRenderTarget::CRenderTarget()
 		rt_dof.create(r2_RT_dof, w, h, RImplementation.o.dx11_hdr10 ? D3DFMT_A16B16G16R16F : D3DFMT_A8R8G8B8);
 
 		if (RImplementation.o.dx11_hdr10) {
-			rt_secondVP.create(r2_RT_secondVP, w, h, D3DFMT_A2R10G10B10, 1); //--#SM+#-- +SecondVP+ // NOTE: this is a hack to use DXGI R10G10B10A2_UNORM
+			// matches rt_Color so the pre encode capture copy is a legal CopyResource
+			rt_secondVP.create(r2_RT_secondVP, w, h, rt_Color->fmt, 1); //--#SM+#-- +SecondVP+
 			rt_ui_pda.create(r2_RT_ui, w, h, D3DFMT_A2R10G10B10); // NOTE: this is a hack to use DXGI R10G10B10A2_UNORM
 		} else {
 			rt_secondVP.create(r2_RT_secondVP, w, h, D3DFMT_A8R8G8B8, 1); //--#SM+#-- +SecondVP+
@@ -564,6 +567,10 @@ CRenderTarget::CRenderTarget()
 		if (RImplementation.o.dx11_hdr10) {
 			rt_HDR10_HalfRes[0].create(r4_RT_HDR10_halfres0, w/2,  h/2,  D3DFMT_A16B16G16R16F);
 			rt_HDR10_HalfRes[1].create(r4_RT_HDR10_halfres1, w/2,  h/2,  D3DFMT_A16B16G16R16F);
+
+			// capture source for screenshots and save thumbnails
+			rt_HDR10_SDR.create(r4_RT_HDR10_sdr, w, h, D3DFMT_A8R8G8B8);
+			s_hdr10_sdr_resolve.create(b_hdr10_sdr_resolve, "hdr10_sdr_resolve");
 		}
 		// PDA, probably not ideal though
 // RT - KD
@@ -1016,7 +1023,8 @@ CRenderTarget::CRenderTarget()
 			desc.ArraySize = 1;
 			desc.SampleDesc.Count = 1;
 			desc.SampleDesc.Quality = 0;
-			desc.Format = DXGI_FORMAT_R8G8B8A8_SNORM;
+			// staging format follows the back buffer so the capture copy stays legal
+			desc.Format = RImplementation.o.dx11_hdr10 ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_R8G8B8A8_SNORM;
 			desc.Usage = D3D_USAGE_STAGING;
 			desc.BindFlags = 0;
 			desc.CPUAccessFlags = D3D_CPU_ACCESS_READ;
@@ -1405,6 +1413,7 @@ CRenderTarget::~CRenderTarget()
 	xr_delete(b_hdr10_lens_flare_fgen);
 	xr_delete(b_hdr10_lens_flare_blur);
 	xr_delete(b_hdr10_lens_flare_upsample);
+	xr_delete(b_hdr10_sdr_resolve);
 
 	if (RImplementation.o.dx10_msaa)
 	{

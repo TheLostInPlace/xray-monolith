@@ -48,13 +48,23 @@ extern int ps_r4_hdr10_on;
 #if defined(USE_DX10) || defined(USE_DX11)
 void CRender::ScreenshotImpl(ScreenshotMode mode, LPCSTR name, CMemoryWriter* memory_writer)
 {
-	// captures are skipped only while the frame is really PQ encoded
-	if (HW.m_HDR10Achieved) {
-		return;
-	}
-
 	ID3DResource* pSrcTexture;
-	HW.pBaseRT->GetResource(&pSrcTexture);
+#ifdef USE_DX11
+	// HDR10 captures resolve the pre encode frame so no inverse PQ is needed
+	if (o.dx11_hdr10)
+	{
+		if (!g_pGameLevel)
+		{
+			Msg("! screenshot unavailable while HDR10 output is active with no level loaded");
+			return;
+		}
+		Target->phase_hdr10_sdr_resolve();
+		pSrcTexture = Target->rt_HDR10_SDR->pTexture->surface_get();
+		Msg("~ hdr10 capture resolved %ux%u", Device.dwWidth, Device.dwHeight);
+	}
+	else
+#endif
+		HW.pBaseRT->GetResource(&pSrcTexture);
 
 	VERIFY(pSrcTexture);
 
@@ -573,10 +583,6 @@ void DoAsyncScreenshot()
 #if defined(USE_DX10) || defined(USE_DX11)
 void CRender::TakeScreenshot(LPCSTR path, Fvector2 dimensions, DxEncoding encoding)
 {
-	// captures are skipped only while the frame is really PQ encoded
-	if (HW.m_HDR10Achieved) {
-		return;
-	}
 	if (!Device.b_is_Ready) return;
 
 	string_path fname;
@@ -593,7 +599,22 @@ void CRender::TakeScreenshot(LPCSTR path, Fvector2 dimensions, DxEncoding encodi
 	clamp(height, 0, actual_height);
 
 	ID3DResource* pSrcTexture;
-	HW.pBaseRT->GetResource(&pSrcTexture);
+#ifdef USE_DX11
+	// HDR10 captures resolve the pre encode frame so no inverse PQ is needed
+	if (o.dx11_hdr10)
+	{
+		if (!g_pGameLevel)
+		{
+			Msg("! screenshot unavailable while HDR10 output is active with no level loaded");
+			return;
+		}
+		Target->phase_hdr10_sdr_resolve();
+		pSrcTexture = Target->rt_HDR10_SDR->pTexture->surface_get();
+		Msg("~ hdr10 capture resolved %ux%u", Device.dwWidth, Device.dwHeight);
+	}
+	else
+#endif
+		HW.pBaseRT->GetResource(&pSrcTexture);
 
 	VERIFY(pSrcTexture);
 
@@ -674,6 +695,41 @@ void CRender::TakeScreenshot(LPCSTR path, Fvector2 dimensions, DxEncoding encodi
 
 	// cleanup
 	_RELEASE(pSrcSmallTexture);
+}
+
+// dumps the pre encode frame as a format preserving F16 dds
+void HDR10DumpFrame()
+{
+#ifdef USE_DX11
+	if (!RImplementation.o.dx11_hdr10)
+	{
+		Msg("! hdr10 frame dump needs HDR10 output to be active");
+		return;
+	}
+
+	string64 t_stemp;
+	string_path buf;
+	xr_sprintf(buf, sizeof(buf), "hdr10_%s.dds", timestamp(t_stemp));
+
+	ID3DBaseTexture* pSrc = RImplementation.Target->rt_Color->pTexture->surface_get();
+	ID3DBlob* saved = 0;
+	HRESULT hr = D3DX11SaveTextureToMemory(HW.pContext, pSrc, D3DX11_IFF_DDS, &saved, 0);
+	if (hr == D3D_OK)
+	{
+		IWriter* fs = FS.w_open("$screenshots$", buf);
+		if (fs)
+		{
+			fs->w(saved->GetBufferPointer(), (u32)saved->GetBufferSize());
+			FS.w_close(fs);
+			Msg("~ hdr10 frame dump saved %s %ux%u f16", buf, Device.dwWidth, Device.dwHeight);
+		}
+	}
+	else
+		Msg("! hdr10 frame dump failed, hr 0x%08x", hr);
+
+	_RELEASE(saved);
+	_RELEASE(pSrc);
+#endif
 }
 #else //DX
 // Antglobes: Export Screenshot Func + variable resolution & encoding

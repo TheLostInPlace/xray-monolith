@@ -440,6 +440,9 @@ public:
 	virtual u32 memory_usage() { return 0; }
 	virtual u32 active_phase() = 0; //Swartz: actor shadow
 	virtual void RenderToTarget(RRT target) = 0;
+	// binds and clears the offscreen pda surface so the 3d pda draws there instead of the back buffer
+	virtual bool BeginPDATarget() { return false; }
+	virtual void EndPDATarget() {}
 	// Constructor/destructor
 	virtual ~IRender_interface();
 protected:

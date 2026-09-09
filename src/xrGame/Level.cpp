@@ -1253,6 +1253,9 @@ void CLevel::OnRender()
 		{
 			ps_r4_hdr10_pda = 1; // !!! HACK !!!
 
+			// renderer takes the draw straight into the pda surface when it can, else the back buffer
+			const bool pda_direct = Render->BeginPDATarget();
+
 			pda->Draw();
 			CUICursor* cursor = &UI().GetUICursor();
 
@@ -1291,7 +1294,10 @@ void CLevel::OnRender()
 				if (is_top)
 					cursor->OnRender();
 			}
-			Render->RenderToTarget(Render->rtPDA);
+			if (pda_direct)
+				Render->EndPDATarget();
+			else
+				Render->RenderToTarget(Render->rtPDA);
 
 			ps_r4_hdr10_pda = 0;
 		}

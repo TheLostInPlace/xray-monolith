@@ -25,10 +25,20 @@ void CRenderTarget::DoAsyncScreenshot()
 
 
 		//HW.pDevice->CopyResource( t_ss_async, pTex );
+		if (RImplementation.o.dx11_hdr10)
+		{
+			// the resolve already ran this frame in phase_combine
+			ID3DBaseTexture* pResolved = rt_HDR10_SDR->pTexture->surface_get();
+			HW.pContext->CopyResource(t_ss_async, pResolved);
+			_RELEASE(pResolved);
+			Msg("~ hdr10 async capture resolved");
+		}
+		else
+		{
 		ID3DTexture2D* pBuffer;
 		hr = HW.m_pSwapChain->GetBuffer(0, __uuidof( ID3D10Texture2D), (LPVOID*)&pBuffer);
-		// TODO: this won't work in DX11 with HDR due to texture format incompat
 		HW.pContext->CopyResource(t_ss_async, pBuffer);
+		}
 
 
 		RImplementation.m_bMakeAsyncSS = false;
@@ -738,6 +748,10 @@ void CRenderTarget::phase_combine()
 	/* if (!RImplementation.o.fp16_blend)*/
 	if (ps_r2_anomaly_flags.test(R2_AN_FLAG_FLARES) && ps_r2_heatvision == 0) //--DSR-- HeatVision
 		g_pGamePersistent->Environment().RenderFlares(); // lens-flares
+
+	// the async capture reads the resolved frame after present
+	if (RImplementation.o.dx11_hdr10 && RImplementation.m_bMakeAsyncSS)
+		phase_hdr10_sdr_resolve();
 
 	//	PP-if required
 	if (PP_Complex)

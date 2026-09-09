@@ -435,6 +435,8 @@ public:
 	virtual void rmNormal();
 	virtual u32 active_phase() { return phase; }; //Swartz: actor shadow
 	void RenderToTarget(RRT target) override;
+	bool BeginPDATarget() override;
+	void EndPDATarget() override;
 	// Constructor/destructor/loader
 	CRender();
 	virtual ~CRender();

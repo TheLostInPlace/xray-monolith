@@ -774,6 +774,9 @@
     <ClInclude Include="blender_hdr10_lens_flare.h">
       <Filter>Shading templates</Filter>
     </ClInclude>
+    <ClInclude Include="blender_hdr10_sdr_resolve.h">
+      <Filter>Shading templates</Filter>
+    </ClInclude>
     <ClInclude Include="..\xrRender\dxImGuiRender.h">
       <Filter>Interfase implementations\ImGuiRender</Filter>
     </ClInclude>
@@ -1428,10 +1431,16 @@
     <ClCompile Include="blender_hdr10_lens_flare.cpp">
       <Filter>Shading templates</Filter>
     </ClCompile>
+    <ClCompile Include="blender_hdr10_sdr_resolve.cpp">
+      <Filter>Shading templates</Filter>
+    </ClCompile>
     <ClCompile Include="r4_rendertarget_phase_hdr10_bloom.cpp">
       <Filter>Core_Target</Filter>
     </ClCompile>
     <ClCompile Include="r4_rendertarget_phase_hdr10_lens_flare.cpp">
+      <Filter>Core_Target</Filter>
+    </ClCompile>
+    <ClCompile Include="r4_rendertarget_phase_hdr10_sdr_resolve.cpp">
       <Filter>Core_Target</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRender\dxImGuiRender.cpp">
