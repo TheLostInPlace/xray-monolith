@@ -19,6 +19,23 @@
 #include "stats_manager.h"
 #endif
 
+#if defined(USE_DX11)
+// What the display told us through IDXGIOutput6, plain scalars so HW.h keeps its dxgi1_4 include
+struct CHWDisplayInfo
+{
+	bool	valid = false;
+	float	min_nits = 0.0f;
+	float	max_nits = 0.0f;
+	float	max_full_frame_nits = 0.0f;
+	int		color_space = -1;
+	float	red_primary[2] = { 0.0f, 0.0f };
+	float	green_primary[2] = { 0.0f, 0.0f };
+	float	blue_primary[2] = { 0.0f, 0.0f };
+	float	white_point[2] = { 0.0f, 0.0f };
+	float	sdr_white_nits = 0.0f;
+};
+#endif
+
 class CHW
 #if defined(USE_DX10) || defined(USE_DX11)
 	:	public pureAppActivate,
@@ -85,6 +102,7 @@ public:
 	bool							m_bUsePerfhud;
 	D3D_FEATURE_LEVEL				FeatureLevel;
 	bool 							m_SupportsVRR; // whether we can use DXGI_PRESENT_ALLOW_TEARING etc.
+	CHWDisplayInfo					m_DisplayInfo; // filled by QueryHDR10Display, all zero until then
 #elif defined(USE_DX10)
 public:
 	IDXGIAdapter*			m_pAdapter;	//	pD3D equivalent
@@ -143,6 +161,7 @@ private:
 #endif
 #if defined(USE_DX11)
 	void SelectAdapterAndOutput(HMONITOR hTargetMonitor);
+	void QueryHDR10Display();
 #endif
 	bool m_move_window;
 };
