@@ -220,6 +220,10 @@ public:
 private:
 };
 
+void R_constant_table_check_order(const R_constant_table::c_table& T);
+void R_constant_table_check_miss(const R_constant_table::c_table& T, const shared_str& S);
+void R_constant_table_check_report();
+
 typedef resptr_core<R_constant_table, resptr_base<R_constant_table>> ref_ctable;
 
 #if defined(USE_DX10) || defined(USE_DX11)

@@ -14,7 +14,14 @@
 
 #include "../xrRenderDX10/dx10ConstantBuffer.h"
 
+// pointer order, the lower_bound in R_constant_table::get searches this order
 IC bool p_sort(ref_constant C1, ref_constant C2)
+{
+	return C1->name < C2->name;
+}
+
+// the stock alphabetical order, kept as the revert path for r__ctable_ptr_sort 0
+IC bool p_sort_stock(ref_constant C1, ref_constant C2)
 {
 	return xr_strcmp(C1->name, C2->name) < 0;
 }
@@ -403,6 +410,11 @@ BOOL R_constant_table::parse(void* _desc, u32 destination)
 		parseResources(pReflection, ShaderDesc.BoundResources, destination);
 	}
 
-	std::sort(table.begin(), table.end(), p_sort);
+	if (ps_r__ctable_ptr_sort)
+		std::sort(table.begin(), table.end(), p_sort);
+	else
+		std::sort(table.begin(), table.end(), p_sort_stock);
+	if (ps_r__ctable_check)
+		R_constant_table_check_order(table);
 	return TRUE;
 }

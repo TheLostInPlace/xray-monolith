@@ -216,6 +216,9 @@ extern ECORE_API float ps_r2_tnmp_exposure; // r2-only
 extern ECORE_API float ps_r2_tnmp_gamma; // r2-only
 extern ECORE_API float ps_r2_tnmp_onoff; // r2-only
 
+extern ECORE_API int ps_r__ctable_ptr_sort; // dx11 constant table sorts in lookup order
+extern ECORE_API int ps_r__ctable_check;    // count tables and lookups that disagree
+
 /* --- HDR10 parameters --- */
 extern ECORE_API float ps_r4_hdr10_whitepoint_nits; // r4-only
 extern ECORE_API float ps_r4_hdr10_ui_nits; 		// r4-only

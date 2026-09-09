@@ -485,6 +485,8 @@ void CRender::create()
 
 void CRender::destroy()
 {
+	if (ps_r__ctable_check)
+		R_constant_table_check_report();
 	m_bMakeAsyncSS = false;
 	FluidManager.Destroy();
 	::PortalTraverser.destroy();

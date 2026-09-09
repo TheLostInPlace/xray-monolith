@@ -300,6 +300,9 @@ float ps_r2_tnmp_exposure = 7.0f; // r2-only
 float ps_r2_tnmp_gamma = .25f; // r2-only
 float ps_r2_tnmp_onoff = .0f; // r2-only
 
+int ps_r__ctable_ptr_sort = 1; // 0 restores the stock alphabetical parse sort
+int ps_r__ctable_check    = 0; // diagnostic counters, off by default
+
 // HDR10 parameters
 float ps_r4_hdr10_whitepoint_nits = 400.0f; // r4-only, default = 400 nits
 float ps_r4_hdr10_ui_nits         = 400.0f; // r4-only, default = 400 nits
@@ -1124,6 +1127,9 @@ void xrRender_initconsole()
 	CMD4(CCC_Float, "r__wallmark_ttl", &ps_r__WallmarkTTL, 1.0f, 10.f*60.f);
 
 	CMD4(CCC_Integer, "r__supersample", &ps_r__Supersample, 1, 8);
+
+	CMD4(CCC_Integer, "r__ctable_ptr_sort", &ps_r__ctable_ptr_sort, 0, 1);
+	CMD4(CCC_Integer, "r__ctable_check", &ps_r__ctable_check, 0, 1);
 
 	Fvector tw_min, tw_max;
 
