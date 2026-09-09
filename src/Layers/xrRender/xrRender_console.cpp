@@ -305,21 +305,21 @@ int ps_r__ctable_check    = 0; // diagnostic counters, off by default
 
 // HDR10 parameters
 float ps_r4_hdr10_whitepoint_nits = 400.0f; // r4-only, default = 400 nits
-float ps_r4_hdr10_ui_nits         = 400.0f; // r4-only, default = 400 nits
+float ps_r4_hdr10_ui_nits         = 203.0f; // r4-only, default = 203 nits
 float ps_r4_hdr10_paper_white_nits = 203.0f; // r4-only, default = 203 nits
 float ps_r4_hdr10_pda_intensity   = 1.0f;   // r4-only, default = 1.0x
 int   ps_r4_hdr10_pda             = 0;	    // r4-only (NOTE: this is a hack to not double HDR tonemap the 3D PDA)
 int   ps_r4_hdr10_on              = 0;	    // r4-only, default = off
 int   ps_r4_hdr10_colorspace      = 2;      // r4-only, default = Rec.2020
 
-int   ps_r4_hdr10_tonemapper   		   = 0;    // r4-only, default = ACES (Narkowicz)
+int   ps_r4_hdr10_tonemapper   		   = 9;    // r4-only, default = headroom
 int   ps_r4_hdr10_tonemap_mode 		   = 1;	   // r4-only, default = Color
-float ps_r4_hdr10_exposure     		   = 0.8f; // r4-only, default = 1.0x
+float ps_r4_hdr10_exposure     		   = 1.0f; // r4-only, default = 1.0x
 float ps_r4_hdr10_contrast     		   = 0.0f; // r4-only, default = +0%
 float ps_r4_hdr10_contrast_middle_gray = 0.5f; // r4-only, default = 0.5
 float ps_r4_hdr10_saturation   		   = 0.1f; // r4-only, default = +0%
 float ps_r4_hdr10_brightness		   = 0.0f; // r4-only, default = +0
-float ps_r4_hdr10_gamma 			   = 1.1f; // r4-only, default = 1.0
+float ps_r4_hdr10_gamma 			   = 1.0f; // r4-only, default = 1.0
 float ps_r4_hdr10_ui_saturation        = 0.5f; // r4-only, default = +0%
 
 int   ps_r4_hdr10_bloom_on          = 0; 	  // r4-only, default = off

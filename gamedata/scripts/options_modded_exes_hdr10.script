@@ -54,7 +54,7 @@ PAGE = page {
 	track {
 		id = "ui_nits",
 		tag = "hdr10",
-		def = 400,
+		def = 203,
 		step = 10,
 		cmd = "r4_hdr10_ui_nits",
 	},
@@ -120,14 +120,14 @@ PAGE = page {
 	track {
 		id = "gamma",
 		tag = "hdr10",
-		def = 1.1,
+		def = 1.0,
 		step = 0.01,
 		cmd = "r4_hdr10_gamma",	
 	},
 	track {
 		id = "exposure",
 		tag = "hdr10",
-		def = 0.8,
+		def = 1.0,
 		step = 0.05,
 		cmd = "r4_hdr10_exposure",
 	},
