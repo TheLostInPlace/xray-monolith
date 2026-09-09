@@ -457,12 +457,6 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_saturation_desc">
 		<text>Adjusts image saturation.</text>
 	</string>
-	<string id="ui_mm_modded_exes_visual_hdr10_ui_saturation">
-		<text>UI Saturation (r4_hdr10_ui_saturation)</text>
-	</string>
-	<string id="ui_mm_modded_exes_visual_hdr10_ui_saturation_desc">
-		<text>Adjusts UI saturation weighted by transparency. This is a corrective factor that is proportional to the element's transparency.</text>
-	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_bloom_on">
 		<text>Bloom (r4_hdr10_bloom_on)</text>
 	</string>

@@ -1547,9 +1547,10 @@ void CHW::ApplyColorSpace(LPCSTR site)
     }
 
     // forced fallback switch for exercising the refused path on hardware that accepts pq
-    const bool force_sdr = !!strstr(Core.Params, "--hdr10-force-sdr");
+    // the persistent hold does the same thing for the rest of the session
+    const bool force_sdr = m_HDR10ForceSDR || !!strstr(Core.Params, "--hdr10-force-sdr");
 
-    LPCSTR  reason   = force_sdr ? "forced_sdr" : "present_unsupported";
+    LPCSTR  reason   = m_HDR10ForceSDR ? "stale_shader" : (force_sdr ? "forced_sdr" : "present_unsupported");
     bool    achieved = false;
 
     UINT color_space_supported = 0;

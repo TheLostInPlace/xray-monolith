@@ -29,6 +29,7 @@
 #include "blender_hdr10_bloom.h"
 #include "blender_hdr10_lens_flare.h"
 #include "blender_hdr10_sdr_resolve.h"
+#include "blender_hdr10_ui_composite.h"
 
 #include "../xrRender/dxRenderDeviceRender.h"
 #include "../xrRender/xrRender_console.h"
@@ -428,6 +429,7 @@ CRenderTarget::CRenderTarget()
 	b_hdr10_lens_flare_blur       = xr_new<CBlender_hdr10_lens_flare_blur>();
 	b_hdr10_lens_flare_upsample   = xr_new<CBlender_hdr10_lens_flare_upsample>();
 	b_hdr10_sdr_resolve = xr_new<CBlender_hdr10_sdr_resolve>();
+	b_hdr10_ui_composite = xr_new<CBlender_hdr10_ui_composite>();
 
 	// Screen Space Shaders Stuff
 	b_ssfx_fog_scattering = xr_new<CBlender_ssfx_fog_scattering>();
@@ -571,6 +573,10 @@ CRenderTarget::CRenderTarget()
 			rt_HDR10_HalfRes[0].create(r4_RT_HDR10_halfres0, w/2,  h/2,  D3DFMT_A16B16G16R16F);
 			rt_HDR10_HalfRes[1].create(r4_RT_HDR10_halfres1, w/2,  h/2,  D3DFMT_A16B16G16R16F);
 
+			// UI draws here in linear light, present copy feeds the composite its world half
+			rt_HDR10_ui.create(r4_RT_HDR10_ui, w, h, D3DFMT_A16B16G16R16F, 1);
+			rt_HDR10_present.create(r4_RT_HDR10_present, w, h, D3DFMT_A2R10G10B10, 1);
+
 			// capture source for screenshots and save thumbnails
 			rt_HDR10_SDR.create(r4_RT_HDR10_sdr, w, h, D3DFMT_A8R8G8B8);
 			s_hdr10_sdr_resolve.create(b_hdr10_sdr_resolve, "hdr10_sdr_resolve");
@@ -673,6 +679,9 @@ CRenderTarget::CRenderTarget()
 	s_hdr10_lens_flare_fgen.create(b_hdr10_lens_flare_fgen, "hdr10_lens_flare_fgen");
 	s_hdr10_lens_flare_blur.create(b_hdr10_lens_flare_blur, "hdr10_lens_flare_blur");
 	s_hdr10_lens_flare_upsample.create(b_hdr10_lens_flare_upsample, "hdr10_lens_flare_upsample");
+
+	if (RImplementation.o.dx11_hdr10)
+		s_hdr10_ui_composite.create(b_hdr10_ui_composite, "hdr10_ui_composite");
 
 	s_sunshafts.create(b_sunshafts, "r2\\sunshafts");
 	s_blur.create(b_blur, "r2\\blur");
@@ -1429,6 +1438,7 @@ CRenderTarget::~CRenderTarget()
 	xr_delete(b_hdr10_lens_flare_blur);
 	xr_delete(b_hdr10_lens_flare_upsample);
 	xr_delete(b_hdr10_sdr_resolve);
+	xr_delete(b_hdr10_ui_composite);
 
 	if (RImplementation.o.dx10_msaa)
 	{

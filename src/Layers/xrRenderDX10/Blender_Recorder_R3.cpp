@@ -11,6 +11,9 @@
 
 void fix_texture_name(LPSTR fn);
 
+extern bool hdr10_is_ui_pixel_shader(LPCSTR ps);
+extern void hdr10_ui_layer_ablend(CSimulator& RS, LPCSTR ps, BOOL bABlend, u32 abSRC, u32 abDST);
+
 void CBlender_Compile::r_Stencil(BOOL Enable, u32 Func, u32 Mask, u32 WriteMask, u32 Fail, u32 Pass, u32 ZFail)
 {
 	RS.SetRS(D3DRS_STENCILENABLE, BC(Enable));
@@ -210,6 +213,7 @@ void CBlender_Compile::r_Pass(LPCSTR _vs, LPCSTR _gs, LPCSTR _ps, bool bFog, BOO
 	// Setup FF-units (Z-buffer, blender)
 	PassSET_ZB(bZtest, bZwrite);
 	PassSET_Blend(bABlend, abSRC, abDST, aTest, aRef);
+	hdr10_ui_layer_ablend(RS, _ps, bABlend, abSRC, abDST);
 	PassSET_LightFog(FALSE, bFog);
 
 	// Create shaders
@@ -264,6 +268,14 @@ void CBlender_Compile::r_End()
 {
 	SetMapping();
 	dest.constants = DEV->_CreateConstantTable(ctable);
+#if RENDER == R_R4
+	// script and screen_set blenders pick their blend after the pass so the layer alpha lands here
+	if (RImplementation.o.dx11_hdr10 && dest.ps && hdr10_is_ui_pixel_shader(*dest.ps->cName))
+	{
+		RS.SetRS(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+		RS.SetRS(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+	}
+#endif
 	dest.state = DEV->_CreateState(RS.GetContainer());
 	dest.T = DEV->_CreateTextureList(passTextures);
 	dest.C = 0;

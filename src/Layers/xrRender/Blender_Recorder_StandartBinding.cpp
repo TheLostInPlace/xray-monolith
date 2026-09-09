@@ -1233,7 +1233,6 @@ extern float ps_r4_hdr10_contrast_middle_gray;
 extern float ps_r4_hdr10_saturation;
 extern float ps_r4_hdr10_brightness;
 extern float ps_r4_hdr10_gamma;
-extern float ps_r4_hdr10_ui_saturation;
 
 extern int   ps_r4_hdr10_bloom_on;
 extern float ps_r4_hdr10_bloom_blur_scale;
@@ -1274,7 +1273,9 @@ extern float ps_r4_hdr10_sun_dusk_end;
 	} name
 
 #if RENDER == R_R4
-#define HDR10_ON (RImplementation.o.dx11_hdr10)
+extern u32 g_hdr10_ui_layer_live;
+// 2 tells the shaders the ui layer is bound so they stop at linear light
+#define HDR10_ON (RImplementation.o.dx11_hdr10 ? (g_hdr10_ui_layer_live ? 2 : 1) : 0)
 #else
 #define HDR10_ON (0)
 #endif
@@ -1332,7 +1333,7 @@ DECL_BINDER4F( binder_hdr10_parameters8,
 	ps_r4_hdr10_flare_halo_ca,
 	ps_r4_hdr10_flare_ghost_ca,
 	ps_r4_hdr10_flare_blur_scale,
-	ps_r4_hdr10_ui_saturation + 1.0f
+	1.0f
 );
 
 DECL_BINDER4F( binder_hdr10_parameters9,

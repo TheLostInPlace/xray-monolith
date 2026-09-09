@@ -69,6 +69,8 @@
 #define 	r4_RT_HDR10_halfres0 "$user$hdr10_halfres0"
 #define 	r4_RT_HDR10_halfres1 "$user$hdr10_halfres1"
 #define 	r4_RT_HDR10_sdr "$user$hdr10_sdr"
+#define 	r4_RT_HDR10_ui       "$user$hdr10_ui"
+#define 	r4_RT_HDR10_present  "$user$hdr10_present"
 
 #define		r2_RT_dof			"$user$dof"
 #define		r2_RT_ui			"$user$ui"

@@ -77,6 +77,12 @@ void dxApplicationRender::load_draw_internal(CApplication& owner)
 	if (use_reshade)
 		render_reshade_effects();
 
+#if RENDER == R_R4
+	// the target is gone between reset_begin and reset_end so test it before the bind
+	if (RImplementation.Target)
+		RImplementation.Target->phase_hdr10_ui_begin();
+#endif
+
 	if (!sh_progress)
 	{
 		return;

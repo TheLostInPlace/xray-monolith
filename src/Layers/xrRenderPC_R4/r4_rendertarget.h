@@ -61,6 +61,7 @@ public:
 	IBlender* b_hdr10_lens_flare_blur;
 	IBlender* b_hdr10_lens_flare_upsample;
 	IBlender* b_hdr10_sdr_resolve;
+	IBlender* b_hdr10_ui_composite;
 
 	IBlender* b_blur;
 	IBlender* b_dof;
@@ -161,6 +162,8 @@ public:
 	// HDR10
 	ref_rt rt_HDR10_HalfRes[2];
 	ref_rt rt_HDR10_SDR;
+	ref_rt rt_HDR10_ui;
+	ref_rt rt_HDR10_present;
 
 	// env
 	ref_texture t_envmap_0; // env-0
@@ -344,6 +347,7 @@ private:
 	ref_shader s_hdr10_lens_flare_blur;
 	ref_shader s_hdr10_lens_flare_upsample;
 	ref_shader s_hdr10_sdr_resolve;
+	ref_shader s_hdr10_ui_composite;
 
 	// Luminance
 	ref_shader s_luminance;
@@ -470,6 +474,10 @@ public:
 	void phase_hdr10_bloom();
 	void phase_hdr10_lens_flare();
 	void phase_hdr10_sdr_resolve();
+	void phase_hdr10_ui_begin();
+	void phase_hdr10_ui_rebind();
+	void phase_hdr10_ui_composite();
+	ID3DRenderTargetView* hdr10_ui_rt();
 
 	//	Generates min/max sm
 	void create_minmax_SM();

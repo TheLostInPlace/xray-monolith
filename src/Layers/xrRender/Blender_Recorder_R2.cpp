@@ -9,6 +9,39 @@
 
 void fix_texture_name(LPSTR fn);
 
+// true for the pixel shaders that emit linear light into the hdr ui layer
+bool hdr10_is_ui_pixel_shader(LPCSTR ps)
+{
+	if (!ps) return false;
+	return 0 == stricmp(ps, "hud_default") || 0 == stricmp(ps, "hud_font")
+		|| 0 == stricmp(ps, "font2") || 0 == stricmp(ps, "simple_color")
+		|| 0 == stricmp(ps, "yuv2rgb");
+}
+
+// the hdr ui layer reads coverage from alpha so its passes blend alpha premultiplied
+void hdr10_ui_layer_ablend(CSimulator& RS, LPCSTR ps, BOOL bABlend, u32 abSRC, u32 abDST)
+{
+#if RENDER == R_R4
+	if (!RImplementation.o.dx11_hdr10) return;
+	if (!hdr10_is_ui_pixel_shader(ps)) return;
+
+	const bool over = bABlend && D3DBLEND_SRCALPHA == abSRC && D3DBLEND_INVSRCALPHA == abDST;
+	const bool opaque = !bABlend || (D3DBLEND_ONE == abSRC && D3DBLEND_ZERO == abDST);
+	if (!over && !opaque) return;
+
+	// an unblended ui pass writes straight colour so give it the same over composite
+	if (opaque)
+	{
+		RS.SetRS(D3DRS_ALPHABLENDENABLE, TRUE);
+		RS.SetRS(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		RS.SetRS(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	}
+
+	RS.SetRS(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+	RS.SetRS(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+#endif
+}
+
 void CBlender_Compile::r_Pass(LPCSTR _vs, LPCSTR _ps, bool bFog, BOOL bZtest, BOOL bZwrite, BOOL bABlend,
                               D3DBLEND abSRC, D3DBLEND abDST, BOOL aTest, u32 aRef)
 {
@@ -22,6 +55,7 @@ void CBlender_Compile::r_Pass(LPCSTR _vs, LPCSTR _ps, bool bFog, BOOL bZtest, BO
 	// Setup FF-units (Z-buffer, blender)
 	PassSET_ZB(bZtest, bZwrite);
 	PassSET_Blend(bABlend, abSRC, abDST, aTest, aRef);
+	hdr10_ui_layer_ablend(RS, _ps, bABlend, abSRC, abDST);
 	PassSET_LightFog(FALSE, bFog);
 
 	// Create shaders

@@ -320,7 +320,6 @@ float ps_r4_hdr10_contrast_middle_gray = 0.391f; // r4-only, default = LogC mid 
 float ps_r4_hdr10_saturation   		   = 0.1f; // r4-only, default = +0%
 float ps_r4_hdr10_brightness		   = 0.0f; // r4-only, default = +0
 float ps_r4_hdr10_gamma 			   = 1.0f; // r4-only, default = 1.0
-float ps_r4_hdr10_ui_saturation        = 0.5f; // r4-only, default = +0%
 
 int   ps_r4_hdr10_bloom_on          = 0; 	  // r4-only, default = off
 int   ps_r4_hdr10_bloom_blur_passes = 20;      // r4-only, default = 8
@@ -1311,7 +1310,6 @@ void xrRender_initconsole()
 	CMD4(CCC_Float,   "r4_hdr10_saturation", 	  		&ps_r4_hdr10_saturation,      	     -1, 1);
 	CMD4(CCC_Float,   "r4_hdr10_brightness", 			&ps_r4_hdr10_brightness,			 -1, 1);
 	CMD4(CCC_Float,   "r4_hdr10_gamma",   			    &ps_r4_hdr10_gamma,					0.1, 5);
-	CMD4(CCC_Float,   "r4_hdr10_ui_saturation",         &ps_r4_hdr10_ui_saturation,          -1, 1);
 
 	CMD4(CCC_Integer, "r4_hdr10_bloom_on",          &ps_r4_hdr10_bloom_on,          0, 1);
 	CMD4(CCC_Integer, "r4_hdr10_bloom_blur_passes", &ps_r4_hdr10_bloom_blur_passes, 1, 32);

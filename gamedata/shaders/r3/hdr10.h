@@ -62,6 +62,7 @@ uniform float4 hdr10_parameters11;
 #define HDR10_UI_NITS_SCALAR   (hdr10_parameters1.y)
 #define HDR10_IS_ENABLED       (hdr10_parameters1.z != 0.0)
 #define HDR10_IS_RENDERING_PDA (hdr10_parameters1.w != 0.0)
+#define HDR10_UI_LINEAR        (hdr10_parameters1.z > 1.5)
 
 #define HDR10_COLORSPACE    (hdr10_parameters2.x)
 #define HDR10_PDA_INTENSITY (hdr10_parameters2.y)
@@ -267,6 +268,19 @@ float3 HDR10_ApplyST2084_PQ(float3 color_norm)
     float3             cp = pow(color_norm, m1);
 
     return pow((c1 + c2 * cp) / (1 + c3 * cp), m2);
+}
+
+// NOTE: inverse of HDR10_ApplyST2084_PQ
+float3 HDR10_RemoveST2084_PQ(float3 color_pq)
+{
+    static const float m1 = 2610.0 / 4096.0 / 4;
+    static const float m2 = 2523.0 / 4096.0 * 128;
+    static const float c1 = 3424.0 / 4096.0;
+    static const float c2 = 2413.0 / 4096.0 * 32;
+    static const float c3 = 2392.0 / 4096.0 * 32;
+    float3             ep = pow(color_pq, 1.0 / m2);
+
+    return pow(max(ep - c1, 0.0) / (c2 - c3 * ep), 1.0 / m1);
 }
 
 // NOTE: the luminance weight vector is the y-component (2nd row) of the CIE XYZ matrix for RGB -> CIE XYZ
@@ -773,14 +787,10 @@ float3 HDR10_ToDisplay_UI(float3 color, float nits_scalar, float alpha)
 	// NOTE: sRGB/Rec.709 are equivalent color spaces, their OETFs (gamma curves basically) aren't, but when linearized they are equivalent
 	color = HDR10_sRGBToLinear(color);
 
-	// Apply UI saturation. This is a workaround for UI blending in non-linear PQ colorspace
-	// Correct:   output = PQ(alpha * color)
-	// Incorrect: output = alpha * PQ(color)
-	// at alpha = 1, the color is correct
-	// at alpha = 0, the color is the most incorrect
-	float saturation = lerp(HDR10_UI_SATURATION, 1.0, alpha);
-	float luma = HDR10_Luminance_Rec709(color);
-	color = lerp(luma, color, saturation);
+	// the UI layer carries linear light so the composite pass owns the gamut, the nits and the PQ
+	if (HDR10_UI_LINEAR) {
+		return color;
+	}
 
 	// apply colorspace transform user selected
 	color = HDR10_TransformColorspace_ToTarget(color);

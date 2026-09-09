@@ -1,0 +1,30 @@
+#include "common.h"
+#include "hdr10.h"
+
+Texture2D s_hdr10_present;
+Texture2D s_hdr10_ui;
+
+float4 main(p_screen I) : SV_TARGET
+{
+	float2 tc = I.tc0;
+
+	float4 ui = s_hdr10_ui.Sample(smp_rtlinear, tc);
+	float3 world_pq = s_hdr10_present.Sample(smp_rtlinear, tc).rgb;
+
+	// world arrives PQ encoded in Rec.2020, UI arrives premultiplied linear Rec.709 at paper white
+	float3 world = HDR10_RemoveST2084_PQ(world_pq);
+
+	float3 ui_display = HDR10_TransformColorspace_ToTarget(ui.rgb);
+	ui_display = saturate(ui_display);
+	ui_display = HDR10_TransformColorspace_ToDisplay(ui_display);
+
+	static const float st2084_max_nits = 10000.0;
+	ui_display = HDR10_WORLD_SCALE_NITS * HDR10_UI_NITS_SCALAR * ui_display / st2084_max_nits;
+
+	float3 color = ui_display + world * (1.0 - ui.a);
+
+	// ST2084 is defined on [0,1]
+	color = saturate(color);
+
+	return float4(HDR10_ApplyST2084_PQ(color), 1.0);
+}
