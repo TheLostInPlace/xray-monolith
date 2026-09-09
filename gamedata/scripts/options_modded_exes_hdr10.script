@@ -141,7 +141,7 @@ PAGE = page {
 	track {
 		id = "contrast_middle_gray",
 		tag = "hdr10",
-		def = 0.5,
+		def = 0.391,
 		step = 0.01,
 		cmd = "r4_hdr10_contrast_middle_gray",
 	},

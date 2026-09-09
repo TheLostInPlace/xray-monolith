@@ -32,9 +32,13 @@ float4 main( p_postpr I ) : SV_Target
 
 	float	grad_i 	= dot		(image_o,(0.3333h).xxx);
 
-	float3 	image0 	= s_grad0.Sample( smp_rtlinear, float2(grad_i,0.5));
-	float3 	image1 	= s_grad1.Sample( smp_rtlinear, float2(grad_i,0.5));
-	float3	image	= lerp		(image0, image1, c_colormap.y);
+	// the gradient sampler clamps so read it in range and carry the headroom back as a tint
+	float	grad_c	= HDR10_IS_ENABLED ? saturate(grad_i) : grad_i;
+	float	grad_s	= HDR10_IS_ENABLED ? max(grad_i, 1.0) : 1.0;
+
+	float3 	image0 	= s_grad0.Sample( smp_rtlinear, float2(grad_c,0.5));
+	float3 	image1 	= s_grad1.Sample( smp_rtlinear, float2(grad_c,0.5));
+	float3	image	= lerp		(image0, image1, c_colormap.y) * grad_s;
 			image	= lerp		(image_o, image, c_colormap.x);
 
 	float	gray 	= dot		(image,I.Gray);			// dp3
@@ -47,7 +51,7 @@ float4 main( p_postpr I ) : SV_Target
 			image	= (image * I.Color + c_brightness)*2;		// mad
 //		image	= (image + c_brightness) * I.Color;		// mad ?
 
-	image = HDR10_ToDisplay_World(image);
+	image = HDR10_ToDisplay_World(image, I.Tex0 * screen_res.xy, true);
 
 	// out
 	return  float4( image, 1.0h);					// +mov
