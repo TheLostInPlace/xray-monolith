@@ -27,7 +27,12 @@ void CRenderTarget::phase_hdr10_ui_begin()
 {
     if (!RImplementation.o.dx11_hdr10) return;
     if (!rt_HDR10_ui || !rt_HDR10_ui->valid() || !rt_HDR10_present || !rt_HDR10_present->valid()) return;
-    if (g_hdr10_ui_layer_live) return;
+    if (g_hdr10_ui_layer_live)
+    {
+        // the caller rebound the back buffer so re-assert the layer target
+        u_setrt(rt_HDR10_ui, NULL, NULL, HW.pBaseZB);
+        return;
+    }
 
     FLOAT ClearRGBA[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     HW.pContext->ClearRenderTargetView(rt_HDR10_ui->pRT, ClearRGBA);
