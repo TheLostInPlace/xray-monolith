@@ -590,21 +590,33 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
     IDXGISwapChain3* swapchain3;
     R_CHK(m_pSwapChain->QueryInterface(&swapchain3));
 
+    LPCSTR hdr10_reason = "disabled_by_cvar";
+    const bool hdr10_force_sdr = !!strstr(Core.Params, "--hdr10-force-sdr");
+
     if (ps_r4_hdr10_on) {
         UINT color_space_supported = 0;
         R_CHK(swapchain3->CheckColorSpaceSupport(
             DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
             &color_space_supported));
 
-        if (color_space_supported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) {
+        if (!hdr10_force_sdr && (color_space_supported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT)) {
             R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
+            m_HDR10Achieved = true;
+            hdr10_reason = "present_supported";
         } else {
             Log("HDR10 color space unsupported, failed to enable HDR10 output");
             R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709));
+            m_HDR10Achieved = false;
+            hdr10_reason = hdr10_force_sdr ? "forced_sdr" : "present_unsupported";
         }
     } else {
         R_CHK(swapchain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709));
     }
+
+    Msg("[HDR10] achieved=%d colourspace=%s reason=%s",
+        m_HDR10Achieved ? 1 : 0,
+        m_HDR10Achieved ? "G2084_NONE_P2020" : "G22_NONE_P709",
+        hdr10_reason);
 
     _RELEASE(swapchain3);
 
@@ -627,6 +639,10 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
         FeatureLevel = D3D_FEATURE_LEVEL_10_1;
     }
     pContext1 = pDevice1;
+
+    // the DX10 path has no swapchain colour space call so HDR output is never achieved
+    m_HDR10Achieved = false;
+    Msg("[HDR10] achieved=0 colourspace=G22_NONE_P709 reason=renderer_dx10");
 #endif
 
     /*

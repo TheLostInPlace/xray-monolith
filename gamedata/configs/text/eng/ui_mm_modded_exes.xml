@@ -323,7 +323,16 @@
 		<text>Enable HDR10 (Requires Restart) (r4_hdr10_on)</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_enabled_desc">
-		<text>HDR10 is incompatible with MSAA, enabling HDR will disable MSAA</text>
+		<text>Turn HDR on in Windows display settings first. HDR10 is incompatible with MSAA, enabling HDR will disable MSAA. If the display refuses HDR the game falls back to SDR and says so on this page.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_status_active">
+		<text>HDR10 output is active</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_status_failed">
+		<text>HDR10 was requested but the display refused it, the game is running in SDR. Turn HDR on in Windows display settings and restart.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_status_off">
+		<text>HDR10 is off</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_whitepoint_nits">
 		<text>White Point (nits) (r4_hdr10_whitepoint_nits)</text>

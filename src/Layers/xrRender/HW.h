@@ -123,6 +123,9 @@ public:
 	D3DPRESENT_PARAMETERS DevPP;
 #endif	//	USE_DX10
 
+	// true only while the swapchain is presenting in the PQ Rec.2020 colour space
+	bool m_HDR10Achieved = false;
+
 #ifndef _MAYA_EXPORT
 	stats_manager stats_manager;
 #endif

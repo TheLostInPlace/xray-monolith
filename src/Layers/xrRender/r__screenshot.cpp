@@ -48,8 +48,8 @@ extern int ps_r4_hdr10_on;
 #if defined(USE_DX10) || defined(USE_DX11)
 void CRender::ScreenshotImpl(ScreenshotMode mode, LPCSTR name, CMemoryWriter* memory_writer)
 {
-	// demonized: Disable screenshots if HDR is enabled
-	if (ps_r4_hdr10_on) {
+	// captures are skipped only while the frame is really PQ encoded
+	if (HW.m_HDR10Achieved) {
 		return;
 	}
 
@@ -187,6 +187,10 @@ void CRender::ScreenshotImpl(ScreenshotMode mode, LPCSTR name, CMemoryWriter* me
 	case IRender_interface::SM_FOR_LEVELMAP:
 	case IRender_interface::SM_FOR_CUBEMAP:
 		{
+		// the staging texture is 8 bit so a 10 bit backbuffer cannot be copied into it
+		if (ps_r4_hdr10_on)
+			break;
+
 		string_path buf;
 		VERIFY(name);
 		strconcat(sizeof(buf), buf, name, ".tga");
@@ -569,8 +573,8 @@ void DoAsyncScreenshot()
 #if defined(USE_DX10) || defined(USE_DX11)
 void CRender::TakeScreenshot(LPCSTR path, Fvector2 dimensions, DxEncoding encoding)
 {
-	// demonized: Disable screenshots if HDR is enabled
-	if (ps_r4_hdr10_on) {
+	// captures are skipped only while the frame is really PQ encoded
+	if (HW.m_HDR10Achieved) {
 		return;
 	}
 	if (!Device.b_is_Ready) return;

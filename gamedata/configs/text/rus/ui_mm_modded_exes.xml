@@ -322,6 +322,15 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_enabled">
 		<text>Включить HDR10 (требуется перезагрузка) (r4_hdr10_on)</text>
 	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_status_active">
+		<text>HDR10 output is active</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_status_failed">
+		<text>HDR10 was requested but the display refused it, the game is running in SDR. Turn HDR on in Windows display settings and restart.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_status_off">
+		<text>HDR10 is off</text>
+	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_enabled_desc">
 		<text>HDR10 несовместим с MSAA, при включении HDR, MSAA будет выключен</text>
 	</string>
