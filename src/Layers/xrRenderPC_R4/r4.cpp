@@ -266,6 +266,14 @@ bool CRender::hdr10_probe_gate(LPCSTR fname, int depth)
 // derive the encode mode and the pass ownership from the probed gate state and the cvars
 void CRender::hdr10_resolve_mode()
 {
+	// a reset can achieve hdr for the first time so measure the gate before any mode is picked
+	if (o.dx11_hdr10 && !o.hdr10_gate_probed)
+	{
+		o.hdr10_combine_gated = hdr10_probe_gate("combine_2_naa.ps", 0) ? 1 : 0;
+		o.hdr10_cf_gated = hdr10_probe_gate("common_functions.h", 0) ? 1 : 0;
+		o.hdr10_gate_probed = 1;
+	}
+
 	// auto mode follows the combine alone, it is the pass that hands postprocess its frame
 	if (2 == ps_r4_hdr10_display_referred)
 		o.hdr10_display_referred = (o.dx11_hdr10 && !o.hdr10_combine_gated) ? 1 : 0;
@@ -273,6 +281,24 @@ void CRender::hdr10_resolve_mode()
 		o.hdr10_display_referred = (o.dx11_hdr10 && 1 == ps_r4_hdr10_display_referred) ? 1 : 0;
 
 	o.hdr10_own_final_pass = (o.dx11_hdr10 && !!ps_r4_hdr10_own_final_pass) ? 1 : 0;
+}
+
+// report the gate state, the encode mode, the pass owner and the taa policy
+void CRender::hdr10_report_mode()
+{
+	if (o.dx11_hdr10 && !o.hdr10_combine_gated)
+		Msg("![HDR10] the winning combine_2_naa.ps has no HDR10 gate, a shader mod is overriding the HDR aware copy");
+	if (o.dx11_hdr10 && !o.hdr10_cf_gated)
+		Msg("![HDR10] the winning common_functions.h has no HDR10 gate, a shader mod is overriding the HDR aware copy");
+	if (o.hdr10_display_referred && o.hdr10_combine_gated)
+		Msg("![HDR10] display referred forced while the combine still gates, the frame is anchored twice");
+
+	Msg("[HDR10] combine gate=%s common_functions gate=%s mode=%s own=%s taa=%s",
+		o.hdr10_combine_gated ? "yes" : "no",
+		o.hdr10_cf_gated ? "yes" : "no",
+		o.hdr10_display_referred ? "display" : "scene",
+		o.hdr10_own_final_pass ? "engine" : "script",
+		o.ssfx_taa ? "on" : "skipped");
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -484,6 +510,7 @@ void CRender::create()
 	// the gate probe runs further down so the derived modes start clear
 	o.hdr10_combine_gated = 0;
 	o.hdr10_cf_gated = 0;
+	o.hdr10_gate_probed = 0;
 	o.hdr10_display_referred = 0;
 	o.hdr10_own_final_pass = 0;
 
@@ -673,9 +700,6 @@ void CRender::create()
 		}
 
 		// the gate only reaches the frame if the shader that wins the filesystem still carries it
-		o.hdr10_combine_gated = o.dx11_hdr10 ? (hdr10_probe_gate("combine_2_naa.ps", 0) ? 1 : 0) : 0;
-		o.hdr10_cf_gated = o.dx11_hdr10 ? (hdr10_probe_gate("common_functions.h", 0) ? 1 : 0) : 0;
-
 		hdr10_resolve_mode();
 
 		// TAA clamps the scene to unity before the combine so it can be skipped when it carries no HDR10 gate
@@ -683,19 +707,7 @@ void CRender::create()
 			&& !hdr10_probe_gate("ssfx_taa.ps", 0) && !hdr10_probe_gate("ssfx_taa_sharp.ps", 0))
 			o.ssfx_taa = 0;
 
-		if (o.dx11_hdr10 && !o.hdr10_combine_gated)
-			Msg("![HDR10] the winning combine_2_naa.ps has no HDR10 gate, a shader mod is overriding the HDR aware copy");
-		if (o.dx11_hdr10 && !o.hdr10_cf_gated)
-			Msg("![HDR10] the winning common_functions.h has no HDR10 gate, a shader mod is overriding the HDR aware copy");
-		if (o.hdr10_display_referred && o.hdr10_combine_gated)
-			Msg("![HDR10] display referred forced while the combine still gates, the frame is anchored twice");
-
-		Msg("[HDR10] combine gate=%s common_functions gate=%s mode=%s own=%s taa=%s",
-			o.hdr10_combine_gated ? "yes" : "no",
-			o.hdr10_cf_gated ? "yes" : "no",
-			o.hdr10_display_referred ? "display" : "scene",
-			o.hdr10_own_final_pass ? "engine" : "script",
-			o.ssfx_taa ? "on" : "skipped");
+		hdr10_report_mode();
 	}
 
 	// constants
@@ -820,6 +832,7 @@ void CRender::reset_end()
 	// the achieved colour space can change across a reset so the option follows the flag before the targets rebuild
 	o.dx11_hdr10 = HW.m_HDR10Achieved ? 1 : 0;
 	hdr10_resolve_mode();
+	hdr10_report_mode();
 
 	Target = xr_new<CRenderTarget>();
 
