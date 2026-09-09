@@ -108,6 +108,62 @@
         ai_danger_grenade_mult [0.0; 5.0] // Grenade danger urgency multiplier. Default 1.0 (base score 1000)
         ai_danger_enemy_sound_mult [0.0; 5.0] // Enemy sound danger urgency multiplier. Default 1.0 (base score 1000)
 
+        // HDR10, DX11 renderer only, the display has the last word.
+        r4_hdr10_on [0; 1] // Enable the 10 bit PQ Rec.2020 swapchain. Default 0. Requires restart. Forces MSAA off
+        r4_hdr10_achieved // Read only, 1 when the display accepted HDR10 output
+        r4_hdr10_dump_frame // Write the frame reaching the encode as an f16 dds, needs HDR10 output active
+        r4_hdr10_whitepoint_nits [10; 10000] // Display peak luminance in nits. Default 400
+        r4_hdr10_paper_white_nits [80; 1000] // Diffuse white in nits, used by tonemapper 9. Default 203
+        r4_hdr10_ui_nits [10; 10000] // UI luminance target in nits. Default 203
+        r4_hdr10_pda_intensity [0.1; 2.0] // Brightness of the 3D PDA screen. Default 1.0
+        r4_hdr10_colorspace [0; 2] // 0 Rec.709, 1 DCI-P3 D65, 2 Rec.2020. Default 2
+        r4_hdr10_own_final_pass [0; 1] // Engine supplies the final encode pass instead of the by name script route. Default 1
+        r4_hdr10_display_referred [0; 2] // Treat the incoming frame as a finished SDR image. 0 scene, 1 display, 2 auto from the gate probe. Default 2
+        r4_hdr10_skip_taa [0; 1] // Drop an ungated screen space shaders TAA, which clamps the scene to unity. Default 0
+
+        r4_hdr10_tonemapper [0; 9] // 0 ACES Narkowicz, 1 ACES Hill, 2 AgX, 3 AgX punchy, 4 Uchimura, 5 SteveM, 6 Uncharted2, 7 Reinhard, 8 Reinhard2, 9 headroom. Default 9
+        r4_hdr10_tonemap_mode [0; 1] // 0 luminance, 1 per channel. Default 1
+        r4_hdr10_exposure [0.1; 30.0] // Scene exposure. Default 1.0. Inert in display referred mode
+        r4_hdr10_brightness [-1.0; 1.0] // Added after grading. Default 0.0. Inert in display referred mode
+        r4_hdr10_contrast [-1.0; 1.0] // Contrast around the pivot below. Default 0.0. Inert in display referred mode
+        r4_hdr10_contrast_middle_gray [0.0; 5.0] // Contrast pivot, LogC mid grey. Default 0.391
+        r4_hdr10_saturation [-1.0; 1.0] // World saturation. Default 0.1. Inert in display referred mode
+        r4_hdr10_gamma [0.1; 5.0] // Output gamma. Default 1.0. Inert in display referred mode
+
+        r4_hdr10_bloom_on [0; 1] // HDR bloom. Default 0
+        r4_hdr10_bloom_blur_passes [1; 32] // Bloom blur passes. Default 20
+        r4_hdr10_bloom_blur_scale [0.0; 1.0] // Bloom blur scale. Default 1.0
+        r4_hdr10_bloom_intensity [0.0; 1.0] // Bloom intensity. Default 0.06
+        r4_hdr10_bloom_threshold [0.0; 10.0] // Luminance a pixel must exceed to seed the bloom. Default 1.0
+
+        r4_hdr10_flare_on [0; 1] // HDR lens flares. Default 0
+        r4_hdr10_flare_threshold [0.0; 10.0] // Luminance a pixel must exceed to seed a flare. Default 0.0
+        r4_hdr10_flare_power [0.0; 5.0] // Overall flare strength. Default 0.04
+        r4_hdr10_flare_ghosts [0; 10] // Number of ghost images. Default 1
+        r4_hdr10_flare_ghost_dispersal [0.01; 5.0] // Spacing of the ghosts along the centre line. Default 0.6
+        r4_hdr10_flare_center_falloff [0.1; 10.0] // Falloff of the ghosts away from screen centre. Default 1.1
+        r4_hdr10_flare_halo_scale [0.01; 5.0] // Radius of the halo ring. Default 0.47
+        r4_hdr10_flare_halo_ca [0.0; 20.0] // Chromatic aberration of the halo. Default 10.0
+        r4_hdr10_flare_ghost_ca [0.0; 20.0] // Chromatic aberration of the ghosts. Default 3.0
+        r4_hdr10_flare_blur_passes [1; 32] // Flare blur passes. Default 12
+        r4_hdr10_flare_blur_scale [0.0; 1.0] // Flare blur scale. Default 1.0
+        r4_hdr10_flare_ghost_intensity [0.0; 1.0] // Ghost brightness. Default 0.04
+        r4_hdr10_flare_halo_intensity [0.0; 1.0] // Halo brightness. Default 0.04
+        r4_hdr10_flare_lens_color [r, g, b] // Flare tint, each channel [0.0; 1.0]. Default 1.0, 0.7, 1.0
+
+        r4_hdr10_sun_on [0; 1] // Procedural HDR sun disc. Default 0
+        r4_hdr10_sun_intensity [1.0; 100.0] // Sun disc intensity. Default 80
+        r4_hdr10_sun_inner_radius [0.01; 1.0] // Sun disc full intensity radius. Default 0.2
+        r4_hdr10_sun_outer_radius [0.01; 1.0] // Sun disc falloff radius. Default 0.4
+        r4_hdr10_sun_dawn_begin [0.0; 24.0] // Hour the sun disc starts fading in. Default 4.5
+        r4_hdr10_sun_dawn_end [0.0; 24.0] // Hour the sun disc reaches full intensity. Default 6.0
+        r4_hdr10_sun_dusk_begin [0.0; 24.0] // Hour the sun disc starts fading out. Default 18.5
+        r4_hdr10_sun_dusk_end [0.0; 24.0] // Hour the sun disc is fully faded. Default 21.0
+
+        // DX10 and DX11 shader constant tables
+        r__ctable_ptr_sort [0; 1] // Sort the constant table in the order its lookup searches. Default 1, 0 restores the stock parse order
+        r__ctable_check [0; 1] // Count duplicate names, out of order slots and missed lookups, reported on renderer shutdown. Default 0
+
     }
 
     lua extensions {
