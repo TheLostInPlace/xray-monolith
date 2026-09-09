@@ -58,6 +58,35 @@ PAGE = page {
 		step = 10,
 		cmd = "r4_hdr10_ui_nits",
 	},
+	list_enum {
+		id = "display_referred",
+		tag = "hdr10",
+		curr = function()
+			return get_console_cmd(0, "r4_hdr10_display_referred")
+		end,
+		content = {
+			"hdr10_display_referred_scene",
+			"hdr10_display_referred_display",
+			"hdr10_display_referred_auto"
+		},
+		cmd = "r4_hdr10_display_referred",
+	},
+	list_bool {
+		id = "own_final_pass",
+		curr = function()
+			return get_console_cmd(0, "r4_hdr10_own_final_pass")
+		end,
+		cmd = "r4_hdr10_own_final_pass",
+		restart = true,
+	},
+	list_bool {
+		id = "skip_taa",
+		curr = function()
+			return get_console_cmd(0, "r4_hdr10_skip_taa")
+		end,
+		cmd = "r4_hdr10_skip_taa",
+		restart = true,
+	},
 	track {
 		id = "pda_intensity",
 		tag = "hdr10",

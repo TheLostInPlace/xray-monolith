@@ -352,6 +352,33 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_ui_nits_desc">
 		<text>The luminance of white UI. 203 nits matches paper white. Keep it at or below Paper White on the Headroom tonemapper, or the 3D PDA screen will clip.</text>
 	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_display_referred">
+		<text>Display Referred Mode (r4_hdr10_display_referred)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_display_referred_desc">
+		<text>Auto detects whether a shader mod has replaced the HDR aware combine. In display referred mode the frame is anchored at Paper White instead of being tone mapped a second time, and the HDR grading sliders do nothing.</text>
+	</string>
+	<string id="ui_mm_lst_hdr10_display_referred_scene">
+		<text>Scene referred</text>
+	</string>
+	<string id="ui_mm_lst_hdr10_display_referred_display">
+		<text>Display referred</text>
+	</string>
+	<string id="ui_mm_lst_hdr10_display_referred_auto">
+		<text>Auto</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_own_final_pass">
+		<text>Engine Owned Final Pass (r4_hdr10_own_final_pass)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_own_final_pass_desc">
+		<text>The engine selects the final HDR encode itself so a shader mod's postprocess.s cannot remove it. Turn off only if a shader mod supplies its own HDR aware final pass.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_skip_taa">
+		<text>Skip TAA in HDR (r4_hdr10_skip_taa)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_skip_taa_desc">
+		<text>Screen Space Shaders TAA clamps the image to SDR white before the HDR encode. Skipping it keeps highlight range at the cost of temporal antialiasing.</text>
+	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_pda_intensity">
 		<text>PDA Intensity (r4_hdr10_pda_intensity)</text>
 	</string>

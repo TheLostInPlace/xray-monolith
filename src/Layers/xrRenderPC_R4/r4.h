@@ -134,7 +134,11 @@ public:
 		
 		// HDR10
 		u32 dx11_hdr10 : 1;
-		
+		u32 hdr10_combine_gated : 1;
+		u32 hdr10_cf_gated : 1;
+		u32 hdr10_display_referred : 1;
+		u32 hdr10_own_final_pass : 1;
+
 		float forcegloss_v;
 	} o;
 
@@ -322,6 +326,8 @@ public:
 	// Information
 	virtual void Statistics(CGameFont* F);
 	virtual LPCSTR getShaderPath() { return "r3\\"; }
+	bool hdr10_probe_gate(LPCSTR fname, int depth);
+	void hdr10_resolve_mode();
 	virtual ref_shader getShader(int id);
 	virtual IRender_Sector* getSector(int id);
 	virtual IRenderVisual* getVisual(int id);

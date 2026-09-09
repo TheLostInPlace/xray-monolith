@@ -110,6 +110,10 @@ uniform float4 hdr10_parameters11;
 // display peak over paper white, 1.0 when there is no headroom
 #define HDR10_HEADROOM (hdr10_parameters11.x)
 
+// set when the frame arriving at the encode is already a finished SDR image
+#define HDR10_IS_DISPLAY_REFERRED (hdr10_parameters11.y != 0.0)
+#define HDR10_PAPER_WHITE_NITS    (hdr10_parameters11.z)
+
 /* --- Colorspace Options --- */
 
 #define HDR10_USE_COLORSPACE_REC709  (HDR10_COLORSPACE == 0.0)
@@ -713,6 +717,15 @@ float3 HDR10_ApplyColorGrading_Rec709(float3 color)
 	return color;
 }
 
+// quadratic ramp above a fixed knee that reaches the display headroom at SDR white
+float3 HDR10_ExpandHighlights_DisplayReferred(float3 color)
+{
+	static const float knee = 0.5;
+	float headroom = max(HDR10_HEADROOM - 1.0, 0.0);
+	float3 t = saturate((color - knee) / (1.0 - knee));
+	return color + headroom * t * t;
+}
+
 // Convert from sRGB to HDR10
 // included tonemapping, color grading, colorspace transform, and PQ
 float3 HDR10_ToDisplay_World(float3 color, float2 pixel_pos, bool dither)
@@ -729,6 +742,24 @@ float3 HDR10_ToDisplay_World(float3 color, float2 pixel_pos, bool dither)
 	// we want linear (sRGB/Rec.709 colorspace, but without non-linear OETF applied)
 	// NOTE: sRGB/Rec.709 are equivalent color spaces, their OETFs (gamma curves basically) aren't, but when linearized they are equivalent (identical primaries and whitepoint)
 	color = HDR10_sRGBToLinear(color);
+
+	// the input is a finished SDR frame so anchor it at paper white instead of tonemapping it again
+	if (HDR10_IS_DISPLAY_REFERRED) {
+		color = HDR10_ExpandHighlights_DisplayReferred(color);
+		color = HDR10_TransformColorspace_ToTarget(color);
+		color = HDR10_TransformColorspace_ToDisplay(color);
+
+		static const float st2084_dr_max_nits = 10000.0;
+		color = HDR10_PAPER_WHITE_NITS * color / st2084_dr_max_nits;
+		color = saturate(color);
+		color = HDR10_ApplyST2084_PQ(color);
+
+		if (dither) {
+			color = HDR10_DitherPQ(color, pixel_pos);
+		}
+
+		return color;
+	}
 
 	// apply color grading in linear HDR sRGB
 	color = HDR10_ApplyColorGrading_Rec709(color);

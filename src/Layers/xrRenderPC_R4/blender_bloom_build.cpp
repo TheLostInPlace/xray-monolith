@@ -145,6 +145,46 @@ void CBlender_postprocess_msaa::Compile(CBlender_Compile& C)
 	}
 }
 
+CBlender_postprocess::CBlender_postprocess() { description.CLS = 0; }
+
+CBlender_postprocess::~CBlender_postprocess()
+{
+}
+
+void CBlender_postprocess::Compile(CBlender_Compile& C)
+{
+	IBlender::Compile(C);
+
+	switch (C.iElement)
+	{
+	case 0: // normal post process
+		C.r_Pass("stub_notransform_postpr", "postprocess", FALSE, FALSE, FALSE, FALSE, D3DBLEND_SRCALPHA,
+		         D3DBLEND_INVSRCALPHA);
+		C.r_dx10Texture("s_base0", r2_RT_albedo);
+		C.r_dx10Texture("s_base1", r2_RT_albedo);
+		C.r_dx10Texture("s_noise", "fx\\fx_noise2");
+
+		C.r_dx10Sampler("smp_rtlinear");
+		C.r_dx10Sampler("smp_linear");
+		C.r_End();
+		break;
+
+	case 4: // use color map
+		C.r_Pass("stub_notransform_postpr", "postprocess_CM", FALSE, FALSE, FALSE, FALSE, D3DBLEND_SRCALPHA,
+		         D3DBLEND_INVSRCALPHA);
+		C.r_dx10Texture("s_base0", r2_RT_albedo);
+		C.r_dx10Texture("s_base1", r2_RT_albedo);
+		C.r_dx10Texture("s_noise", "fx\\fx_noise2");
+		C.r_dx10Texture("s_grad0", "$user$cmap0");
+		C.r_dx10Texture("s_grad1", "$user$cmap1");
+
+		C.r_dx10Sampler("smp_rtlinear");
+		C.r_dx10Sampler("smp_linear");
+		C.r_End();
+		break;
+	}
+}
+
 CBlender_ssfx_bloom_build::CBlender_ssfx_bloom_build() { description.CLS = 0; }
 
 CBlender_ssfx_bloom_build::~CBlender_ssfx_bloom_build()

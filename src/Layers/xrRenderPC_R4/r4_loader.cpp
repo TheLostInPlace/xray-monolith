@@ -25,6 +25,13 @@ void CRender::level_Load(IReader* fs)
 	R_ASSERT(0!=g_pGameLevel);
 	R_ASSERT(!b_loaded);
 
+	Msg("[HDR10] combine gate=%s common_functions gate=%s mode=%s own=%s taa=%s",
+		o.hdr10_combine_gated ? "yes" : "no",
+		o.hdr10_cf_gated ? "yes" : "no",
+		o.hdr10_display_referred ? "display" : "scene",
+		o.hdr10_own_final_pass ? "engine" : "script",
+		o.ssfx_taa ? "on" : "skipped");
+
 	// Begin
 	pApp->LoadBegin();
 	dxRenderDeviceRender::Instance().Resources->DeferredLoad(TRUE);

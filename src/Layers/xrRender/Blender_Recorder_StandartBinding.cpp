@@ -1276,8 +1276,10 @@ extern float ps_r4_hdr10_sun_dusk_end;
 extern u32 g_hdr10_ui_layer_live;
 // 2 tells the shaders the ui layer is bound so they stop at linear light
 #define HDR10_ON (RImplementation.o.dx11_hdr10 ? (g_hdr10_ui_layer_live ? 2 : 1) : 0)
+#define HDR10_DISPLAY_REFERRED_ON (RImplementation.o.hdr10_display_referred)
 #else
 #define HDR10_ON (0)
+#define HDR10_DISPLAY_REFERRED_ON (0)
 #endif
 
 DECL_BINDER4F( binder_hdr10_parameters1,
@@ -1352,8 +1354,8 @@ DECL_BINDER4F( binder_hdr10_parameters10,
 
 DECL_BINDER4F( binder_hdr10_parameters11,
 	hdr10_headroom(),
-	0.0f,
-	0.0f,
+	HDR10_DISPLAY_REFERRED_ON,
+	ps_r4_hdr10_paper_white_nits,
 	0.0f
 );
 /* --- HDR10 Parameters --- */

@@ -311,6 +311,9 @@ float ps_r4_hdr10_pda_intensity   = 1.0f;   // r4-only, default = 1.0x
 int   ps_r4_hdr10_pda             = 0;	    // r4-only (NOTE: this is a hack to not double HDR tonemap the 3D PDA)
 int   ps_r4_hdr10_on              = 0;	    // r4-only, default = off
 int   ps_r4_hdr10_colorspace      = 2;      // r4-only, default = Rec.2020
+int   ps_r4_hdr10_own_final_pass  = 1;      // r4-only, engine owns the final encode under HDR
+int   ps_r4_hdr10_display_referred = 2;     // r4-only, 0 scene, 1 display, 2 auto from the gate probe
+int   ps_r4_hdr10_skip_taa        = 0;      // r4-only, skip an ungated TAA under HDR
 
 int   ps_r4_hdr10_tonemapper   		   = 9;    // r4-only, default = headroom
 int   ps_r4_hdr10_tonemap_mode 		   = 1;	   // r4-only, default = Color
@@ -1301,6 +1304,9 @@ void xrRender_initconsole()
 	CMD1(CCC_HDR10Achieved, "r4_hdr10_achieved");
 #endif
     CMD4(CCC_Integer, "r4_hdr10_colorspace",	  &ps_r4_hdr10_colorspace, 		     0, 2);
+    CMD4(CCC_Integer, "r4_hdr10_own_final_pass",  &ps_r4_hdr10_own_final_pass,           0, 1);
+    CMD4(CCC_Integer, "r4_hdr10_display_referred",&ps_r4_hdr10_display_referred,         0, 2);
+    CMD4(CCC_Integer, "r4_hdr10_skip_taa",        &ps_r4_hdr10_skip_taa,                 0, 1);
 
     CMD4(CCC_Integer, "r4_hdr10_tonemapper", 	  		&ps_r4_hdr10_tonemapper,      	      0, 9);
 	CMD4(CCC_Integer, "r4_hdr10_tonemap_mode",    		&ps_r4_hdr10_tonemap_mode,    	      0, 1);
