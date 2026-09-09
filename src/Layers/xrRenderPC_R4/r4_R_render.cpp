@@ -706,8 +706,45 @@ void CRender::RenderToTarget(RRT target)
 		break;
 	}
 
+	// under hdr the back buffer is already pq encoded, take the combine output instead
+	if (o.dx11_hdr10 && rtSVP == target)
+	{
+		static bool svp_reported = false;
+		if (!svp_reported)
+		{
+			svp_reported = true;
+			Msg("HDR10: second viewport captured from the pre encode color target");
+		}
+		HW.pContext->CopyResource((*RT)->pSurface, Target->rt_Color->pSurface);
+		return;
+	}
+
 	ID3DTexture2D* pBuffer = nullptr;
 	HW.m_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBuffer);
 	HW.pContext->CopyResource((*RT)->pSurface, pBuffer);
 	pBuffer->Release();
+}
+
+bool CRender::BeginPDATarget()
+{
+	if (!o.dx11_hdr10)
+		return false;
+
+	// the pda owns the whole surface so no foreign back buffer pixels ride along into the copy
+	FLOAT ColorRGBA[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+	HW.pContext->ClearRenderTargetView(Target->rt_ui_pda->pRT, ColorRGBA);
+	RCache.set_RT(Target->rt_ui_pda->pRT, 0);
+
+	static bool pda_reported = false;
+	if (!pda_reported)
+	{
+		pda_reported = true;
+		Msg("HDR10: pda drawn into its own surface");
+	}
+	return true;
+}
+
+void CRender::EndPDATarget()
+{
+	RCache.set_RT(HW.pBaseRT, 0);
 }
