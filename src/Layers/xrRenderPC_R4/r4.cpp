@@ -665,6 +665,9 @@ void CRender::reset_end()
 	//R_CHK						(HW.pDevice->CreateQuery(D3DQUERYTYPE_EVENT,&q_sync_point[1]));
 	HWOCC.occq_create(occq_size);
 
+	// the achieved colour space can change across a reset so the option follows the flag before the targets rebuild
+	o.dx11_hdr10 = HW.m_HDR10Achieved ? 1 : 0;
+
 	Target = xr_new<CRenderTarget>();
 
 	//AVO: let's reload details while changed details options on vid_restart
