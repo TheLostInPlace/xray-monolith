@@ -123,12 +123,15 @@ static LPCSTR hdr10_screen_set_ps(LPCSTR name)
 #if RENDER == R_R4
 	if (RImplementation.o.dx11_hdr10 && name)
 	{
-		if (0 == stricmp(name, "font") || 0 == stricmp(name, "hud\\fog_of_war"))
+		const bool is_font = (0 == stricmp(name, "font"));
+		if (is_font || 0 == stricmp(name, "hud\\fog_of_war"))
 		{
-			static u32 logged = 0;
-			if (logged < 2)
+			// one latch per record so the six element compiles log the record once
+			static bool logged_font = false, logged_fow = false;
+			bool& seen = is_font ? logged_font : logged_fow;
+			if (!seen)
 			{
-				logged++;
+				seen = true;
 				Msg("* [HDR10-UI] screen_set '%s' -> hud_default", name);
 			}
 			return "hud_default";
