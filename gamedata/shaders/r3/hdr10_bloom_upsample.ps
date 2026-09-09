@@ -8,7 +8,8 @@ float4 main(p_screen I) : SV_TARGET
     float3 game  = HDR10_SampleGameTexel(x, y);
     float3 bloom = HDR10_SampleBloomTexel(x, y);
 
-    float3 color = lerp(game, bloom, HDR10_BLOOM_INTENSITY);
+    // add the bloom instead of crossfading so the base image is not darkened by the intensity
+    float3 color = game + bloom * HDR10_BLOOM_INTENSITY;
 
     color = HDR10_LinearTosRGB(color);
 

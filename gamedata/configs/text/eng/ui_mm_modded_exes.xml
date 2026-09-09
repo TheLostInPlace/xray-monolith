@@ -487,6 +487,12 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_bloom_intensity_desc">
 		<text>Adjusts the strength of the bloom. Larger values are more hazy.</text>
 	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_bloom_threshold">
+		<text>Bloom Threshold (r4_hdr10_bloom_threshold)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_bloom_threshold_desc">
+		<text>Luminance above which a pixel starts to bloom. 1.0 is diffuse white. Lower values spread haze over the whole frame.</text>
+	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_flare_on">
 		<text>Lens Flare (r4_hdr10_flare_on)</text>
 	</string>

@@ -11,10 +11,51 @@ void dxFlareRender::Copy(IFlareRender& _in)
 	*this = *(dxFlareRender*)&_in;
 }
 
+#if RENDER == R_R4
+// emits the same pass and state as effects_sun.s so a mod copy of that file cannot drop the disc
+class CBlender_hdr10_sun : public IBlender
+{
+public:
+	virtual LPCSTR getComment() { return "INTERNAL: HDR10 sun disc"; }
+	virtual BOOL canBeDetailed() { return FALSE; }
+	virtual BOOL canBeLMAPped() { return FALSE; }
+
+	virtual void Compile(CBlender_Compile& C)
+	{
+		IBlender::Compile(C);
+
+		C.r_Pass("effects_sun", "effects_sun", true);
+		VERIFY(C.L_textures.size() > 0);
+		C.r_dx10Texture("s_base", C.L_textures[0]);
+		C.r_dx10Sampler("smp_base");
+		C.PassSET_Blend(TRUE, D3DBLEND_SRCALPHA, D3DBLEND_ONE, FALSE, 0);
+		C.PassSET_ZB(TRUE, FALSE);
+		C.r_End();
+	}
+};
+#endif
+
 void dxFlareRender::CreateShader(LPCSTR sh_name, LPCSTR tex_name)
 {
-	if (tex_name && tex_name[0])
-		hShader.create(sh_name, tex_name);
+	if (!(tex_name && tex_name[0]))
+		return;
+
+#if RENDER == R_R4
+	if (RImplementation.o.dx11_hdr10 && sh_name && 0 == xr_strcmp(sh_name, "effects\\sun"))
+	{
+		static bool reported = false;
+		if (!reported)
+		{
+			reported = true;
+			Msg("* [HDR10] sun technique forced to effects_sun");
+		}
+		CBlender_hdr10_sun blender;
+		hShader.create(&blender, sh_name, tex_name);
+		return;
+	}
+#endif
+
+	hShader.create(sh_name, tex_name);
 }
 
 void dxFlareRender::DestroyShader()

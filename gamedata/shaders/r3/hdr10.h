@@ -244,13 +244,14 @@ float3 HDR10_DitherPQ(float3 color_pq, float2 pixel_pos)
 
 float3 HDR10_sRGBToLinear(float3 color)
 {
-	color = pow(color, 2.2);
+	// pow of a negative is a NaN and the bloom downsample would spread it frame wide
+	color = pow(max(0, color), 2.2);
 	return color;
 }
 
 float3 HDR10_LinearTosRGB(float3 color)
 {
-	color = pow(color, 1.0 / 2.2);
+	color = pow(max(0, color), 1.0 / 2.2);
 	return color;
 }
 

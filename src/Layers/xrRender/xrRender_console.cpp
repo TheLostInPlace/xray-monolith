@@ -333,6 +333,7 @@ int   ps_r4_hdr10_bloom_on          = 0; 	  // r4-only, default = off
 int   ps_r4_hdr10_bloom_blur_passes = 20;      // r4-only, default = 8
 float ps_r4_hdr10_bloom_blur_scale 	= 1.0f;   // r4-only, default = 1.0
 float ps_r4_hdr10_bloom_intensity   = 0.06f;  // r4-only, default = 0.05
+float ps_r4_hdr10_bloom_threshold   = 1.0f;   // r4-only, default = diffuse white
 
 int      ps_r4_hdr10_flare_on 			   = 0;	     // r4-only
 float    ps_r4_hdr10_flare_threshold       = 0.0f;   // r4-only
@@ -1343,6 +1344,7 @@ void xrRender_initconsole()
 	CMD4(CCC_Integer, "r4_hdr10_bloom_blur_passes", &ps_r4_hdr10_bloom_blur_passes, 1, 32);
 	CMD4(CCC_Float,   "r4_hdr10_bloom_blur_scale",  &ps_r4_hdr10_bloom_blur_scale,  0, 1);
 	CMD4(CCC_Float,   "r4_hdr10_bloom_intensity",   &ps_r4_hdr10_bloom_intensity,   0, 1);
+	CMD4(CCC_Float,   "r4_hdr10_bloom_threshold",   &ps_r4_hdr10_bloom_threshold,   0, 10);
 
 	CMD4(CCC_Integer, "r4_hdr10_flare_on",              &ps_r4_hdr10_flare_on,                   0, 1);
 	CMD4(CCC_Float,   "r4_hdr10_flare_threshold",       &ps_r4_hdr10_flare_threshold,         0.0f, 10.0f);

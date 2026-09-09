@@ -7,6 +7,7 @@
 #define HDR10_BLOOM_SRC_DX  (hdr10_bloom_sparams.x)
 #define HDR10_BLOOM_SRC_DY  (hdr10_bloom_sparams.y)
 #define HDR10_BLOOM_HORZ    (hdr10_bloom_sparams.z != 0.0)
+#define HDR10_BLOOM_THRESHOLD (hdr10_bloom_sparams.w)
 
 /* --- HDR10 Bloom Uniforms --- */
 

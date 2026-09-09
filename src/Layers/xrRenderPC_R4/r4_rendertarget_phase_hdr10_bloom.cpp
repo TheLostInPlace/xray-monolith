@@ -46,7 +46,7 @@ void CRenderTarget::phase_hdr10_bloom()
 
         float dx = 1.0f / orig_w;
         float dy = 1.0f / orig_h;
-        RCache.set_c("hdr10_bloom_sparams", dx, dy, 0, 0);
+        RCache.set_c("hdr10_bloom_sparams", dx, dy, 0, ps_r4_hdr10_bloom_threshold);
 
         set_viewport_size(HW.pContext, bloom_w, bloom_h);
         u_setrt(rt_HDR10_HalfRes[dst], NULL, NULL, NULL);

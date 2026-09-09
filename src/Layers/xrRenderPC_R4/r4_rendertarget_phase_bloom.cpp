@@ -144,7 +144,17 @@ void CRenderTarget::phase_bloom()
 	}
 
 	// Capture luminance values
-	phase_luminance();
+	if (RImplementation.o.dx11_hdr10)
+	{
+		static bool reported = false;
+		if (!reported)
+		{
+			reported = true;
+			Msg("* [HDR10] auto exposure phase skipped");
+		}
+	}
+	else
+		phase_luminance();
 
 	if (RImplementation.o.ssfx_bloom)
 		return;
