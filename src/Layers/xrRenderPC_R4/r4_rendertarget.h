@@ -39,6 +39,7 @@ public:
 	IBlender* b_combine;
 	IBlender* b_sunshafts;
 	IBlender* b_postprocess_msaa;
+	IBlender* b_postprocess;
 	IBlender* b_bloom_msaa;
 	IBlender* b_combine_msaa[8];
 	IBlender* b_accum_mask_msaa[8];

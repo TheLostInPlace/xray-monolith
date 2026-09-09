@@ -39,6 +39,19 @@ public:
 	virtual ~CBlender_postprocess_msaa();
 };
 
+class CBlender_postprocess : public IBlender
+{
+public:
+	virtual LPCSTR getComment() { return "INTERNAL: engine owned final postprocess"; }
+	virtual BOOL canBeDetailed() { return FALSE; }
+	virtual BOOL canBeLMAPped() { return FALSE; }
+
+	virtual void Compile(CBlender_Compile& C);
+
+	CBlender_postprocess();
+	virtual ~CBlender_postprocess();
+};
+
 class CBlender_ssfx_bloom_build : public IBlender
 {
 public:

@@ -195,6 +195,112 @@ static class cl_meatchunks_stuff : public R_constant_setup
 
 extern ENGINE_API BOOL r2_sun_static;
 extern ENGINE_API BOOL r2_advanced_pp; //	advanced post process and effects
+
+// true when this file's own text uses the HDR10 gate, ignoring the line that defines it
+static bool hdr10_text_uses_gate(const xr_string& src)
+{
+	size_t at = 0;
+	while ((at = src.find("HDR10_IS_ENABLED", at)) != xr_string::npos)
+	{
+		size_t bol = src.rfind('\n', at);
+		bol = (bol == xr_string::npos) ? 0 : bol + 1;
+		if (src.substr(bol, at - bol).find("#define") == xr_string::npos) return true;
+		at += 16;
+	}
+	return false;
+}
+
+// headers the engine ships and probes on its own, a mod file may not borrow their gate
+static bool hdr10_is_engine_gate_carrier(LPCSTR inc)
+{
+	LPCSTR base = inc;
+	for (LPCSTR p = inc; *p; ++p)
+		if (*p == '\\' || *p == '/') base = p + 1;
+	return 0 == _stricmp(base, "common_functions.h") || 0 == _strnicmp(base, "hdr10", 5);
+}
+
+// read the winning shader source and report whether the HDR10 gate reaches it
+bool CRender::hdr10_probe_gate(LPCSTR fname, int depth)
+{
+	if (depth > 3) return false;
+
+	string_path pname;
+	strconcat(sizeof(pname), pname, getShaderPath(), fname);
+	IReader* R = FS.r_open("$game_shaders$", pname);
+	if (0 == R)
+	{
+		R = FS.r_open("$game_shaders$", fname);
+		if (0 == R)
+		{
+			if (0 == depth) Msg("[HDR10] probe %s not found", fname);
+			return false;
+		}
+	}
+
+	u32 size = R->length();
+	xr_string src((LPCSTR)R->pointer(), size);
+	FS.r_close(R);
+
+	if (0 == depth)
+		Msg("[HDR10] probe %s len=%d crc=%08x", fname, size, crc32(src.data(), size));
+
+	if (hdr10_text_uses_gate(src)) return true;
+
+	// follow the includes so a gate reached through a mod's own helper still counts
+	size_t at = 0;
+	while ((at = src.find("#include", at)) != xr_string::npos)
+	{
+		size_t q0 = src.find('"', at);
+		if (q0 == xr_string::npos) break;
+		size_t q1 = src.find('"', q0 + 1);
+		if (q1 == xr_string::npos) break;
+
+		xr_string inc = src.substr(q0 + 1, q1 - q0 - 1);
+		if (!hdr10_is_engine_gate_carrier(inc.c_str()) && hdr10_probe_gate(inc.c_str(), depth + 1))
+			return true;
+		at = q1 + 1;
+	}
+	return false;
+}
+
+// derive the encode mode and the pass ownership from the probed gate state and the cvars
+void CRender::hdr10_resolve_mode()
+{
+	// a reset can achieve hdr for the first time so measure the gate before any mode is picked
+	if (o.dx11_hdr10 && !o.hdr10_gate_probed)
+	{
+		o.hdr10_combine_gated = hdr10_probe_gate("combine_2_naa.ps", 0) ? 1 : 0;
+		o.hdr10_cf_gated = hdr10_probe_gate("common_functions.h", 0) ? 1 : 0;
+		o.hdr10_gate_probed = 1;
+	}
+
+	// auto mode follows the combine alone, it is the pass that hands postprocess its frame
+	if (2 == ps_r4_hdr10_display_referred)
+		o.hdr10_display_referred = (o.dx11_hdr10 && !o.hdr10_combine_gated) ? 1 : 0;
+	else
+		o.hdr10_display_referred = (o.dx11_hdr10 && 1 == ps_r4_hdr10_display_referred) ? 1 : 0;
+
+	o.hdr10_own_final_pass = (o.dx11_hdr10 && !!ps_r4_hdr10_own_final_pass) ? 1 : 0;
+}
+
+// report the gate state, the encode mode, the pass owner and the taa policy
+void CRender::hdr10_report_mode()
+{
+	if (o.dx11_hdr10 && !o.hdr10_combine_gated)
+		Msg("![HDR10] the winning combine_2_naa.ps has no HDR10 gate, a shader mod is overriding the HDR aware copy");
+	if (o.dx11_hdr10 && !o.hdr10_cf_gated)
+		Msg("![HDR10] the winning common_functions.h has no HDR10 gate, a shader mod is overriding the HDR aware copy");
+	if (o.hdr10_display_referred && o.hdr10_combine_gated)
+		Msg("![HDR10] display referred forced while the combine still gates, the frame is anchored twice");
+
+	Msg("[HDR10] combine gate=%s common_functions gate=%s mode=%s own=%s taa=%s",
+		o.hdr10_combine_gated ? "yes" : "no",
+		o.hdr10_cf_gated ? "yes" : "no",
+		o.hdr10_display_referred ? "display" : "scene",
+		o.hdr10_own_final_pass ? "engine" : "script",
+		o.ssfx_taa ? "on" : "skipped");
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Just two static storage
 void CRender::create()
@@ -400,6 +506,13 @@ void CRender::create()
 	// HDR10 follows the colour space the swapchain actually accepted
 	o.dx11_hdr10 = HW.m_HDR10Achieved ? 1 : 0;
 
+	// the gate probe runs further down so the derived modes start clear
+	o.hdr10_combine_gated = 0;
+	o.hdr10_cf_gated = 0;
+	o.hdr10_gate_probed = 0;
+	o.hdr10_display_referred = 0;
+	o.hdr10_own_final_pass = 0;
+
 	//	MSAA option dependencies
 	// MSAA stays off for the whole 10 bit swapchain request, achieved or not
 	o.dx10_msaa = ps_r3_msaa && !ps_r4_hdr10_on;
@@ -584,6 +697,16 @@ void CRender::create()
 				o.dx11_hdr10 = HW.m_HDR10Achieved ? 1 : 0;
 			}
 		}
+
+		// the gate only reaches the frame if the shader that wins the filesystem still carries it
+		hdr10_resolve_mode();
+
+		// TAA clamps the scene to unity before the combine so it can be skipped when it carries no HDR10 gate
+		if (o.ssfx_taa && o.dx11_hdr10 && ps_r4_hdr10_skip_taa
+			&& !hdr10_probe_gate("ssfx_taa.ps", 0) && !hdr10_probe_gate("ssfx_taa_sharp.ps", 0))
+			o.ssfx_taa = 0;
+
+		hdr10_report_mode();
 	}
 
 	// constants
@@ -655,6 +778,8 @@ void CRender::reset_end()
 
 	// the achieved colour space can change across a reset so the option follows the flag before the targets rebuild
 	o.dx11_hdr10 = HW.m_HDR10Achieved ? 1 : 0;
+	hdr10_resolve_mode();
+	hdr10_report_mode();
 
 	Target = xr_new<CRenderTarget>();
 

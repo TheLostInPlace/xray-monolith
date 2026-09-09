@@ -403,6 +403,11 @@ CRenderTarget::CRenderTarget()
 		b_bloom_msaa = nullptr;
 		b_postprocess_msaa = nullptr;
 	}
+	// the engine supplies the final pass itself when it owns the encode
+	if (RImplementation.o.hdr10_own_final_pass)
+		b_postprocess = xr_new<CBlender_postprocess>();
+	else
+		b_postprocess = nullptr;
 	b_luminance = xr_new<CBlender_luminance>();
 	b_combine = xr_new<CBlender_combine>();
 	b_ssao = xr_new<CBlender_SSAO_noMSAA>();
@@ -1317,7 +1322,11 @@ CRenderTarget::CRenderTarget()
 	}
 
 	// PP
-	s_postprocess.create("postprocess");
+	// the engine owns the final encode under HDR so no gamedata script can select a different pixel shader
+	if (b_postprocess)
+		s_postprocess.create(b_postprocess, "r2\\post");
+	else
+		s_postprocess.create("postprocess");
 	g_postprocess.create(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX3, RCache.Vertex.Buffer(),
 	                     RCache.QuadIB);
 
@@ -1461,6 +1470,7 @@ CRenderTarget::~CRenderTarget()
 		xr_delete(b_postprocess_msaa);
 		xr_delete(b_bloom_msaa);
 	}
+	xr_delete(b_postprocess);
 	xr_delete(b_accum_mask);
 	xr_delete(b_occq);
 	xr_delete(b_sunshafts);
