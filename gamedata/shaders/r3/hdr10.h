@@ -55,8 +55,10 @@ uniform float4 hdr10_parameters7;
 uniform float4 hdr10_parameters8;
 uniform float4 hdr10_parameters9;
 uniform float4 hdr10_parameters10;
+uniform float4 hdr10_parameters11;
 
-#define HDR10_WHITEPOINT_NITS  (hdr10_parameters1.x)
+// nits that a tonemapper output of 1.0 maps to, the peak for the legacy curves and paper white for the headroom curve
+#define HDR10_WORLD_SCALE_NITS (hdr10_parameters1.x)
 #define HDR10_UI_NITS_SCALAR   (hdr10_parameters1.y)
 #define HDR10_IS_ENABLED       (hdr10_parameters1.z != 0.0)
 #define HDR10_IS_RENDERING_PDA (hdr10_parameters1.w != 0.0)
@@ -104,6 +106,9 @@ uniform float4 hdr10_parameters10;
 #define HDR10_FLARE_LENS_COLOR (hdr10_parameters10.rgb)
 #define HDR10_SUN_ON           (hdr10_parameters10.w)
 
+// display peak over paper white, 1.0 when there is no headroom
+#define HDR10_HEADROOM (hdr10_parameters11.x)
+
 /* --- Colorspace Options --- */
 
 #define HDR10_USE_COLORSPACE_REC709  (HDR10_COLORSPACE == 0.0)
@@ -121,6 +126,7 @@ uniform float4 hdr10_parameters10;
 #define HDR10_USE_TONEMAPPER_UNCHARTED2     (HDR10_TONEMAPPER == 64.0)
 #define HDR10_USE_TONEMAPPER_REINHARD_W2_0	(HDR10_TONEMAPPER == 128.0)
 #define HDR10_USE_TONEMAPPER_REINHARD_W3_0  (HDR10_TONEMAPPER == 256.0)
+#define HDR10_USE_TONEMAPPER_HEADROOM		(HDR10_TONEMAPPER == 512.0)
 
 /* --- Tonemapping Mode Options --- */
 
@@ -522,6 +528,28 @@ float3 HDR10_Tonemap_AgX_Punchy(float3 color)
 	return saturate(color);
 }
 
+// ITU-R BT.2408 anchors, HDR reference white 203 nits and an 18% grey card 2.965 stops below it
+static const float HDR10_BT2408_GREY_NITS  = 26.0;
+static const float HDR10_BT2408_WHITE_NITS = 203.0;
+
+// maps graded scene to paper white units, 1.0 is diffuse white and the shoulder runs to the display headroom
+float3 HDR10_Tonemap_Headroom(float3 color, float headroom)
+{
+	// exponent that puts an 18% grey card the BT.2408 distance under diffuse white
+	static const float toe = log(HDR10_BT2408_GREY_NITS / HDR10_BT2408_WHITE_NITS) / log(0.18);
+
+	color = pow(max(0, color), toe);
+
+	if (headroom <= 1.0) {
+		return saturate(color);
+	}
+
+	// exponential shoulder with unit slope at 1.0 and the headroom as its asymptote
+	float3 shoulder = 1.0 + (headroom - 1.0) * (1.0 - exp(-(color - 1.0) / (headroom - 1.0)));
+
+	return lerp(color, min(shoulder, headroom), step(1.0, color));
+}
+
 /* --- Dispatch Functions --- */
 
 float3 HDR10_Tonemap_Color(float3 color)
@@ -552,6 +580,9 @@ float3 HDR10_Tonemap_Color(float3 color)
 
 	} else if (HDR10_USE_TONEMAPPER_REINHARD_W3_0) {
 		return HDR10_Tonemap_ExtendedReinhard(color, 3.0);
+
+	} else if (HDR10_USE_TONEMAPPER_HEADROOM) {
+		return HDR10_Tonemap_Headroom(color, HDR10_HEADROOM);
 	}
 
 	return saturate(color);
@@ -656,7 +687,7 @@ float3 HDR10_ToDisplay_World(float3 color)
 
 	// ST2084 curve operates on normalized luminance (unitless, but 1.0 from tonemapper -> HDR_WHITEPOINT_NITS (cd/m2), normalized by ST2084 peak cd/m2)
 	static const float st2084_max_nits = 10000.0;
-	color = HDR10_WHITEPOINT_NITS * color / st2084_max_nits;
+	color = HDR10_WORLD_SCALE_NITS * color / st2084_max_nits;
 	color = HDR10_ApplyST2084_PQ(color);
 
 	return color;
@@ -699,7 +730,7 @@ float3 HDR10_ToDisplay_UI(float3 color, float nits_scalar, float alpha)
 
 	// ST2084 curve operates on normalized luminance (unitless, but 1.0 from tonemapper -> HDR_WHITEPOINT_NITS (cd/m2), normalized by ST2084 peak cd/m2)
 	static const float st2084_max_nits = 10000.0;
-	color = HDR10_WHITEPOINT_NITS * nits_scalar * color / st2084_max_nits;
+	color = HDR10_WORLD_SCALE_NITS * nits_scalar * color / st2084_max_nits;
 	color = HDR10_ApplyST2084_PQ(color);
 
 	return color;

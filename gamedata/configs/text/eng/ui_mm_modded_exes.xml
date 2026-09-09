@@ -335,16 +335,22 @@
 		<text>HDR10 is off</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_whitepoint_nits">
-		<text>White Point (nits) (r4_hdr10_whitepoint_nits)</text>
+		<text>Display Peak (nits) (r4_hdr10_whitepoint_nits)</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_whitepoint_nits_desc">
-		<text>The maximum luminance of your monitor. DisplayHDR 400 = 400 nits, HDR Peak 1000 = 1000 nits</text>
+		<text>The maximum luminance of your monitor. DisplayHDR 400 = 400 nits, HDR Peak 1000 = 1000 nits. Only the highlight roll-off uses this, mid-tones and diffuse white do not move with it.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_paper_white_nits">
+		<text>Paper White (nits) (r4_hdr10_paper_white_nits)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_paper_white_nits_desc">
+		<text>The luminance of a diffuse white surface in full light. 203 nits is the ITU-R BT.2408 reference. Raise it if the picture is too dim in a bright room.</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_ui_nits">
 		<text>UI Brightness (nits) (r4_hdr10_ui_nits)</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_ui_nits_desc">
-		<text>The maximum luminance of the UI. Use a value at or below the monitor peak that is comfortable.</text>
+		<text>The luminance of white UI. 203 nits matches paper white. Keep it at or below Paper White on the Headroom tonemapper, or the 3D PDA screen will clip.</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_pda_intensity">
 		<text>PDA Intensity (r4_hdr10_pda_intensity)</text>
@@ -399,6 +405,9 @@
 	</string>
 	<string id="ui_mm_lst_hdr10_tonemapper_reinhard2">
 		<text>Reinhard (Lw = 3.0)</text>
+	</string>
+	<string id="ui_mm_lst_hdr10_tonemapper_headroom">
+		<text>Headroom (BT.2408 anchored)</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_tonemap_mode">
 		<text>Tonemapping Mode (r4_hdr10_tonemap_mode)</text>
@@ -579,6 +588,39 @@
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_sun_outer_radius_desc">
 		<text>Adjusts the outer radius of the HDR sun rendering. The outer radius fades between full intensity and 0.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dawn_begin">
+		<text>Sun Dawn Begin (hours) (r4_hdr10_sun_dawn_begin)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dawn_begin_desc">
+		<text>Hour at which the HDR sun starts to rise. Match it to the weather setup if the day length is not the default.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dawn_end">
+		<text>Sun Dawn End (hours) (r4_hdr10_sun_dawn_end)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dawn_end_desc">
+		<text>Hour at which the HDR sun reaches full intensity.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dusk_begin">
+		<text>Sun Dusk Begin (hours) (r4_hdr10_sun_dusk_begin)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dusk_begin_desc">
+		<text>Hour at which the HDR sun starts to fade.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dusk_end">
+		<text>Sun Dusk End (hours) (r4_hdr10_sun_dusk_end)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_sun_dusk_end_desc">
+		<text>Hour at which the HDR sun is fully gone.</text>
+	</string>
+	<string id="ui_mm_r4_hdr10_flare_lens_color_x">
+		<text>Lens Flare Tint Red (r4_hdr10_flare_lens_color)</text>
+	</string>
+	<string id="ui_mm_r4_hdr10_flare_lens_color_y">
+		<text>Lens Flare Tint Green (r4_hdr10_flare_lens_color)</text>
+	</string>
+	<string id="ui_mm_r4_hdr10_flare_lens_color_z">
+		<text>Lens Flare Tint Blue (r4_hdr10_flare_lens_color)</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_live_editing">
 		<text>Setup</text>

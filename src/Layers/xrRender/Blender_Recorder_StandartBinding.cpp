@@ -1217,6 +1217,9 @@ static class ssfx_floravariation : public R_constant_setup
 /* --- HDR10 parameters --- */
 extern float ps_r4_hdr10_whitepoint_nits;
 extern float ps_r4_hdr10_ui_nits;
+extern float ps_r4_hdr10_paper_white_nits;
+extern float hdr10_world_scale_nits();
+extern float hdr10_headroom();
 extern float ps_r4_hdr10_pda_intensity;
 extern int   ps_r4_hdr10_pda;
 extern int   ps_r4_hdr10_on;
@@ -1277,8 +1280,8 @@ extern float ps_r4_hdr10_sun_dusk_end;
 #endif
 
 DECL_BINDER4F( binder_hdr10_parameters1,
-	ps_r4_hdr10_whitepoint_nits,
-	ps_r4_hdr10_ui_nits / ps_r4_hdr10_whitepoint_nits,
+	hdr10_world_scale_nits(),
+	ps_r4_hdr10_ui_nits / hdr10_world_scale_nits(),
 	HDR10_ON,
 	ps_r4_hdr10_pda
 );
@@ -1344,6 +1347,13 @@ DECL_BINDER4F( binder_hdr10_parameters10,
 	ps_r4_hdr10_flare_lens_color.y,
 	ps_r4_hdr10_flare_lens_color.z,
 	ps_r4_hdr10_sun_on
+);
+
+DECL_BINDER4F( binder_hdr10_parameters11,
+	hdr10_headroom(),
+	0.0f,
+	0.0f,
+	0.0f
 );
 /* --- HDR10 Parameters --- */
 
@@ -1549,6 +1559,7 @@ void CBlender_Compile::SetMapping()
 	r_Constant("hdr10_parameters8",  &binder_hdr10_parameters8);
 	r_Constant("hdr10_parameters9",  &binder_hdr10_parameters9);
 	r_Constant("hdr10_parameters10", &binder_hdr10_parameters10);
+	r_Constant("hdr10_parameters11", &binder_hdr10_parameters11);
 
 	r_Constant("vignette_control", &vignette_control);
 }
