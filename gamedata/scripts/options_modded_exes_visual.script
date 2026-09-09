@@ -11,12 +11,14 @@ local page_graphics = options_modded_exes_graphics.PAGE
 options_builder.import_into(this)
 
 -- Options group
-GROUP = group {
+local hdr10_supported = get_console_cmd(0, "r4_hdr10_achieved") ~= nil
+
+GROUP = filter_false(group {
 	{ id = "visual" },
 	page_graphics,
 	page_ui_hud,
 	page_crosshair,
 	page_3d_scopes,
 	page_particles,
-	page_hdr10,
-}
+	hdr10_supported and page_hdr10 or false,
+})

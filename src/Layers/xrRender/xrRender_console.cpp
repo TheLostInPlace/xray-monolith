@@ -1063,6 +1063,18 @@ public:
 #endif	//	DEBUG
 #endif	//	(RENDER == R_R3) || (RENDER == R_R4)
 
+#if RENDER == R_R4
+class CCC_HDR10Achieved : public IConsole_Command
+{
+public:
+	CCC_HDR10Achieved(LPCSTR N) : IConsole_Command(N) {};
+	virtual void Execute(LPCSTR args) { ; }
+	virtual void Status(TStatus& S) { xr_strcpy(S, sizeof(S), HW.m_HDR10Achieved ? "1" : "0"); }
+	virtual void Info(TInfo& I) { xr_strcpy(I, "read only, 1 when HDR10 output was accepted by the display"); }
+	virtual void Save(IWriter* F) { ; }
+};
+#endif
+
 //-----------------------------------------------------------------------
 void xrRender_initconsole()
 {
@@ -1243,6 +1255,9 @@ void xrRender_initconsole()
     CMD4(CCC_Float,   "r4_hdr10_ui_nits", 		  &ps_r4_hdr10_ui_nits, 	     10.0f, 10000.0f);
     CMD4(CCC_Float,   "r4_hdr10_pda_intensity",   &ps_r4_hdr10_pda_intensity,      0.1, 2);
 	CMD4(CCC_Integer, "r4_hdr10_on", 			  &ps_r4_hdr10_on, 				     0, 1);
+#if RENDER == R_R4
+	CMD1(CCC_HDR10Achieved, "r4_hdr10_achieved");
+#endif
     CMD4(CCC_Integer, "r4_hdr10_colorspace",	  &ps_r4_hdr10_colorspace, 		     0, 2);
 
     CMD4(CCC_Integer, "r4_hdr10_tonemapper", 	  		&ps_r4_hdr10_tonemapper,      	      0, 8);

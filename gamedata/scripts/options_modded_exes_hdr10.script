@@ -4,8 +4,22 @@
 options_builder.import_into(this)
 
 -- Options page
+local hdr10_status_text = (function()
+	if get_console_cmd(0, "r4_hdr10_achieved") == "1" then
+		return "ui_mm_modded_exes_visual_hdr10_status_active"
+	elseif get_console_cmd(1, "r4_hdr10_on") then
+		return "ui_mm_modded_exes_visual_hdr10_status_failed"
+	end
+	return "ui_mm_modded_exes_visual_hdr10_status_off"
+end)()
+
 PAGE = page {
 	{ id = "hdr10" },
+	desc {
+		id = "hdr10_status",
+		text = hdr10_status_text,
+		clr = { 255, 200, 75, 75 },
+	},
 	list_bool {
 		id = "enabled",
 		curr = function()
