@@ -705,4 +705,43 @@ float3 HDR10_ToDisplay_UI(float3 color, float nits_scalar, float alpha)
 	return color;
 }
 
+// from target colorspace back to Rec.709
+float3 HDR10_TransformColorspace_ToRec709(float3 color)
+{
+	if (HDR10_USE_COLORSPACE_P3D65) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_P3D65_To_Rec709);
+
+	} else if (HDR10_USE_COLORSPACE_REC2020) {
+		return HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec2020_To_Rec709);
+	}
+
+	// no transform since input is already in Rec.709
+	return color;
+}
+
+// Convert the pre encode frame to 8 bit sRGB for capture
+// the HDR10_ToDisplay_World chain with the display rotation, nits scale and PQ replaced by an sRGB encode
+float3 HDR10_ToSDR_World(float3 color)
+{
+	if (!HDR10_IS_ENABLED) {
+		return color;
+	}
+
+	color = max(0, color);
+	color = HDR10_sRGBToLinear(color);
+	color = HDR10_ApplyColorGrading_Rec709(color);
+	color = HDR10_TransformColorspace_ToTarget(color);
+
+	if (HDR10_USE_TONEMAP_MODE_LUMINANCE) {
+		color = HDR10_Tonemap_Luminance(color);
+
+	} else if (HDR10_USE_TONEMAP_MODE_COLOR) {
+		color = HDR10_Tonemap_Color(color);
+	}
+
+	color = HDR10_TransformColorspace_ToRec709(color);
+	color = saturate(color);
+	return HDR10_LinearTosRGB(color);
+}
+
 #endif // HDR10_H_

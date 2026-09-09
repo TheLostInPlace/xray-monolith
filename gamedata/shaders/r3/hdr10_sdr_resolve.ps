@@ -1,0 +1,10 @@
+#include "common.h"
+#include "hdr10.h"
+
+Texture2D s_hdr10_game;
+
+float4 main(p_screen I) : SV_TARGET
+{
+	float3 color = s_hdr10_game.Sample(smp_rtlinear, I.tc0).rgb;
+	return float4(HDR10_ToSDR_World(color), 1.0);
+}

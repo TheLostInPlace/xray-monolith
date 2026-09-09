@@ -705,6 +705,21 @@ public:
 	}
 };
 
+#if RENDER == R_R4
+extern void HDR10DumpFrame();
+
+class CCC_HDR10DumpFrame : public IConsole_Command
+{
+public:
+	CCC_HDR10DumpFrame(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = TRUE; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		HDR10DumpFrame();
+	}
+};
+#endif	//	RENDER == R_R4
+
 class CCC_RestoreQuadIBData : public IConsole_Command
 {
 public:
@@ -1089,6 +1104,9 @@ void xrRender_initconsole()
 
 	// Common
 	CMD1(CCC_Screenshot, "screenshot");
+#if RENDER == R_R4
+	CMD1(CCC_HDR10DumpFrame, "r4_hdr10_dump_frame");
+#endif	//	RENDER == R_R4
 
 	//	Igor: just to test bug with rain/particles corruption
 	CMD1(CCC_RestoreQuadIBData, "r_restore_quad_ib_data");

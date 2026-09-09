@@ -60,6 +60,7 @@ public:
 	IBlender* b_hdr10_lens_flare_fgen;
 	IBlender* b_hdr10_lens_flare_blur;
 	IBlender* b_hdr10_lens_flare_upsample;
+	IBlender* b_hdr10_sdr_resolve;
 
 	IBlender* b_blur;
 	IBlender* b_dof;
@@ -159,6 +160,7 @@ public:
 
 	// HDR10
 	ref_rt rt_HDR10_HalfRes[2];
+	ref_rt rt_HDR10_SDR;
 
 	// env
 	ref_texture t_envmap_0; // env-0
@@ -341,6 +343,7 @@ private:
 	ref_shader s_hdr10_lens_flare_fgen;
 	ref_shader s_hdr10_lens_flare_blur;
 	ref_shader s_hdr10_lens_flare_upsample;
+	ref_shader s_hdr10_sdr_resolve;
 
 	// Luminance
 	ref_shader s_luminance;
@@ -466,6 +469,7 @@ public:
 	// HDR10
 	void phase_hdr10_bloom();
 	void phase_hdr10_lens_flare();
+	void phase_hdr10_sdr_resolve();
 
 	//	Generates min/max sm
 	void create_minmax_SM();
