@@ -117,9 +117,9 @@
         r4_hdr10_ui_nits [10; 10000] // UI luminance target in nits. Default 203
         r4_hdr10_pda_intensity [0.1; 2.0] // Brightness of the 3D PDA screen. Default 1.0
         r4_hdr10_colorspace [0; 2] // 0 Rec.709, 1 DCI-P3 D65, 2 Rec.2020. Default 2
-        r4_hdr10_own_final_pass [0; 1] // Engine supplies the final encode pass instead of the by name script route. Default 1
-        r4_hdr10_display_referred [0; 2] // Treat the incoming frame as a finished SDR image. 0 scene, 1 display, 2 auto from the gate probe. Default 2
-        r4_hdr10_skip_taa [0; 1] // Drop an ungated screen space shaders TAA, which clamps the scene to unity. Default 0
+        r4_hdr10_own_final_pass [0; 1] // Engine supplies the final encode pass instead of the by name script route. Default 1. Applies at the next vid_restart
+        r4_hdr10_display_referred [0; 2] // Treat the incoming frame as a finished SDR image. 0 scene, 1 display, 2 auto from the gate probe. Default 2. Applies at the next vid_restart
+        r4_hdr10_skip_taa [0; 1] // Drop an ungated screen space shaders TAA, which clamps the scene to unity. Default 0. Requires restart, and clearing it does not bring TAA back
 
         r4_hdr10_tonemapper [0; 9] // 0 ACES Narkowicz, 1 ACES Hill, 2 AgX, 3 AgX punchy, 4 Uchimura, 5 SteveM, 6 Uncharted2, 7 Reinhard, 8 Reinhard2, 9 headroom. Default 9
         r4_hdr10_tonemap_mode [0; 1] // 0 luminance, 1 per channel. Default 1
