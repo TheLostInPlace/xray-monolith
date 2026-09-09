@@ -134,6 +134,10 @@ The original engine is used in S.T.A.L.K.E.R. Call of Pripyat game released by G
   * Allows to modify contents of loaded xml files before processing by engine by utilizing Lua scripts
   * For more information see DXML.md guide.
 
+* HDR10 output on the DX11 renderer
+  * 10 bit PQ Rec.2020 swapchain, off by default, `r4_hdr10_on 1` and a restart
+  * The display has the last word, `r4_hdr10_achieved` reports what the swapchain actually holds
+
 * Possibility to unlocalize Lua variables in scripts before loading, making them global to the script namespace
   * For unlocalizing a variable in the script, please refer to documentation in test file in `gamedata/configs/unlocalizers` folder
 
@@ -235,6 +239,27 @@ How to compile exes:
 13. A short video demonstration of the entire process: https://youtu.be/MmZwyM2QO38
 
 ## Changelog
+**2026.09.09**
+* Main and MT:
+  * HDR10: the achieved HDR state follows the display instead of the cvar, `r4_hdr10_achieved` reads it back, `--hdr10-force-sdr` forces the refused path
+  * HDR10: the output display is queried for its luminance range, its primaries and the OS SDR white level
+  * HDR10: the colour space is applied again after every swapchain transition and published to ReShade
+  * HDR10: screenshots, save thumbnails, level and cube map captures and `take_screenshot` work again under HDR, resolved from an SDR copy of the pre encode frame, and `r4_hdr10_dump_frame` writes that frame as an f16 dds
+    * HDR screenshots carry no UI layer, every capture is taken before the UI composite
+  * HDR10: the second viewport and the 3D PDA capture the pre encode frame
+    * HDR bloom, lens flare, grain, LUT and tracers no longer reach the scope disc under HDR, and BaS night vision scopes may clip earlier
+  * HDR10: paper white is a separate control from the display peak, `r4_hdr10_paper_white_nits`, with a headroom tonemapper that anchors diffuse white at any panel peak
+  * HDR10: new defaults, tonemapper 9, exposure 1.0, gamma 1.0 and 203 nit UI. For the previous look set `r4_hdr10_tonemapper 0`, `r4_hdr10_exposure 0.8`, `r4_hdr10_gamma 1.1` and `r4_hdr10_ui_nits 400`
+  * HDR10: colour space guards around the tonemap operators, a PQ output dither and a mid grey contrast pivot
+  * HDR10: the bloom, sun shaft and lens flare chain keeps its headroom, with a new `r4_hdr10_bloom_threshold`, and the legacy gamma ramp is skipped
+  * HDR10: the UI composites from a linear layer instead of PQ code space, fonts, the inventory grid, the overlay and the tracers included. The UI saturation workaround and its cvar are gone
+  * HDR10: the engine owns the final encode under HDR, `r4_hdr10_own_final_pass`, and detects a shader mod that took the HDR gate out of the combine, `r4_hdr10_display_referred` and `r4_hdr10_skip_taa`
+  * HDR10: log which copy of each HDR path shader the file system serves
+  * HDR10: documented every `r4_hdr10_*` console command in `lua_help_ex.script`
+  * render: the DX11 constant table sorts in the order its lookup searches, revert with `r__ctable_ptr_sort 0`
+* Main:
+  * HDR10: the item UI composites after the combine, which is where MT already draws it
+
 **2026.08.17**
 * Main and MT:
   * DXML: Revert "Malformed closing tags are silently accepted" due to errors with mods
