@@ -152,13 +152,6 @@ PAGE = page {
 		step = 0.01,
 		cmd = "r4_hdr10_saturation",
 	},
-	track {
-		id = "ui_saturation",
-		tag = "hdr10",
-		def = 0.5,
-		step = 0.01,
-		cmd = "r4_hdr10_ui_saturation",
-	},
 					
 	line {},
 					

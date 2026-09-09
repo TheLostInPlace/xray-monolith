@@ -440,6 +440,8 @@ public:
 	virtual u32 memory_usage() { return 0; }
 	virtual u32 active_phase() = 0; //Swartz: actor shadow
 	virtual void RenderToTarget(RRT target) = 0;
+	// re-assert the hdr ui layer bind after a third party pass may have moved the output merger
+	virtual void hdr10_ui_rebind() {}
 	// binds and clears the offscreen pda surface so the 3d pda draws there instead of the back buffer
 	virtual bool BeginPDATarget() { return false; }
 	virtual void EndPDATarget() {}

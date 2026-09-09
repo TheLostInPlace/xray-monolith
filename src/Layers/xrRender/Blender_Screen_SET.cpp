@@ -118,6 +118,29 @@ void CBlender_Screen_SET::Load(IReader& fs, u16 version)
 
 #if defined(USE_DX10) || defined(USE_DX11)
 
+static LPCSTR hdr10_screen_set_ps(LPCSTR name)
+{
+#if RENDER == R_R4
+	if (RImplementation.o.dx11_hdr10 && name)
+	{
+		const bool is_font = (0 == stricmp(name, "font"));
+		if (is_font || 0 == stricmp(name, "hud\\fog_of_war"))
+		{
+			// one latch per record so the six element compiles log the record once
+			static bool logged_font = false, logged_fow = false;
+			bool& seen = is_font ? logged_font : logged_fow;
+			if (!seen)
+			{
+				seen = true;
+				Msg("* [HDR10-UI] screen_set '%s' -> hud_default", name);
+			}
+			return "hud_default";
+		}
+	}
+#endif
+	return "stub_default";
+}
+
 void CBlender_Screen_SET::Compile(CBlender_Compile& C)
 {
 	IBlender::Compile(C);
@@ -155,7 +178,8 @@ void CBlender_Screen_SET::Compile(CBlender_Compile& C)
 			else
 			{
 				// 1x R
-				C.r_Pass("stub_notransform_t", "stub_default", false);
+				// hud_default carries stub_default's modulate plus the HDR UI transform
+				C.r_Pass("stub_notransform_t", hdr10_screen_set_ps(getName()), false);
 				//C.StageSET_Color	(D3DTA_TEXTURE,	  D3DTOP_MODULATE,		D3DTA_DIFFUSE);
 				//C.StageSET_Alpha	(D3DTA_TEXTURE,	  D3DTOP_MODULATE,		D3DTA_DIFFUSE);
 			}

@@ -543,6 +543,47 @@ void CRender::create()
 		Msg("* HDR10 anchors: paper white %.0f nits, peak %.0f nits, headroom %.3f, world scale %.0f nits, tonemapper %d",
 		    ps_r4_hdr10_paper_white_nits, ps_r4_hdr10_whitepoint_nits, hdr10_headroom(),
 		    hdr10_world_scale_nits(), ps_r4_hdr10_tonemapper);
+
+		// which effects_bullet_tracer.s the file system serves decides whether the tracer is hdr aware
+		{
+			IReader* R = FS.r_open("$game_shaders$", "r3\\effects_bullet_tracer.s");
+			if (R)
+			{
+				const u32 n = R->length();
+				u8* buf = xr_alloc<u8>(n + 1);
+				CopyMemory(buf, R->pointer(), n);
+				buf[n] = 0;
+				if (strstr((LPCSTR)buf, "dx10color_write_enable"))
+					Msg("* [HDR10-UI] tracer shader resolved to engine copy");
+				else
+					Msg("! [HDR10-UI] tracer shader resolved to a stock or third party copy");
+				xr_free(buf);
+				FS.r_close(R);
+			}
+		}
+
+		// a stale loose hdr10.h would PQ encode into the linear UI layer so stand HDR down
+		{
+			IReader* R = FS.r_open("$game_shaders$", "r3\\hdr10.h");
+			bool ok = false;
+			if (R)
+			{
+				const u32 n = R->length();
+				u8* buf = xr_alloc<u8>(n + 1);
+				CopyMemory(buf, R->pointer(), n);
+				buf[n] = 0;
+				ok = (0 != strstr((LPCSTR)buf, "HDR10_UI_LINEAR"));
+				xr_free(buf);
+				FS.r_close(R);
+			}
+			if (!ok)
+			{
+				Msg("! [HDR10-UI] hdr10.h has no HDR10_UI_LINEAR, a stale copy wins the VFS, HDR disabled");
+				HW.m_HDR10ForceSDR = true;
+				HW.ApplyColorSpace("stale shader stand down");
+				o.dx11_hdr10 = HW.m_HDR10Achieved ? 1 : 0;
+			}
+		}
 	}
 
 	// constants

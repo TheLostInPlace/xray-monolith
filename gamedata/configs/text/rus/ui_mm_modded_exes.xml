@@ -448,12 +448,6 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_saturation_desc">
 		<text>Регулирует насыщенность изображения.</text>
 	</string>
-	<string id="ui_mm_modded_exes_visual_hdr10_ui_saturation">
-		<text>UI Насыщенность (r4_hdr10_ui_saturation)</text>
-	</string>
-	<string id="ui_mm_modded_exes_visual_hdr10_ui_saturation_desc">
-		<text>Регулирует насыщенность пользовательского интерфейса с учётом прозрачности. Это корректирующий коэффициент, пропорциональный степени прозрачности элемента.</text>
-	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_bloom_on">
 		<text>Свечение (r4_hdr10_bloom_on)</text>
 	</string>

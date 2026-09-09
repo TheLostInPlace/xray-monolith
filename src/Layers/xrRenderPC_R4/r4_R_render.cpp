@@ -58,6 +58,8 @@ void CRender::render_menu()
 	pv++;
 	RCache.Vertex.Unlock(4, Target->g_menu->vb_stride);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+
+	Target->phase_hdr10_ui_begin();
 }
 
 extern u32 g_r;
@@ -82,6 +84,7 @@ void CRender::Render()
 		|| bMenu)
 	{
 		Target->u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
+		Target->phase_hdr10_ui_begin();
 		return;
 	}
 

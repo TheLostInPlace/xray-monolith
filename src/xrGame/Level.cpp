@@ -1319,7 +1319,10 @@ void CLevel::OnRender()
 		Render->RenderToTarget(Render->rtSVP);
 
 	if (use_reshade)
+	{
 		render_reshade_effects();
+		Render->hdr10_ui_rebind();
+	}
 
 	HUD().RenderUI();
 

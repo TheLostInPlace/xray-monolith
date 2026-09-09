@@ -21,6 +21,17 @@ void CBackend::DestroyDebugDraw()
 #endif
 }
 
+#if defined(USE_DX10) || defined(USE_DX11)
+// debug and gizmo draws follow the hdr ui layer while it is bound
+static ID3DRenderTargetView* dbg_hdr10_rt()
+{
+#if RENDER == R_R4
+	if (RImplementation.Target) return RImplementation.Target->hdr10_ui_rt();
+#endif
+	return HW.pBaseRT;
+}
+#endif
+
 void CBackend::dbg_DP(D3DPRIMITIVETYPE pt, ref_geom geom, u32 vBase, u32 pc)
 {
 	set_Geometry(geom);
@@ -55,7 +66,7 @@ void CBackend::dbg_Draw(D3DPRIMITIVETYPE T, FVF::L* pVerts, int vcnt, u16* pIdx,
 		Index.Unlock(count);
 	}
 	set_Geometry(vs_L);
-	set_RT(HW.pBaseRT);
+	set_RT(dbg_hdr10_rt());
 	RImplementation.rmNormal();
 	set_Stencil(FALSE);
 	Render(T, vBase, 0, vcnt, iBase, pcnt);
@@ -83,7 +94,7 @@ void CBackend::dbg_Draw(D3DPRIMITIVETYPE T, FVF::L* pVerts, int pcnt)
 	}
 
 	set_Geometry(vs_L);
-	set_RT(HW.pBaseRT);
+	set_RT(dbg_hdr10_rt());
 	RImplementation.rmFar();
 	set_Stencil(FALSE);
 	Render(T, vBase, pcnt);

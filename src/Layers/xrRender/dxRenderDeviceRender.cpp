@@ -415,6 +415,12 @@ void dxRenderDeviceRender::End()
 
 	if (HW.Caps.SceneMode) overdrawEnd();
 
+#if RENDER == R_R4
+	// the target is gone between reset_begin and reset_end so test it before the composite
+	if (RImplementation.Target)
+		RImplementation.Target->phase_hdr10_ui_composite();
+#endif
+
 	RCache.OnFrameEnd();
 	Memory.dbg_check();
 
