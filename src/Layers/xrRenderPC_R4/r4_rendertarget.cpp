@@ -554,6 +554,9 @@ CRenderTarget::CRenderTarget()
 
 		rt_dof.create(r2_RT_dof, w, h, RImplementation.o.dx11_hdr10 ? D3DFMT_A16B16G16R16F : D3DFMT_A8R8G8B8);
 
+		// every one of these carries scene colour into a later pass so they follow rt_Color
+		const D3DFORMAT fmt_scene = RImplementation.o.dx11_hdr10 ? D3DFMT_A16B16G16R16F : D3DFMT_A8R8G8B8;
+
 		if (RImplementation.o.dx11_hdr10) {
 			// matches rt_Color so the pre encode capture copy is a legal CopyResource
 			rt_secondVP.create(r2_RT_secondVP, w, h, rt_Color->fmt, 1); //--#SM+#-- +SecondVP+
@@ -574,20 +577,23 @@ CRenderTarget::CRenderTarget()
 		}
 		// PDA, probably not ideal though
 // RT - KD
-		rt_sunshafts_0.create(r2_RT_sunshafts0, w, h, D3DFMT_A8R8G8B8);
-		rt_sunshafts_1.create(r2_RT_sunshafts1, w, h, D3DFMT_A8R8G8B8);
+		rt_sunshafts_0.create(r2_RT_sunshafts0, w, h, fmt_scene);
+		rt_sunshafts_1.create(r2_RT_sunshafts1, w, h, fmt_scene);
 
 		// RT Blur
-		rt_blur_h_2.create(r2_RT_blur_h_2, u32(w/2), u32(h/2), D3DFMT_A8R8G8B8);
-		rt_blur_2.create(r2_RT_blur_2, u32(w/2), u32(h/2), D3DFMT_A8R8G8B8);
+		rt_blur_h_2.create(r2_RT_blur_h_2, u32(w/2), u32(h/2), fmt_scene);
+		rt_blur_2.create(r2_RT_blur_2, u32(w/2), u32(h/2), fmt_scene);
 
-		rt_blur_h_4.create(r2_RT_blur_h_4, u32(w/4), u32(h/4), D3DFMT_A8R8G8B8);
-		rt_blur_4.create(r2_RT_blur_4, u32(w/4), u32(h/4), D3DFMT_A8R8G8B8);
+		rt_blur_h_4.create(r2_RT_blur_h_4, u32(w/4), u32(h/4), fmt_scene);
+		rt_blur_4.create(r2_RT_blur_4, u32(w/4), u32(h/4), fmt_scene);
 
-		rt_blur_h_8.create(r2_RT_blur_h_8, u32(w/8), u32(h/8), D3DFMT_A8R8G8B8);
-		rt_blur_8.create(r2_RT_blur_8, u32(w/8), u32(h/8), D3DFMT_A8R8G8B8);
+		rt_blur_h_8.create(r2_RT_blur_h_8, u32(w/8), u32(h/8), fmt_scene);
+		rt_blur_8.create(r2_RT_blur_8, u32(w/8), u32(h/8), fmt_scene);
 
-		rt_pp_bloom.create(r2_RT_pp_bloom, w, h, D3DFMT_A8R8G8B8);
+		rt_pp_bloom.create(r2_RT_pp_bloom, w, h, fmt_scene);
+
+		if (RImplementation.o.dx11_hdr10)
+			Msg("* [HDR10] scene chain F16 sunshafts blur pp_bloom");
 
 		// Screen Space Shaders Stuff
 		rt_ssfx_taa.create(r2_RT_ssfx_taa, w, h, D3DFMT_A16B16G16R16F, SampleCount); // Temp RT
@@ -873,7 +879,10 @@ CRenderTarget::CRenderTarget()
 
 	// BLOOM
 	{
-		D3DFORMAT fmt = D3DFMT_A8R8G8B8; //;		// D3DFMT_X8R8G8B8
+		// the combine reads this back into scene colour so it needs the same headroom as rt_Color
+		D3DFORMAT fmt = RImplementation.o.dx11_hdr10 ? D3DFMT_A16B16G16R16F : D3DFMT_A8R8G8B8;
+		if (RImplementation.o.dx11_hdr10)
+			Msg("* [HDR10] classic bloom targets F16");
 		u32 w = BLOOM_size_X, h = BLOOM_size_Y;
 		u32 fvf_build = D3DFVF_XYZRHW | D3DFVF_TEX4 | D3DFVF_TEXCOORDSIZE2(0) | D3DFVF_TEXCOORDSIZE2(1) |
 			D3DFVF_TEXCOORDSIZE2(2) | D3DFVF_TEXCOORDSIZE2(3);
@@ -924,9 +933,13 @@ CRenderTarget::CRenderTarget()
 			rt_LUM_pool[it].create(name, 1, 1, D3DFMT_R32F);
 			//u_setrt						(rt_LUM_pool[it],	0,	0,	0			);
 			//CHK_DX						(HW.pDevice->Clear( 0L, NULL, D3DCLEAR_TARGET,	0x7f7f7f7f,	1.0f, 0L));
-			FLOAT ColorRGBA[4] = {127.0f / 255.0f, 127.0f / 255.0f, 127.0f / 255.0f, 127.0f / 255.0f};
+			// under HDR nothing rewrites this pool so a unit clear pins the exposure scale
+			const float lum_seed = RImplementation.o.dx11_hdr10 ? 1.0f : (127.0f / 255.0f);
+			FLOAT ColorRGBA[4] = {lum_seed, lum_seed, lum_seed, lum_seed};
 			HW.pContext->ClearRenderTargetView(rt_LUM_pool[it]->pRT, ColorRGBA);
 		}
+		if (RImplementation.o.dx11_hdr10)
+			Msg("* [HDR10] exposure pool seeded 1.0");
 		u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
 	}
 

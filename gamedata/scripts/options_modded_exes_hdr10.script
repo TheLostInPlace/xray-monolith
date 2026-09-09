@@ -191,6 +191,13 @@ PAGE = page {
 		step = 0.01,
 		cmd = "r4_hdr10_bloom_intensity",
 	},
+	track {
+		id = "bloom_threshold",
+		tag = "hdr10",
+		def = 1.0,
+		step = 0.05,
+		cmd = "r4_hdr10_bloom_threshold",
+	},
 					
 	line {},
 					

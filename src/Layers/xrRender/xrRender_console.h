@@ -241,6 +241,7 @@ extern ECORE_API int   ps_r4_hdr10_bloom_on;		  // r4-only
 extern ECORE_API int   ps_r4_hdr10_bloom_blur_passes; // r4-only
 extern ECORE_API float ps_r4_hdr10_bloom_blur_scale;       // r4-only
 extern ECORE_API float ps_r4_hdr10_bloom_intensity;   // r4-only
+extern ECORE_API float ps_r4_hdr10_bloom_threshold;   // r4-only
 
 extern ECORE_API int      ps_r4_hdr10_flare_on; // r4-only
 extern ECORE_API float    ps_r4_hdr10_flare_threshold; // r4-only

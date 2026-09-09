@@ -7,6 +7,20 @@ void CGammaControl::Update()
 {
 	if (HW.pDevice)
 	{
+#if defined(USE_DX11)
+		// this ramp is applied to PQ code values so it has no meaning once HDR is achieved
+		if (HW.m_HDR10Achieved)
+		{
+			static bool reported = false;
+			if (!reported)
+			{
+				reported = true;
+				Msg("* [HDR10] legacy gamma ramp skipped");
+			}
+			return;
+		}
+#endif
+
 		DXGI_GAMMA_CONTROL_CAPABILITIES GC;
 		DXGI_GAMMA_CONTROL G;
 		IDXGIOutput* pOutput;

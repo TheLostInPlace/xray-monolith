@@ -8,10 +8,18 @@ uniform float4 timers_game;
 #define TIME_HOURSF   (timers_game.z) // [0, 24]
 #define TIME_HOURS    (timers_game.w) // {0, 1, ..., 24}
 
+struct sun_out
+{
+    float4 low  : SV_Target0;
+    float4 high : SV_Target1;
+};
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Pixel
-float4 main ( p_TL I ) : SV_Target
+sun_out main ( p_TL I )
 {
+    float4 col = s_base.Sample( smp_base, I.Tex0 ) * I.Color;
+
     if (HDR10_IS_ENABLED && HDR10_SUN_ON) {
         const float amplitude = HDR10_SUN_INTENSITY;
         static const float inner_radius = 0.5 * HDR10_SUN_INNER_RADIUS;
@@ -28,29 +36,29 @@ float4 main ( p_TL I ) : SV_Target
         float magnitude = lerp(amplitude, 0, smoothstep(0, 1, norm_dist));
 
         float4 hdr_sun = float4(magnitude * tint, center_px.a * I.Color.a);
-        float4 normal_sun = s_base.Sample(smp_base, I.Tex0) * I.Color;
+        float4 normal_sun = col;
 
         if (HDR10_SUN_DAWN_END <= TIME_HOURSF && TIME_HOURSF <= HDR10_SUN_DUSK_BEGIN) {
             // day
-            return hdr_sun;
+            col = hdr_sun;
 
         } else if (HDR10_SUN_DAWN_BEGIN < TIME_HOURSF && TIME_HOURSF < HDR10_SUN_DAWN_END) {
             // dawn
             float factor = (TIME_HOURSF - HDR10_SUN_DAWN_BEGIN) / (HDR10_SUN_DAWN_END - HDR10_SUN_DAWN_BEGIN);
-            return lerp(normal_sun, hdr_sun, smoothstep(0, 1, factor));
+            col = lerp(normal_sun, hdr_sun, smoothstep(0, 1, factor));
 
         } else if (HDR10_SUN_DUSK_BEGIN < TIME_HOURSF && TIME_HOURSF < HDR10_SUN_DUSK_END) {
             // dusk
             float factor = (TIME_HOURSF - HDR10_SUN_DUSK_BEGIN) / (HDR10_SUN_DUSK_END - HDR10_SUN_DUSK_BEGIN);
-            return lerp(hdr_sun, normal_sun, smoothstep(0, 1, factor));
+            col = lerp(hdr_sun, normal_sun, smoothstep(0, 1, factor));
         }
-
-        // night
-        return normal_sun;
-
-    } else {
-	    return s_base.Sample( smp_base, I.Tex0 ) * I.Color;
     }
+
+    sun_out o;
+    o.low  = col;
+    // the classic bloom is built from target 1 so the disc has to land there too
+    o.high = HDR10_IS_ENABLED ? float4(col.rgb / def_hdr, col.a) : float4(0, 0, 0, 0);
+    return o;
 
 //	float4 res = s_base.Sample( smp_base, I.Tex0 )*I.Color;
 //	clip(res-m_AlphaRef);

@@ -69,7 +69,15 @@ c2_out main( v2p_aa_AA I )
 
 	img = mblur( center, ( gbd ).P, img.rgb);
 
-	img = blend_soft(img, bloom.xyz*bloom.w);
+	if (HDR10_IS_ENABLED)
+	{
+		// screen blend caps a highlight at 1 so add the bloom in linear light instead
+		img = HDR10_LinearTosRGB(HDR10_sRGBToLinear(img) + HDR10_sRGBToLinear(bloom.xyz*bloom.w));
+	}
+	else
+	{
+		img = blend_soft(img, bloom.xyz*bloom.w);
+	}
 		
 	if (!HDR10_IS_ENABLED) {
 		if (tnmp_onoff == 1.0)
@@ -101,8 +109,11 @@ c2_out main( v2p_aa_AA I )
 	}
 
 #ifdef 	USE_DISTORT
+	if (!HDR10_IS_ENABLED)
+	{
  	float3	blurred	= bloom*def_hdr	;
 			img		= lerp	(img,blurred,distort.z);
+	}
 #endif
 	
 		res.Color = float4(img,1.0);

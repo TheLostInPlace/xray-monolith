@@ -49,5 +49,9 @@ float4 main(p_screen I) : SV_TARGET
     karis_avg  = g1w * g1 + g2w * g2 + g3w * g3 + g4w * g4 + g5w * g5;
     karis_avg /= g1w + g2w + g3w + g4w + g5w;
 
+    // without a threshold the karis average normalises away the very energy bloom should spread
+    float lum = HDR10_Luminance_Rec709(karis_avg);
+    karis_avg *= saturate(lum - HDR10_BLOOM_THRESHOLD) / max(lum, 0.0001);
+
     return float4(karis_avg, 1.0);
 }
