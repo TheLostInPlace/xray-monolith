@@ -515,6 +515,33 @@ void CRender::create()
 	Msg("- SSS MOTION BLUR SHADER INSTALLED %i", o.ssfx_motionblur);
 	Msg("- SSS TAA SHADER INSTALLED %i", o.ssfx_taa);
 
+	// log where each hdr10 path shader was resolved from
+	if (o.dx11_hdr10)
+	{
+		static LPCSTR hdr10_probe[] = {
+			"r3\\hdr10.h", "r3\\postprocess.ps", "r3\\postprocess_cm.ps",
+			"r3\\hud_default.ps", "r3\\hud_font.ps", "r3\\simple_color.ps",
+			"r3\\yuv2rgb.ps", "r3\\combine_2_naa.ps", "r3\\common_functions.h",
+			"r3\\effects_sun.ps", "r3\\effects_sun.s", "r3\\hdr10_bloom.h",
+			"r3\\hdr10_bloom_blur.ps", "r3\\hdr10_bloom_downsample.ps", "r3\\hdr10_bloom_upsample.ps",
+			"r3\\hdr10_lens_flare.h", "r3\\hdr10_lens_flare_blur.ps", "r3\\hdr10_lens_flare_downsample.ps",
+			"r3\\hdr10_lens_flare_fgen.ps", "r3\\hdr10_lens_flare_upsample.ps"
+		};
+
+		const size_t probe_count = sizeof(hdr10_probe) / sizeof(hdr10_probe[0]);
+		for (size_t i = 0; i < probe_count; i++)
+		{
+			string_path pn;
+			const CLocatorAPI::file* pf = FS.exist(pn, "$game_shaders$", hdr10_probe[i]);
+			if (!pf)
+				Msg("* [HDR10] %s missing", hdr10_probe[i]);
+			else if (0xffffffff == pf->vfs)
+				Msg("* [HDR10] %s loose %u bytes", pn, pf->size_real);
+			else
+				Msg("* [HDR10] %s from %s %u bytes", pn, FS.m_archives[pf->vfs].path.c_str(), pf->size_real);
+		}
+	}
+
 	// constants
 	CResourceManager* RM = dxRenderDeviceRender::Instance().Resources;
 	RM->RegisterConstantSetup("parallax", &binder_parallax);
