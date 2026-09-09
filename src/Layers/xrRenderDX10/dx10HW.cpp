@@ -647,6 +647,15 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
     // create swapchain
     R_CHK(m_pFactory->CreateSwapChainForHwnd(pDevice, m_hWnd, &sd, &sd_fullscreen, NULL, &m_pSwapChain));
 
+    // suppresses dxgi's own alt enter mode switch so only the engine screenmode path changes fullscreen
+    if (ps_r4_hdr10_on)
+    {
+        const HRESULT hr_mwa = m_pFactory->MakeWindowAssociation(m_hWnd, DXGI_MWA_NO_ALT_ENTER);
+        Msg("* hdr10: dxgi alt enter %s, hr 0x%08x",
+            SUCCEEDED(hr_mwa) ? "suppressed" : "left at the dxgi default",
+            (unsigned)hr_mwa);
+    }
+
     // setup colorspace
     // HDR10 (U10 output) -> DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
     // SDR   (U8 output)  -> DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709
@@ -895,7 +904,9 @@ void CHW::Reset(HWND hwnd)
     mode.Height      = cd.Height;
     mode.Format      = cd.Format;
     mode.RefreshRate = cd_fs.RefreshRate;
-    CHK_DX(m_pSwapChain->ResizeTarget(&mode));
+    HRESULT hr_target = m_pSwapChain->ResizeTarget(&mode);
+    if (FAILED(hr_target))
+        Msg("! swapchain: ResizeTarget failed on reset, hr 0x%08x", (unsigned)hr_target);
 #elif defined(USE_DX10)
     CHK_DX(m_pSwapChain->ResizeTarget(&desc));
 #endif
@@ -916,12 +927,14 @@ void CHW::Reset(HWND hwnd)
         flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     }
 
-    CHK_DX(m_pSwapChain->ResizeBuffers(
+    HRESULT hr_resize = m_pSwapChain->ResizeBuffers(
         cd.BufferCount,
         cd.Width,
         cd.Height,
         cd.Format,
-        flags));
+        flags);
+    if (FAILED(hr_resize))
+        Msg("! swapchain: ResizeBuffers failed on reset, hr 0x%08x", (unsigned)hr_resize);
 #elif defined(USE_DX10)
 	CHK_DX(m_pSwapChain->ResizeBuffers(
 		cd.BufferCount,
@@ -1165,12 +1178,14 @@ void CHW::OnAppActivate()
             flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
         }
 
-        m_pSwapChain->ResizeBuffers(
+        HRESULT hr_resize = m_pSwapChain->ResizeBuffers(
             cd.BufferCount,
             cd.Width,
             cd.Height,
             cd.Format,
             flags);
+        if (FAILED(hr_resize))
+            Msg("! swapchain: ResizeBuffers failed on app activate, hr 0x%08x", (unsigned)hr_resize);
 
         UpdateViews();
 #endif
@@ -1211,12 +1226,14 @@ void CHW::OnAppDeactivate()
             flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
         }
 
-        m_pSwapChain->ResizeBuffers(
+        HRESULT hr_resize = m_pSwapChain->ResizeBuffers(
             cd.BufferCount,
             cd.Width,
             cd.Height,
             cd.Format,
             flags);
+        if (FAILED(hr_resize))
+            Msg("! swapchain: ResizeBuffers failed on app deactivate, hr 0x%08x", (unsigned)hr_resize);
 
         UpdateViews();
 #endif
