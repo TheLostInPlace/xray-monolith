@@ -39,7 +39,7 @@ static lpm_setup_inputs hdr10_lpm_inputs()
 {
 	lpm_setup_inputs in;
 	in.hdr_max = hdr10_headroom();
-	// the exposure cvar is a grading gain applied before the mapper so scene 0.18 always lands on mid level
+	// the mapper anchors its own 0.18 input on mid level so the exposure cvar stays a plain grading gain
 	in.exposure = ALog2F1(in.hdr_max);
 	in.hdr10_s = LpmHdr10RawScalar(ps_r4_hdr10_whitepoint_nits);
 	in.contrast = ps_r4_hdr10_lpm_contrast;
