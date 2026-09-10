@@ -4,6 +4,15 @@
 Texture2D s_hdr10_present;
 Texture2D s_hdr10_ui;
 
+// decodes a straight srgb encoded ui colour and rotates it into the display primaries
+float3 hdr10_ui_display_linear(float3 encoded)
+{
+	float3 lin = HDR10_sRGBToLinear(encoded);
+	lin = HDR10_TransformColorspace_ToTarget(lin);
+	lin = saturate(lin);
+	return HDR10_TransformColorspace_ToDisplay(lin);
+}
+
 float4 main(p_screen I) : SV_TARGET
 {
 	float2 tc = I.tc0;
@@ -22,23 +31,21 @@ float4 main(p_screen I) : SV_TARGET
 	static const float st2084_max_nits = 10000.0;
 	float ui_white = HDR10_WORLD_SCALE_NITS * HDR10_UI_NITS_SCALAR / st2084_max_nits;
 
-	// additive draws leave colour with no coverage so their share adds over the world instead of covering it
+	// the over stack keeps colour within coverage, anything above it is additive residue that adds over the world
 	float cover = saturate(ui.a);
-	float share = (cover > 0.0) ? cover : 1.0;
-	float3 ui_enc = (cover > 0.0) ? saturate(ui.rgb / cover) : saturate(ui.rgb);
+	float3 covered = min(ui.rgb, cover);
+	float3 residue = saturate(ui.rgb - covered);
 
-	float3 ui_lin = HDR10_sRGBToLinear(ui_enc);
-	ui_lin = HDR10_TransformColorspace_ToTarget(ui_lin);
-	ui_lin = saturate(ui_lin);
-	ui_lin = HDR10_TransformColorspace_ToDisplay(ui_lin);
+	float3 ui_lin = hdr10_ui_display_linear(covered / max(cover, 1e-6));
+	float3 res_lin = hdr10_ui_display_linear(residue);
 
 	float3 color;
 	if (HDR10_UI_SDR_BLEND) {
 		// the mix the sdr back buffer makes, both sides in the header's 2.2 curve with ui white at 1.0
-		float3 mix_enc = HDR10_LinearTosRGB(ui_lin) * share + HDR10_LinearTosRGB(world / ui_white) * (1.0 - cover);
+		float3 mix_enc = HDR10_LinearTosRGB(ui_lin) * cover + HDR10_LinearTosRGB(res_lin) + HDR10_LinearTosRGB(world / ui_white) * (1.0 - cover);
 		color = HDR10_sRGBToLinear(mix_enc) * ui_white;
 	} else {
-		color = ui_lin * ui_white * share + world * (1.0 - cover);
+		color = ui_lin * ui_white * cover + res_lin * ui_white + world * (1.0 - cover);
 	}
 
 	// ST2084 is defined on [0,1]
