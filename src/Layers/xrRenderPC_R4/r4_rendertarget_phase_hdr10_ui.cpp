@@ -6,13 +6,29 @@ u32 g_hdr10_ui_layer_live = 0;
 
 static u32 g_hdr10_ui_proof = 0;
 
-// every pass drawn into the layer blends coverage into alpha so the composite can cover the world
-ID3DBlendState* hdr10_ui_layer_blend(ID3DBlendState* base)
+// builds the layer variant of a blend state once, the cache clears when the device changes
+static ID3DBlendState* hdr10_ui_layer_variant(ID3DBlendState* base)
 {
-	if (!g_hdr10_ui_layer_live || !base) return base;
-
 	D3D_BLEND_DESC desc;
-	base->GetDesc(&desc);
+	dx10StateUtils::ResetDescription(desc);
+	D3D_BLEND_DESC src;
+	dx10StateUtils::ResetDescription(src);
+	base->GetDesc(&src);
+
+	// copy field by field so the hash never sees stale padding
+	desc.AlphaToCoverageEnable = src.AlphaToCoverageEnable;
+	desc.IndependentBlendEnable = src.IndependentBlendEnable;
+	for (u32 i = 0; i < 8; ++i)
+	{
+		desc.RenderTarget[i].BlendEnable = src.RenderTarget[i].BlendEnable;
+		desc.RenderTarget[i].SrcBlend = src.RenderTarget[i].SrcBlend;
+		desc.RenderTarget[i].DestBlend = src.RenderTarget[i].DestBlend;
+		desc.RenderTarget[i].BlendOp = src.RenderTarget[i].BlendOp;
+		desc.RenderTarget[i].SrcBlendAlpha = src.RenderTarget[i].SrcBlendAlpha;
+		desc.RenderTarget[i].DestBlendAlpha = src.RenderTarget[i].DestBlendAlpha;
+		desc.RenderTarget[i].BlendOpAlpha = src.RenderTarget[i].BlendOpAlpha;
+		desc.RenderTarget[i].RenderTargetWriteMask = src.RenderTarget[i].RenderTargetWriteMask;
+	}
 	D3D11_RENDER_TARGET_BLEND_DESC& rt = desc.RenderTarget[0];
 
 	const u8 rgb = D3D11_COLOR_WRITE_ENABLE_RED | D3D11_COLOR_WRITE_ENABLE_GREEN | D3D11_COLOR_WRITE_ENABLE_BLUE;
@@ -35,6 +51,27 @@ ID3DBlendState* hdr10_ui_layer_blend(ID3DBlendState* base)
 	rt.BlendOpAlpha = D3D_BLEND_OP_ADD;
 	rt.RenderTargetWriteMask |= D3D11_COLOR_WRITE_ENABLE_ALPHA;
 	return BSManager.GetState(desc);
+}
+
+// every pass drawn into the layer blends coverage into alpha so the composite can cover the world
+ID3DBlendState* hdr10_ui_layer_blend(ID3DBlendState* base)
+{
+	if (!g_hdr10_ui_layer_live || !base) return base;
+
+	static xr_map<ID3DBlendState*, ID3DBlendState*> variants;
+	static ID3DDevice* variants_device = NULL;
+	if (variants_device != HW.pDevice)
+	{
+		variants.clear();
+		variants_device = HW.pDevice;
+	}
+
+	xr_map<ID3DBlendState*, ID3DBlendState*>::iterator it = variants.find(base);
+	if (it != variants.end()) return it->second;
+
+	ID3DBlendState* variant = hdr10_ui_layer_variant(base);
+	variants.insert(std::make_pair(base, variant));
+	return variant;
 }
 
 static void PushFSQ(FVF::TL* pv, float w, float h)
