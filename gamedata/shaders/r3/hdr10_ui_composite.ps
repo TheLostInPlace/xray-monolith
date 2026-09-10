@@ -11,17 +11,35 @@ float4 main(p_screen I) : SV_TARGET
 	float4 ui = s_hdr10_ui.Sample(smp_rtlinear, tc);
 	float3 world_pq = s_hdr10_present.Sample(smp_rtlinear, tc).rgb;
 
-	// world arrives PQ encoded in Rec.2020, UI arrives premultiplied linear Rec.709 at paper white
+	// a texel nothing drew into keeps the encoded world bit for bit
+	if (all(ui <= 0.0)) {
+		return float4(world_pq, 1.0);
+	}
+
+	// world arrives PQ encoded in Rec.2020, the layer holds premultiplied srgb encoded Rec.709 like the sdr back buffer
 	float3 world = HDR10_RemoveST2084_PQ(world_pq);
 
-	float3 ui_display = HDR10_TransformColorspace_ToTarget(ui.rgb);
-	ui_display = saturate(ui_display);
-	ui_display = HDR10_TransformColorspace_ToDisplay(ui_display);
-
 	static const float st2084_max_nits = 10000.0;
-	ui_display = HDR10_WORLD_SCALE_NITS * HDR10_UI_NITS_SCALAR * ui_display / st2084_max_nits;
+	float ui_white = HDR10_WORLD_SCALE_NITS * HDR10_UI_NITS_SCALAR / st2084_max_nits;
 
-	float3 color = ui_display + world * (1.0 - ui.a);
+	// additive draws leave colour with no coverage so their share adds over the world instead of covering it
+	float cover = saturate(ui.a);
+	float share = (cover > 0.0) ? cover : 1.0;
+	float3 ui_enc = (cover > 0.0) ? saturate(ui.rgb / cover) : saturate(ui.rgb);
+
+	float3 ui_lin = HDR10_sRGBToLinear(ui_enc);
+	ui_lin = HDR10_TransformColorspace_ToTarget(ui_lin);
+	ui_lin = saturate(ui_lin);
+	ui_lin = HDR10_TransformColorspace_ToDisplay(ui_lin);
+
+	float3 color;
+	if (HDR10_UI_SDR_BLEND) {
+		// the mix the sdr back buffer makes, both sides in the header's 2.2 curve with ui white at 1.0
+		float3 mix_enc = HDR10_LinearTosRGB(ui_lin) * share + HDR10_LinearTosRGB(world / ui_white) * (1.0 - cover);
+		color = HDR10_sRGBToLinear(mix_enc) * ui_white;
+	} else {
+		color = ui_lin * ui_white * share + world * (1.0 - cover);
+	}
 
 	// ST2084 is defined on [0,1]
 	color = saturate(color);

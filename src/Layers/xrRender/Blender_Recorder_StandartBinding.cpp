@@ -1274,7 +1274,7 @@ extern float ps_r4_hdr10_sun_dusk_end;
 
 #if RENDER == R_R4
 extern u32 g_hdr10_ui_layer_live;
-// 2 tells the shaders the ui layer is bound so they stop at linear light
+// 2 tells the shaders the ui layer is bound so they return the srgb encoded value
 #define HDR10_ON (RImplementation.o.dx11_hdr10 ? (g_hdr10_ui_layer_live ? 2 : 1) : 0)
 #define HDR10_DISPLAY_REFERRED_ON (RImplementation.o.hdr10_display_referred)
 #else
@@ -1356,7 +1356,7 @@ DECL_BINDER4F( binder_hdr10_parameters11,
 	hdr10_headroom(),
 	HDR10_DISPLAY_REFERRED_ON,
 	ps_r4_hdr10_paper_white_nits,
-	0.0f
+	float(ps_r4_hdr10_ui_sdr_blend)
 );
 
 #if RENDER == R_R4

@@ -67,17 +67,6 @@ void dxImGuiRender::Frame()
 void dxImGuiRender::Render(ImDrawData* data)
 {
 #if defined(USE_DX11)
-#if RENDER == R_R4
-    extern int g_imgui_hdr_linear;
-    extern u32 g_hdr10_ui_layer_live;
-    g_imgui_hdr_linear = g_hdr10_ui_layer_live ? 1 : 0;
-    static bool armed = false;
-    if (g_imgui_hdr_linear && !armed)
-    {
-        armed = true;
-        Msg("* [HDR10-UI] imgui hdr path armed");
-    }
-#endif
     ImGui_ImplDX11_RenderDrawData(data);
 #elif defined(USE_DX10)
     ImGui_ImplDX10_RenderDrawData(data);

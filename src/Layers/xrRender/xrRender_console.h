@@ -229,6 +229,7 @@ extern ECORE_API int   ps_r4_hdr10_own_final_pass;	// r4-only
 extern ECORE_API int   ps_r4_hdr10_display_referred;// r4-only
 extern ECORE_API int   ps_r4_hdr10_skip_taa;		// r4-only
 extern ECORE_API int   ps_r4_hdr10_auto_exposure;	// r4-only
+extern ECORE_API int   ps_r4_hdr10_ui_sdr_blend;	// r4-only
 extern ECORE_API float ps_r4_hdr10_pda_intensity; 	// r4-only
 
 extern ECORE_API int   ps_r4_hdr10_tonemapper;    		 // r4-only

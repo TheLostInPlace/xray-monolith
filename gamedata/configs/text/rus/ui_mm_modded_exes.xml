@@ -334,6 +334,12 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_auto_exposure_desc">
 		<text>On: the eye adapts to scene brightness the same way it does in SDR, and Exposure is a bias on top. Off: adaptation is pinned and Exposure sets the level by itself.</text>
 	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_ui_sdr_blend">
+		<text>UI blend like SDR</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_ui_sdr_blend_desc">
+		<text>Blends the UI over the world in the SDR gamma curve so translucent panels keep the darkness they have in SDR. Off blends the UI over the world in linear light. The UI's own layers always mix the SDR way.</text>
+	</string>
 	<string id="ui_mm_lst_hdr10_tonemapper_lpm">
 		<text>AMD FidelityFX LPM</text>
 	</string>

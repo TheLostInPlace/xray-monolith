@@ -315,6 +315,7 @@ int   ps_r4_hdr10_own_final_pass  = 1;      // r4-only, engine owns the final en
 int   ps_r4_hdr10_display_referred = 2;     // r4-only, 0 scene, 1 display, 2 auto from the gate probe
 int   ps_r4_hdr10_skip_taa        = 0;      // r4-only, skip an ungated TAA under HDR
 int   ps_r4_hdr10_auto_exposure   = 1;      // r4-only, adapt exposure under scene referred HDR
+int   ps_r4_hdr10_ui_sdr_blend    = 0;      // r4-only
 
 int   ps_r4_hdr10_tonemapper   		   = 9;    // r4-only, default = headroom
 int   ps_r4_hdr10_tonemap_mode 		   = 1;	   // r4-only, default = Color
@@ -1317,6 +1318,7 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r4_hdr10_display_referred",&ps_r4_hdr10_display_referred,         0, 2);
     CMD4(CCC_Integer, "r4_hdr10_skip_taa",        &ps_r4_hdr10_skip_taa,                 0, 1);
     CMD4(CCC_Integer, "r4_hdr10_auto_exposure",   &ps_r4_hdr10_auto_exposure,            0, 1);
+    CMD4(CCC_Integer, "r4_hdr10_ui_sdr_blend",    &ps_r4_hdr10_ui_sdr_blend,             0, 1);
 
     CMD4(CCC_Integer, "r4_hdr10_tonemapper", 	  		&ps_r4_hdr10_tonemapper,      	      0, 10);
 	CMD4(CCC_Integer, "r4_hdr10_tonemap_mode",    		&ps_r4_hdr10_tonemap_mode,    	      0, 1);

@@ -77,7 +77,6 @@ struct ImGui_ImplDX11_Data
 struct VERTEX_CONSTANT_BUFFER_DX11
 {
     float   mvp[4][4];
-    float   hdr[4];
 };
 
 // Backend data stored in io.BackendRendererUserData to allow support for multiple Dear ImGui contexts
@@ -90,9 +89,6 @@ static ImGui_ImplDX11_Data* ImGui_ImplDX11_GetBackendData()
 // Forward Declarations
 static void ImGui_ImplDX11_InitMultiViewportSupport();
 static void ImGui_ImplDX11_ShutdownMultiViewportSupport();
-
-// nonzero while the engine's HDR UI layer is bound so the overlay emits linear light
-int g_imgui_hdr_linear = 0;
 
 // Functions
 static void ImGui_ImplDX11_SetupRenderState(ImDrawData* draw_data, ID3D11DeviceContext* device_ctx)
@@ -127,10 +123,6 @@ static void ImGui_ImplDX11_SetupRenderState(ImDrawData* draw_data, ID3D11DeviceC
             { (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f },
         };
         memcpy(&constant_buffer->mvp, mvp, sizeof(mvp));
-        constant_buffer->hdr[0] = g_imgui_hdr_linear ? 1.0f : 0.0f;
-        constant_buffer->hdr[1] = 0.0f;
-        constant_buffer->hdr[2] = 0.0f;
-        constant_buffer->hdr[3] = 0.0f;
         device_ctx->Unmap(bd->pVertexConstantBuffer, 0);
     }
 
@@ -143,7 +135,6 @@ static void ImGui_ImplDX11_SetupRenderState(ImDrawData* draw_data, ID3D11DeviceC
     device_ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     device_ctx->VSSetShader(bd->pVertexShader, nullptr, 0);
     device_ctx->VSSetConstantBuffers(0, 1, &bd->pVertexConstantBuffer);
-    device_ctx->PSSetConstantBuffers(0, 1, &bd->pVertexConstantBuffer);
     device_ctx->PSSetShader(bd->pPixelShader, nullptr, 0);
     device_ctx->PSSetSamplers(0, 1, &bd->pFontSampler);
     device_ctx->GSSetShader(nullptr, nullptr, 0);
@@ -236,7 +227,7 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
         UINT                        PSInstancesCount, VSInstancesCount, GSInstancesCount;
         ID3D11ClassInstance         *PSInstances[256], *VSInstances[256], *GSInstances[256];   // 256 is max according to PSSetShader documentation
         D3D11_PRIMITIVE_TOPOLOGY    PrimitiveTopology;
-        ID3D11Buffer*               IndexBuffer, *VertexBuffer, *VSConstantBuffer, *PSConstantBuffer;
+        ID3D11Buffer*               IndexBuffer, *VertexBuffer, *VSConstantBuffer;
         UINT                        IndexBufferOffset, VertexBufferStride, VertexBufferOffset;
         DXGI_FORMAT                 IndexBufferFormat;
         ID3D11InputLayout*          InputLayout;
@@ -254,7 +245,6 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
     device->PSGetShader(&old.PS, old.PSInstances, &old.PSInstancesCount);
     device->VSGetShader(&old.VS, old.VSInstances, &old.VSInstancesCount);
     device->VSGetConstantBuffers(0, 1, &old.VSConstantBuffer);
-    device->PSGetConstantBuffers(0, 1, &old.PSConstantBuffer);
     device->GSGetShader(&old.GS, old.GSInstances, &old.GSInstancesCount);
 
     device->IAGetPrimitiveTopology(&old.PrimitiveTopology);
@@ -329,7 +319,6 @@ void ImGui_ImplDX11_RenderDrawData(ImDrawData* draw_data)
     for (UINT i = 0; i < old.PSInstancesCount; i++) if (old.PSInstances[i]) old.PSInstances[i]->Release();
     device->VSSetShader(old.VS, old.VSInstances, old.VSInstancesCount); if (old.VS) old.VS->Release();
     device->VSSetConstantBuffers(0, 1, &old.VSConstantBuffer); if (old.VSConstantBuffer) old.VSConstantBuffer->Release();
-    device->PSSetConstantBuffers(0, 1, &old.PSConstantBuffer); if (old.PSConstantBuffer) old.PSConstantBuffer->Release();
     device->GSSetShader(old.GS, old.GSInstances, old.GSInstancesCount); if (old.GS) old.GS->Release();
     for (UINT i = 0; i < old.VSInstancesCount; i++) if (old.VSInstances[i]) old.VSInstances[i]->Release();
     device->IASetPrimitiveTopology(old.PrimitiveTopology);
@@ -486,15 +475,9 @@ bool    ImGui_ImplDX11_CreateDeviceObjects()
             sampler sampler0;\
             Texture2D texture0;\
             \
-            cbuffer imguiPS : register(b0)\
-            {\
-            float4x4 mvp_unused;\
-            float4 hdr;\
-            };\
             float4 main(PS_INPUT input) : SV_Target\
             {\
             float4 out_col = input.col * texture0.Sample(sampler0, input.uv); \
-            if (hdr.x > 0.5) out_col.rgb = pow(max(out_col.rgb, 0.0), 2.2); \
             return out_col; \
             }";
 
