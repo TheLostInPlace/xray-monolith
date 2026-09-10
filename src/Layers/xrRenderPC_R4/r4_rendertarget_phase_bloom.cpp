@@ -144,7 +144,8 @@ void CRenderTarget::phase_bloom()
 	}
 
 	// Capture luminance values
-	if (RImplementation.o.dx11_hdr10)
+	// a display referred frame still adapts through the mods own tonemap so only the scene referred path skips it
+	if (RImplementation.o.dx11_hdr10 && !RImplementation.o.hdr10_display_referred)
 	{
 		static bool reported = false;
 		if (!reported)

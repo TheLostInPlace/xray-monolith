@@ -851,6 +851,11 @@ float3 HDR10_ToSDR_World(float3 color)
 		return color;
 	}
 
+	// a display referred frame is already a finished sdr image so the capture keeps it as it is
+	if (HDR10_IS_DISPLAY_REFERRED) {
+		return saturate(color);
+	}
+
 	color = max(0, color);
 	color = HDR10_sRGBToLinear(color);
 	color = HDR10_ApplyColorGrading_Rec709(color);

@@ -1,9 +1,41 @@
 #include "stdafx.h"
+#include "../xrRenderDX10/StateManager/dx10StateCache.h"
 
 // nonzero while the hdr ui layer is the bound target
 u32 g_hdr10_ui_layer_live = 0;
 
 static u32 g_hdr10_ui_proof = 0;
+
+// every pass drawn into the layer blends coverage into alpha so the composite can cover the world
+ID3DBlendState* hdr10_ui_layer_blend(ID3DBlendState* base)
+{
+	if (!g_hdr10_ui_layer_live || !base) return base;
+
+	D3D_BLEND_DESC desc;
+	base->GetDesc(&desc);
+	D3D11_RENDER_TARGET_BLEND_DESC& rt = desc.RenderTarget[0];
+
+	const u8 rgb = D3D11_COLOR_WRITE_ENABLE_RED | D3D11_COLOR_WRITE_ENABLE_GREEN | D3D11_COLOR_WRITE_ENABLE_BLUE;
+	if (0 == (rt.RenderTargetWriteMask & rgb)) return base;
+
+	const bool over = rt.BlendEnable && D3D_BLEND_SRC_ALPHA == rt.SrcBlend && D3D_BLEND_INV_SRC_ALPHA == rt.DestBlend;
+	const bool opaque = !rt.BlendEnable;
+	if (!over && !opaque) return base;
+
+	const bool coverage = (rt.RenderTargetWriteMask & D3D11_COLOR_WRITE_ENABLE_ALPHA)
+		&& D3D_BLEND_ONE == rt.SrcBlendAlpha && D3D_BLEND_INV_SRC_ALPHA == rt.DestBlendAlpha;
+	if (over && coverage) return base;
+
+	rt.BlendEnable = TRUE;
+	rt.SrcBlend = D3D_BLEND_SRC_ALPHA;
+	rt.DestBlend = D3D_BLEND_INV_SRC_ALPHA;
+	rt.BlendOp = D3D_BLEND_OP_ADD;
+	rt.SrcBlendAlpha = D3D_BLEND_ONE;
+	rt.DestBlendAlpha = D3D_BLEND_INV_SRC_ALPHA;
+	rt.BlendOpAlpha = D3D_BLEND_OP_ADD;
+	rt.RenderTargetWriteMask |= D3D11_COLOR_WRITE_ENABLE_ALPHA;
+	return BSManager.GetState(desc);
+}
 
 static void PushFSQ(FVF::TL* pv, float w, float h)
 {
