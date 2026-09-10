@@ -246,7 +246,6 @@ extern ECORE_API float ps_r4_hdr10_lpm_saturation;        // r4-only
 extern ECORE_API float ps_r4_hdr10_lpm_crosstalk_r;       // r4-only
 extern ECORE_API float ps_r4_hdr10_lpm_crosstalk_g;       // r4-only
 extern ECORE_API float ps_r4_hdr10_lpm_crosstalk_b;       // r4-only
-extern ECORE_API float ps_r4_hdr10_lpm_soft_gap;          // r4-only
 
 extern ECORE_API int   ps_r4_hdr10_bloom_on;		  // r4-only
 extern ECORE_API int   ps_r4_hdr10_bloom_blur_passes; // r4-only

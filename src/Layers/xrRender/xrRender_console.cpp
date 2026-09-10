@@ -332,7 +332,6 @@ float ps_r4_hdr10_lpm_saturation        = 0.0f;     // r4-only
 float ps_r4_hdr10_lpm_crosstalk_r       = 1.0f;     // r4-only
 float ps_r4_hdr10_lpm_crosstalk_g       = 0.5f;     // r4-only
 float ps_r4_hdr10_lpm_crosstalk_b       = 0.03125f; // r4-only
-float ps_r4_hdr10_lpm_soft_gap          = 0.0f;     // r4-only
 
 int   ps_r4_hdr10_bloom_on          = 0; 	  // r4-only, default = off
 int   ps_r4_hdr10_bloom_blur_passes = 20;      // r4-only, default = 8
@@ -1334,7 +1333,6 @@ void xrRender_initconsole()
 	CMD4(CCC_Float,   "r4_hdr10_lpm_crosstalk_r",       &ps_r4_hdr10_lpm_crosstalk_r,     0.001, 1);
 	CMD4(CCC_Float,   "r4_hdr10_lpm_crosstalk_g",       &ps_r4_hdr10_lpm_crosstalk_g,     0.001, 1);
 	CMD4(CCC_Float,   "r4_hdr10_lpm_crosstalk_b",       &ps_r4_hdr10_lpm_crosstalk_b,     0.001, 1);
-	CMD4(CCC_Float,   "r4_hdr10_lpm_soft_gap",          &ps_r4_hdr10_lpm_soft_gap,            0, 0.1);
 
 	CMD4(CCC_Integer, "r4_hdr10_bloom_on",          &ps_r4_hdr10_bloom_on,          0, 1);
 	CMD4(CCC_Integer, "r4_hdr10_bloom_blur_passes", &ps_r4_hdr10_bloom_blur_passes, 1, 32);

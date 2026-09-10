@@ -21,10 +21,6 @@
 
 CRender RImplementation;
 
-// tonemapper index of the lpm curve, matches the options list order
-static const int hdr10_tonemapper_lpm = 10;
-extern void hdr10_lpm_report(float& hdr_max, float& exposure, float& hdr10_s, float& contrast, float& shoulder_contrast);
-
 //////////////////////////////////////////////////////////////////////////
 class CGlow : public IRender_Glow
 {
@@ -636,7 +632,8 @@ void CRender::create()
 	if (o.dx11_hdr10)
 	{
 		static LPCSTR hdr10_probe[] = {
-			"r3\\hdr10.h", "r3\\postprocess.ps", "r3\\postprocess_cm.ps",
+			"r3\\hdr10.h", "r3\\ffx_a.h", "r3\\ffx_lpm.h",
+			"r3\\postprocess.ps", "r3\\postprocess_cm.ps",
 			"r3\\hud_default.ps", "r3\\hud_font.ps", "r3\\simple_color.ps",
 			"r3\\yuv2rgb.ps", "r3\\combine_2_naa.ps", "r3\\common_functions.h",
 			"r3\\effects_sun.ps", "r3\\effects_sun.s", "r3\\hdr10_bloom.h",
@@ -650,7 +647,13 @@ void CRender::create()
 		{
 			string_path pn;
 			const CLocatorAPI::file* pf = FS.exist(pn, "$game_shaders$", hdr10_probe[i]);
-			if (!pf)
+			// hdr10.h includes the ffx headers unconditionally so a deploy without them breaks every compile
+			const bool ffx_required = (0 == xr_strcmp(hdr10_probe[i], "r3\\ffx_a.h")
+			                        || 0 == xr_strcmp(hdr10_probe[i], "r3\\ffx_lpm.h"));
+
+			if (!pf && ffx_required)
+				Msg("! [HDR10] %s cannot be opened, every shader compile fails until the deploy carries it", hdr10_probe[i]);
+			else if (!pf)
 				Msg("* [HDR10] %s missing", hdr10_probe[i]);
 			else if (0xffffffff == pf->vfs)
 				Msg("* [HDR10] %s loose %u bytes", pn, pf->size_real);
@@ -661,15 +664,6 @@ void CRender::create()
 		Msg("* HDR10 anchors: paper white %.0f nits, peak %.0f nits, headroom %.3f, world scale %.0f nits, tonemapper %d",
 		    ps_r4_hdr10_paper_white_nits, ps_r4_hdr10_whitepoint_nits, hdr10_headroom(),
 		    hdr10_world_scale_nits(), ps_r4_hdr10_tonemapper);
-
-		// the numbers the lpm control block is built from
-		if (hdr10_tonemapper_lpm == ps_r4_hdr10_tonemapper)
-		{
-			float hdr_max, exposure, hdr10_s, contrast, shoulder_contrast;
-			hdr10_lpm_report(hdr_max, exposure, hdr10_s, contrast, shoulder_contrast);
-			Msg("* HDR10 lpm setup: hdrMax %.3f, exposure %.3f stops, hdr10S %.4f, contrast %.3f, shoulder contrast %.3f",
-			    hdr_max, exposure, hdr10_s, contrast, shoulder_contrast);
-		}
 
 		// which effects_bullet_tracer.s the file system serves decides whether the tracer is hdr aware
 		{

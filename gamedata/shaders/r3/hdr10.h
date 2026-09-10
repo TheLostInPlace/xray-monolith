@@ -894,6 +894,17 @@ float3 HDR10_ToSDR_World(float3 color)
 	color = max(0, color);
 	color = HDR10_sRGBToLinear(color);
 	color = HDR10_ApplyColorGrading_Rec709(color);
+
+	// same curve as the display path with the container scale and the rec2020 rotation taken back off
+	if (HDR10_USE_TONEMAPPER_LPM) {
+		static const float lpm_st2084_max_nits = 10000.0;
+		color = HDR10_Tonemap_LPM(color);
+		color /= (HDR10_WORLD_SCALE_NITS / lpm_st2084_max_nits);
+		color = HDR10_ApplyColorspaceTransform(color, HDR10_CSTransform_Rec2020_To_Rec709);
+		color = saturate(color);
+		return HDR10_LinearTosRGB(color);
+	}
+
 	color = HDR10_TransformColorspace_ToTarget(color);
 
 	if (HDR10_USE_TONEMAP_MODE_LUMINANCE) {

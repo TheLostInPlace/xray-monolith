@@ -1367,6 +1367,9 @@ static class cl_binder_lpm_ctl : public R_constant_setup
 {
 	virtual void setup(R_constant* C)
 	{
+		// only the lpm arm reads the block so the other tonemappers skip the upload
+		if (10 != ps_r4_hdr10_tonemapper) return;
+
 		const u32* ctl = hdr10_lpm_control();
 		for (u32 e = 0; e < 24; e++)
 		{
