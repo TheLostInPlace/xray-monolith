@@ -334,6 +334,21 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_auto_exposure_desc">
 		<text>On: the eye adapts to scene brightness the same way it does in SDR, and Exposure is a bias on top. Off: adaptation is pinned and Exposure sets the level by itself.</text>
 	</string>
+	<string id="ui_mm_lst_hdr10_tonemapper_lpm">
+		<text>AMD FidelityFX LPM</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_contrast">
+		<text>LPM Contrast (r4_hdr10_lpm_contrast)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_contrast_desc">
+		<text>Contrast of the FidelityFX LPM tone curve. Only used when the tonemapper is set to AMD FidelityFX LPM.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_saturation">
+		<text>LPM Saturation (r4_hdr10_lpm_saturation)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_saturation_desc">
+		<text>Saturation adjustment inside the FidelityFX LPM mapper. Only used when the tonemapper is set to AMD FidelityFX LPM.</text>
+	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_status_off">
 		<text>HDR10 is off</text>
 	</string>

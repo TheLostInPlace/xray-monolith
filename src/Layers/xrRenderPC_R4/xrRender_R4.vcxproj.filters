@@ -1440,6 +1440,9 @@
     <ClCompile Include="blender_hdr10_ui_composite.cpp">
       <Filter>Shading templates</Filter>
     </ClCompile>
+    <ClCompile Include="r4_hdr10_lpm.cpp">
+      <Filter>Core_Target</Filter>
+    </ClCompile>
     <ClCompile Include="r4_rendertarget_phase_hdr10_bloom.cpp">
       <Filter>Core_Target</Filter>
     </ClCompile>

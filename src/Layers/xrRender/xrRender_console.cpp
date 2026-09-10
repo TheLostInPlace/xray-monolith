@@ -332,6 +332,15 @@ float ps_r4_hdr10_saturation   		   = 0.1f; // r4-only, default = +0%
 float ps_r4_hdr10_brightness		   = 0.0f; // r4-only, default = +0
 float ps_r4_hdr10_gamma 			   = 1.0f; // r4-only, default = 1.0
 
+// FidelityFX LPM tuning, the header's example values
+float ps_r4_hdr10_lpm_contrast          = 0.25f;    // r4-only
+float ps_r4_hdr10_lpm_shoulder_contrast = 1.0f;     // r4-only
+float ps_r4_hdr10_lpm_saturation        = 0.0f;     // r4-only
+float ps_r4_hdr10_lpm_crosstalk_r       = 1.0f;     // r4-only
+float ps_r4_hdr10_lpm_crosstalk_g       = 0.5f;     // r4-only
+float ps_r4_hdr10_lpm_crosstalk_b       = 0.03125f; // r4-only
+float ps_r4_hdr10_lpm_soft_gap          = 0.0f;     // r4-only
+
 int   ps_r4_hdr10_bloom_on          = 0; 	  // r4-only, default = off
 int   ps_r4_hdr10_bloom_blur_passes = 20;      // r4-only, default = 8
 float ps_r4_hdr10_bloom_blur_scale 	= 1.0f;   // r4-only, default = 1.0
@@ -1337,7 +1346,7 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r4_hdr10_skip_taa",        &ps_r4_hdr10_skip_taa,                 0, 1);
     CMD4(CCC_Integer, "r4_hdr10_auto_exposure",   &ps_r4_hdr10_auto_exposure,            0, 1);
 
-    CMD4(CCC_Integer, "r4_hdr10_tonemapper", 	  		&ps_r4_hdr10_tonemapper,      	      0, 9);
+    CMD4(CCC_Integer, "r4_hdr10_tonemapper", 	  		&ps_r4_hdr10_tonemapper,      	      0, 10);
 	CMD4(CCC_Integer, "r4_hdr10_tonemap_mode",    		&ps_r4_hdr10_tonemap_mode,    	      0, 1);
 	CMD4(CCC_Float,   "r4_hdr10_exposure",        		&ps_r4_hdr10_exposure, 		  	    0.1, 30);
 	CMD4(CCC_Float,   "r4_hdr10_contrast",        		&ps_r4_hdr10_contrast, 		  	     -1, 1);
@@ -1345,6 +1354,14 @@ void xrRender_initconsole()
 	CMD4(CCC_Float,   "r4_hdr10_saturation", 	  		&ps_r4_hdr10_saturation,      	     -1, 1);
 	CMD4(CCC_Float,   "r4_hdr10_brightness", 			&ps_r4_hdr10_brightness,			 -1, 1);
 	CMD4(CCC_Float,   "r4_hdr10_gamma",   			    &ps_r4_hdr10_gamma,					0.1, 5);
+
+	CMD4(CCC_Float,   "r4_hdr10_lpm_contrast",          &ps_r4_hdr10_lpm_contrast,            0, 1);
+	CMD4(CCC_Float,   "r4_hdr10_lpm_shoulder_contrast", &ps_r4_hdr10_lpm_shoulder_contrast, 0.5, 2);
+	CMD4(CCC_Float,   "r4_hdr10_lpm_saturation",        &ps_r4_hdr10_lpm_saturation,         -1, 1);
+	CMD4(CCC_Float,   "r4_hdr10_lpm_crosstalk_r",       &ps_r4_hdr10_lpm_crosstalk_r,     0.001, 1);
+	CMD4(CCC_Float,   "r4_hdr10_lpm_crosstalk_g",       &ps_r4_hdr10_lpm_crosstalk_g,     0.001, 1);
+	CMD4(CCC_Float,   "r4_hdr10_lpm_crosstalk_b",       &ps_r4_hdr10_lpm_crosstalk_b,     0.001, 1);
+	CMD4(CCC_Float,   "r4_hdr10_lpm_soft_gap",          &ps_r4_hdr10_lpm_soft_gap,            0, 0.1);
 
 	CMD4(CCC_Integer, "r4_hdr10_bloom_on",          &ps_r4_hdr10_bloom_on,          0, 1);
 	CMD4(CCC_Integer, "r4_hdr10_bloom_blur_passes", &ps_r4_hdr10_bloom_blur_passes, 1, 32);

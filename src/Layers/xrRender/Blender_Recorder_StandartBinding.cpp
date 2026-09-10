@@ -1358,6 +1358,26 @@ DECL_BINDER4F( binder_hdr10_parameters11,
 	ps_r4_hdr10_paper_white_nits,
 	0.0f
 );
+
+#if RENDER == R_R4
+extern const u32* hdr10_lpm_control();
+
+// uploads the lpm control block as raw bit patterns, one uint4 per array element
+static class cl_binder_lpm_ctl : public R_constant_setup
+{
+	virtual void setup(R_constant* C)
+	{
+		const u32* ctl = hdr10_lpm_control();
+		for (u32 e = 0; e < 24; e++)
+		{
+			Fvector4 v;
+			v.set(*(const float*)&ctl[e * 4 + 0], *(const float*)&ctl[e * 4 + 1],
+			      *(const float*)&ctl[e * 4 + 2], *(const float*)&ctl[e * 4 + 3]);
+			RCache.set_ca(C, e, v);
+		}
+	}
+} binder_lpm_ctl;
+#endif
 /* --- HDR10 Parameters --- */
 
 extern Fvector4 ps_vignette_control;
@@ -1563,6 +1583,9 @@ void CBlender_Compile::SetMapping()
 	r_Constant("hdr10_parameters9",  &binder_hdr10_parameters9);
 	r_Constant("hdr10_parameters10", &binder_hdr10_parameters10);
 	r_Constant("hdr10_parameters11", &binder_hdr10_parameters11);
+#if RENDER == R_R4
+	r_Constant("lpm_ctl", &binder_lpm_ctl);
+#endif
 
 	r_Constant("vignette_control", &vignette_control);
 }

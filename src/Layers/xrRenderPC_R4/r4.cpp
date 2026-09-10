@@ -21,6 +21,10 @@
 
 CRender RImplementation;
 
+// tonemapper index of the lpm curve, matches the options list order
+static const int hdr10_tonemapper_lpm = 10;
+extern void hdr10_lpm_report(float& hdr_max, float& exposure, float& hdr10_s, float& contrast, float& shoulder_contrast);
+
 //////////////////////////////////////////////////////////////////////////
 class CGlow : public IRender_Glow
 {
@@ -656,6 +660,15 @@ void CRender::create()
 		Msg("* HDR10 anchors: paper white %.0f nits, peak %.0f nits, headroom %.3f, world scale %.0f nits, tonemapper %d",
 		    ps_r4_hdr10_paper_white_nits, ps_r4_hdr10_whitepoint_nits, hdr10_headroom(),
 		    hdr10_world_scale_nits(), ps_r4_hdr10_tonemapper);
+
+		// the numbers the lpm control block is built from
+		if (hdr10_tonemapper_lpm == ps_r4_hdr10_tonemapper)
+		{
+			float hdr_max, exposure, hdr10_s, contrast, shoulder_contrast;
+			hdr10_lpm_report(hdr_max, exposure, hdr10_s, contrast, shoulder_contrast);
+			Msg("* HDR10 lpm setup: hdrMax %.3f, exposure %.3f stops, hdr10S %.4f, contrast %.3f, shoulder contrast %.3f",
+			    hdr_max, exposure, hdr10_s, contrast, shoulder_contrast);
+		}
 
 		// which effects_bullet_tracer.s the file system serves decides whether the tracer is hdr aware
 		{

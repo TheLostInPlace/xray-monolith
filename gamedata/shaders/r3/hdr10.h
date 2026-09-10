@@ -57,6 +57,9 @@ uniform float4 hdr10_parameters9;
 uniform float4 hdr10_parameters10;
 uniform float4 hdr10_parameters11;
 
+// FidelityFX LPM control block, 24 uint4 values carried as raw bit patterns in float4 lanes
+uniform float4 lpm_ctl[24];
+
 // nits that a tonemapper output of 1.0 maps to, the peak for the legacy curves and paper white for the headroom curve
 #define HDR10_WORLD_SCALE_NITS (hdr10_parameters1.x)
 #define HDR10_UI_NITS_SCALAR   (hdr10_parameters1.y)
@@ -132,6 +135,19 @@ uniform float4 hdr10_parameters11;
 #define HDR10_USE_TONEMAPPER_REINHARD_W2_0	(HDR10_TONEMAPPER == 128.0)
 #define HDR10_USE_TONEMAPPER_REINHARD_W3_0  (HDR10_TONEMAPPER == 256.0)
 #define HDR10_USE_TONEMAPPER_HEADROOM		(HDR10_TONEMAPPER == 512.0)
+#define HDR10_USE_TONEMAPPER_LPM			(HDR10_TONEMAPPER == 1024.0)
+
+/* --- AMD FidelityFX LPM --- */
+
+#define A_GPU 1
+#define A_HLSL 1
+#include "ffx_a.h"
+
+// the engine writes the control block as float4 lanes so the array reflects as a float constant
+AU4 LpmFilterCtl(AU1 i) { return asuint(lpm_ctl[i]); }
+
+#define LPM_NO_SETUP 1
+#include "ffx_lpm.h"
 
 /* --- Tonemapping Mode Options --- */
 
@@ -638,6 +654,13 @@ float3 HDR10_Tonemap_Headroom(float3 color, float headroom)
 	return lerp(color, min(shoulder, headroom), step(1.0, color));
 }
 
+// maps linear Rec.709 to Rec.2020 primaries already normalised against the ST2084 range
+float3 HDR10_Tonemap_LPM(float3 color)
+{
+	LpmFilter(color.r, color.g, color.b, true, LPM_CONFIG_HDR10RAW_709);
+	return color;
+}
+
 /* --- Dispatch Functions --- */
 
 float3 HDR10_Tonemap_Color(float3 color)
@@ -763,6 +786,18 @@ float3 HDR10_ToDisplay_World(float3 color, float2 pixel_pos, bool dither)
 
 	// apply color grading in linear HDR sRGB
 	color = HDR10_ApplyColorGrading_Rec709(color);
+
+	// lpm owns the gamut rotation and the range scale so only the pq encode follows it
+	if (HDR10_USE_TONEMAPPER_LPM) {
+		color = HDR10_Tonemap_LPM(color);
+		color = HDR10_ApplyST2084_PQ(color);
+
+		if (dither) {
+			color = HDR10_DitherPQ(color, pixel_pos);
+		}
+
+		return color;
+	}
 
 	// apply colorspace transform user selected
 	// color is now in target colorspace
