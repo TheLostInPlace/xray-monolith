@@ -682,7 +682,7 @@ void CRender::create()
 			}
 		}
 
-		// a stale loose hdr10.h would PQ encode into the linear UI layer so stand HDR down
+		// a stale loose hdr10.h would PQ encode into the UI layer so stand HDR down
 		{
 			IReader* R = FS.r_open("$game_shaders$", "r3\\hdr10.h");
 			bool ok = false;
@@ -692,13 +692,13 @@ void CRender::create()
 				u8* buf = xr_alloc<u8>(n + 1);
 				CopyMemory(buf, R->pointer(), n);
 				buf[n] = 0;
-				ok = (0 != strstr((LPCSTR)buf, "HDR10_UI_LINEAR"));
+				ok = (0 != strstr((LPCSTR)buf, "HDR10_UI_LAYER"));
 				xr_free(buf);
 				FS.r_close(R);
 			}
 			if (!ok)
 			{
-				Msg("! [HDR10-UI] hdr10.h has no HDR10_UI_LINEAR, a stale copy wins the VFS, HDR disabled");
+				Msg("! [HDR10-UI] hdr10.h has no HDR10_UI_LAYER, a stale copy wins the VFS, HDR disabled");
 				HW.m_HDR10ForceSDR = true;
 				HW.ApplyColorSpace("stale shader stand down");
 				o.dx11_hdr10 = HW.m_HDR10Achieved ? 1 : 0;

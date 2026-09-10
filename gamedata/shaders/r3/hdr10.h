@@ -65,7 +65,7 @@ uniform float4 lpm_ctl[24];
 #define HDR10_UI_NITS_SCALAR   (hdr10_parameters1.y)
 #define HDR10_IS_ENABLED       (hdr10_parameters1.z != 0.0)
 #define HDR10_IS_RENDERING_PDA (hdr10_parameters1.w != 0.0)
-#define HDR10_UI_LINEAR        (hdr10_parameters1.z > 1.5)
+#define HDR10_UI_LAYER         (hdr10_parameters1.z > 1.5)
 
 #define HDR10_COLORSPACE    (hdr10_parameters2.x)
 #define HDR10_PDA_INTENSITY (hdr10_parameters2.y)
@@ -116,6 +116,9 @@ uniform float4 lpm_ctl[24];
 // set when the frame arriving at the encode is already a finished SDR image
 #define HDR10_IS_DISPLAY_REFERRED (hdr10_parameters11.y != 0.0)
 #define HDR10_PAPER_WHITE_NITS    (hdr10_parameters11.z)
+
+// blends the ui over the world in the sdr gamma curve instead of linear light
+#define HDR10_UI_SDR_BLEND     (hdr10_parameters11.w > 0.5)
 
 /* --- Colorspace Options --- */
 
@@ -848,15 +851,15 @@ float3 HDR10_ToDisplay_UI(float3 color, float nits_scalar, float alpha)
     // avoid NaNs
     color = max(0, color);
 
+	// the layer keeps the srgb encoded value the sdr back buffer would hold and the composite decodes once
+	if (HDR10_UI_LAYER) {
+		return color;
+	}
+
 	// color is [0, inf) in 2.2 gamma sRGB (because we disabled all tonemapping in the code and the game seems to render in 2.2 gamma sRGB)
 	// we want linear (sRGB/Rec.709 colorspace, but without non-linear OETF applied)
 	// NOTE: sRGB/Rec.709 are equivalent color spaces, their OETFs (gamma curves basically) aren't, but when linearized they are equivalent
 	color = HDR10_sRGBToLinear(color);
-
-	// the UI layer carries linear light so the composite pass owns the gamut, the nits and the PQ
-	if (HDR10_UI_LINEAR) {
-		return color;
-	}
 
 	// apply colorspace transform user selected
 	color = HDR10_TransformColorspace_ToTarget(color);

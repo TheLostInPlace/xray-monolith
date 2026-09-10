@@ -79,6 +79,13 @@ PAGE = page {
 		cmd = "r4_hdr10_auto_exposure",
 	},
 	list_bool {
+		id = "ui_sdr_blend",
+		curr = function()
+			return get_console_cmd(0, "r4_hdr10_ui_sdr_blend")
+		end,
+		cmd = "r4_hdr10_ui_sdr_blend",
+	},
+	list_bool {
 		id = "own_final_pass",
 		curr = function()
 			return get_console_cmd(0, "r4_hdr10_own_final_pass")
