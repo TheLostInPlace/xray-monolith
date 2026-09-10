@@ -652,7 +652,7 @@ void CRender::create()
 			                        || 0 == xr_strcmp(hdr10_probe[i], "r3\\ffx_lpm.h"));
 
 			if (!pf && ffx_required)
-				Msg("! [HDR10] %s cannot be opened, every shader compile fails until the deploy carries it", hdr10_probe[i]);
+				Msg("! [HDR10] %s not found, every shader compile fails until the deploy carries it", hdr10_probe[i]);
 			else if (!pf)
 				Msg("* [HDR10] %s missing", hdr10_probe[i]);
 			else if (0xffffffff == pf->vfs)
