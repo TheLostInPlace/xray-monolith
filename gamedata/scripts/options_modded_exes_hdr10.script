@@ -72,6 +72,13 @@ PAGE = page {
 		cmd = "r4_hdr10_display_referred",
 	},
 	list_bool {
+		id = "auto_exposure",
+		curr = function()
+			return get_console_cmd(0, "r4_hdr10_auto_exposure")
+		end,
+		cmd = "r4_hdr10_auto_exposure",
+	},
+	list_bool {
 		id = "own_final_pass",
 		curr = function()
 			return get_console_cmd(0, "r4_hdr10_own_final_pass")
