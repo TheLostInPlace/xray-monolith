@@ -442,6 +442,9 @@
 	<string id="ui_mm_lst_hdr10_tonemapper_headroom">
 		<text>Headroom (BT.2408 anchored)</text>
 	</string>
+	<string id="ui_mm_lst_hdr10_tonemapper_lpm">
+		<text>AMD FidelityFX LPM</text>
+	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_tonemap_mode">
 		<text>Tonemapping Mode (r4_hdr10_tonemap_mode)</text>
 	</string>
@@ -489,6 +492,18 @@
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_saturation_desc">
 		<text>Adjusts image saturation.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_contrast">
+		<text>LPM Contrast (r4_hdr10_lpm_contrast)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_contrast_desc">
+		<text>Contrast of the FidelityFX LPM tone curve. Only used when the tonemapper is set to AMD FidelityFX LPM.</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_saturation">
+		<text>LPM Saturation (r4_hdr10_lpm_saturation)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_lpm_saturation_desc">
+		<text>Saturation adjustment inside the FidelityFX LPM mapper. Only used when the tonemapper is set to AMD FidelityFX LPM.</text>
 	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_bloom_on">
 		<text>Bloom (r4_hdr10_bloom_on)</text>

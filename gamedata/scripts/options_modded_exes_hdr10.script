@@ -131,6 +131,7 @@ PAGE = page {
 			"hdr10_tonemapper_reinhard1",
 			"hdr10_tonemapper_reinhard2",
 			"hdr10_tonemapper_headroom",
+			"hdr10_tonemapper_lpm",
 		},
 		cmd = "r4_hdr10_tonemapper",
 	},
@@ -187,6 +188,20 @@ PAGE = page {
 		def = 0.1,
 		step = 0.01,
 		cmd = "r4_hdr10_saturation",
+	},
+	track {
+		id = "lpm_contrast",
+		tag = "hdr10",
+		def = 0.25,
+		step = 0.01,
+		cmd = "r4_hdr10_lpm_contrast",
+	},
+	track {
+		id = "lpm_saturation",
+		tag = "hdr10",
+		def = 0.0,
+		step = 0.01,
+		cmd = "r4_hdr10_lpm_saturation",
 	},
 					
 	line {},

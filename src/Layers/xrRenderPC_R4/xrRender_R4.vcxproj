@@ -723,6 +723,7 @@
     <ClCompile Include="r4_rendertarget_phase_bloom.cpp" />
     <ClCompile Include="r4_rendertarget_phase_combine.cpp" />
     <ClCompile Include="r4_rendertarget_phase_hdao.cpp" />
+    <ClCompile Include="r4_hdr10_lpm.cpp" />
     <ClCompile Include="r4_rendertarget_phase_hdr10_bloom.cpp" />
     <ClCompile Include="r4_rendertarget_phase_hdr10_lens_flare.cpp" />
     <ClCompile Include="r4_rendertarget_phase_hdr10_sdr_resolve.cpp" />
