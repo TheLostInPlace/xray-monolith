@@ -660,6 +660,8 @@ float3 HDR10_Tonemap_Headroom(float3 color, float headroom)
 // maps linear Rec.709 to Rec.2020 primaries already normalised against the ST2084 range
 float3 HDR10_Tonemap_LPM(float3 color)
 {
+	// the mapper divides by the largest channel and takes logs of the ratios so no channel may sit at or below zero
+	color = max(color, 1e-6);
 	LpmFilter(color.r, color.g, color.b, true, LPM_CONFIG_HDR10RAW_709);
 	return color;
 }
