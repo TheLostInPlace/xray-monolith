@@ -144,14 +144,19 @@ void CRenderTarget::phase_bloom()
 	}
 
 	// Capture luminance values
-	// a display referred frame still adapts through the mods own tonemap so only the scene referred path skips it
-	if (RImplementation.o.dx11_hdr10 && !RImplementation.o.hdr10_display_referred)
+	// display referred frames adapt through the mods own tonemap and scene referred auto exposure adapts the same way
+	if (RImplementation.o.dx11_hdr10 && !RImplementation.o.hdr10_display_referred && !ps_r4_hdr10_auto_exposure)
 	{
+		// manual exposure pins the pool at unit scale every frame so the switch is live
+		FLOAT unit[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		HW.pContext->ClearRenderTargetView(rt_LUM_pool[0]->pRT, unit);
+		HW.pContext->ClearRenderTargetView(rt_LUM_pool[1]->pRT, unit);
+
 		static bool reported = false;
 		if (!reported)
 		{
 			reported = true;
-			Msg("* [HDR10] auto exposure phase skipped");
+			Msg("* [HDR10] auto exposure phase skipped, exposure pinned at unit scale");
 		}
 	}
 	else

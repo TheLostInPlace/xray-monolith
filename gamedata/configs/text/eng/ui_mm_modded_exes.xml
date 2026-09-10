@@ -373,6 +373,12 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_own_final_pass_desc">
 		<text>The engine selects the final HDR encode itself so a shader mod's postprocess.s cannot remove it. Turn off only if a shader mod supplies its own HDR aware final pass.</text>
 	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_auto_exposure">
+		<text>Auto Exposure in HDR (r4_hdr10_auto_exposure)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_auto_exposure_desc">
+		<text>On: the eye adapts to scene brightness the same way it does in SDR, and Exposure is a bias on top. Off: adaptation is pinned and Exposure sets the level by itself.</text>
+	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_skip_taa">
 		<text>Skip TAA in HDR (r4_hdr10_skip_taa)</text>
 	</string>

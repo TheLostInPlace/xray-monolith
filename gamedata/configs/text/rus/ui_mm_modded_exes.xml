@@ -328,6 +328,12 @@
 	<string id="ui_mm_modded_exes_visual_hdr10_status_failed">
 		<text>HDR10 was requested but the display refused it, the game is running in SDR. Turn HDR on in Windows display settings and restart.</text>
 	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_auto_exposure">
+		<text>Auto Exposure in HDR (r4_hdr10_auto_exposure)</text>
+	</string>
+	<string id="ui_mm_modded_exes_visual_hdr10_auto_exposure_desc">
+		<text>On: the eye adapts to scene brightness the same way it does in SDR, and Exposure is a bias on top. Off: adaptation is pinned and Exposure sets the level by itself.</text>
+	</string>
 	<string id="ui_mm_modded_exes_visual_hdr10_status_off">
 		<text>HDR10 is off</text>
 	</string>
