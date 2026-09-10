@@ -9,7 +9,7 @@
 
 void fix_texture_name(LPSTR fn);
 
-// true for the pixel shaders that emit linear light into the hdr ui layer
+// true for the ui pixel shaders whose alpha blend the hdr ui layer fixes
 bool hdr10_is_ui_pixel_shader(LPCSTR ps)
 {
 	if (!ps) return false;
