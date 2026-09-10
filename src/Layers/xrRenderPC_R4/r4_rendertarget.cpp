@@ -947,12 +947,14 @@ CRenderTarget::CRenderTarget()
 			rt_LUM_pool[it].create(name, 1, 1, D3DFMT_R32F);
 			//u_setrt						(rt_LUM_pool[it],	0,	0,	0			);
 			//CHK_DX						(HW.pDevice->Clear( 0L, NULL, D3DCLEAR_TARGET,	0x7f7f7f7f,	1.0f, 0L));
-			// under HDR nothing rewrites this pool so a unit clear pins the exposure scale
-			const float lum_seed = RImplementation.o.dx11_hdr10 ? 1.0f : (127.0f / 255.0f);
+
+			// under scene referred HDR nothing rewrites this pool so a unit clear pins the exposure scale
+			const bool pin_exposure = RImplementation.o.dx11_hdr10 && !RImplementation.o.hdr10_display_referred;
+			const float lum_seed = pin_exposure ? 1.0f : (127.0f / 255.0f);
 			FLOAT ColorRGBA[4] = {lum_seed, lum_seed, lum_seed, lum_seed};
 			HW.pContext->ClearRenderTargetView(rt_LUM_pool[it]->pRT, ColorRGBA);
 		}
-		if (RImplementation.o.dx11_hdr10)
+		if (RImplementation.o.dx11_hdr10 && !RImplementation.o.hdr10_display_referred)
 			Msg("* [HDR10] exposure pool seeded 1.0");
 		u_setrt(Device.dwWidth, Device.dwHeight, HW.pBaseRT,NULL,NULL, HW.pBaseZB);
 	}

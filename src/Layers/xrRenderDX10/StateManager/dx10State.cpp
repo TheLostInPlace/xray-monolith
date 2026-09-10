@@ -4,6 +4,10 @@
 //#include "dx10RSManager.h"
 #include "dx10StateCache.h"
 
+#if RENDER == R_R4
+ID3DBlendState* hdr10_ui_layer_blend(ID3DBlendState* base);
+#endif
+
 dx10State::dx10State() :
 	m_pRasterizerState(0),
 	m_pDepthStencilState(0),
@@ -56,7 +60,11 @@ HRESULT dx10State::Apply()
 	if (m_uiStencilRef != -1)
 		StateManager.SetStencilRef(m_uiStencilRef);
 	VERIFY(m_pBlendState);
+#if RENDER == R_R4
+	StateManager.SetBlendState(hdr10_ui_layer_blend(m_pBlendState));
+#else
 	StateManager.SetBlendState(m_pBlendState);
+#endif
 	StateManager.SetAlphaRef(m_uiAlphaRef);
 
 	SSManager.GSApplySamplers(m_GSSamplers);
