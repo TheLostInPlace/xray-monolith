@@ -101,6 +101,7 @@ namespace GameObject
 #endif
 
 		eActorHudScriptAnimEnd,
+		eActorHudHandsChanged,
 
 		eDummy = u32(-1),
 	};

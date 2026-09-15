@@ -139,6 +139,9 @@ void CScriptGameObject::script_register(lua_State* L)
 
 			value("map_location_added", int(GameObject::eMapLocationAdded)),
 
+			value("hud_script_anim_end", int(GameObject::eActorHudScriptAnimEnd)),
+
+			value("hud_hands_changed", int(GameObject::eActorHudHandsChanged))
 		],
 
 		def("buy_condition", (void (*)(CScriptIniFile*, LPCSTR))(&::buy_condition)),

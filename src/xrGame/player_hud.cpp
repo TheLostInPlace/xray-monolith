@@ -15,6 +15,11 @@
 extern int g_nearwall;
 
 player_hud* g_player_hud = NULL;
+int g_hud_bare_debug = 0;
+
+static bool s_bare_drew_right = false;
+static bool s_bare_drew_left = false;
+static u32 s_bare_trace_next = 0;
 Fvector _ancor_pos;
 Fvector _wpn_root_pos;
 
@@ -735,8 +740,14 @@ player_hud::player_hud()
 	script_anim_keep_freelook[0] = false;
 	script_anim_keep_freelook[1] = false;
 	script_anim_offset_factor = 0.f;
+	script_anim_offset[0].set(0.f, 0.f, 0.f);
+	script_anim_offset[1].set(0.f, 0.f, 0.f);
 	m_item_pos.identity();
 	script_override_arms = false;
+	m_bare_hands_motions = nullptr;
+	m_bare_hands_idle = u8(-1);
+	m_bare_hands_live = false;
+	m_bare_hands_replay = false;
 
 	//Bone Callback Params
 	m_bone_callback_params.insert(mk_pair(r_finger0, xr_new<BoneCallbackParams>()));
@@ -788,6 +799,8 @@ player_hud::~player_hud()
 	delete_data(m_script_layers);
 	delete_data(m_movement_layers);
 	delete_data(m_bone_callback_params);
+
+	g_blend_move_anims_override = -1;
 }
 
 void player_hud::FingerCallback(CBoneInstance* B)
@@ -828,9 +841,14 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 {
 	if (!force && player_hud_sect == m_sect_name) return;
 
+	shared_str prev_sect = m_sect_name;
 	m_sect_name = player_hud_sect;
 
-	if (script_override_arms) return;
+	if (script_override_arms)
+	{
+		notify_hands_changed(prev_sect);
+		return;
+	}
 
 	if (m_model)
 	{
@@ -850,6 +868,12 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 	bool b_reload = (m_attached_items[0] != nullptr || m_attached_items[1] != nullptr);
 
 	::Render->hud_loading = false;
+	setup_hands(player_hud_sect, b_reload);
+	notify_hands_changed(prev_sect);
+}
+
+void player_hud::setup_hands(const shared_str& player_hud_sect, bool b_reload)
+{
 	u16 l_arm = m_model->dcast_PKinematics()->LL_BoneID("l_clavicle");
 	u16 r_arm = m_model_2->dcast_PKinematics()->LL_BoneID("r_clavicle");
 
@@ -861,9 +885,13 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 	//u16 bone_r_triggerfinger01 = m_model->dcast_PKinematics()->LL_BoneID("bip01_r_finger11");
 	//u16 bone_r_triggerfinger02 = m_model->dcast_PKinematics()->LL_BoneID("bip01_r_finger12");
 
-	m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_finger0).set_callback(bctCustom, FingerCallback, m_bone_callback_params[r_finger0]);
-	m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_finger01).set_callback(bctCustom, FingerCallback, m_bone_callback_params[r_finger01]);
-	m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_finger02).set_callback(bctCustom, FingerCallback, m_bone_callback_params[r_finger02]);
+	// LL_GetBoneInstance has no range check so a missing finger bone skips its callback
+	if (bone_r_finger0 != BI_NONE)
+		m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_finger0).set_callback(bctCustom, FingerCallback, m_bone_callback_params[r_finger0]);
+	if (bone_r_finger01 != BI_NONE)
+		m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_finger01).set_callback(bctCustom, FingerCallback, m_bone_callback_params[r_finger01]);
+	if (bone_r_finger02 != BI_NONE)
+		m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_finger02).set_callback(bctCustom, FingerCallback, m_bone_callback_params[r_finger02]);
 
 	//m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_triggerfinger0).set_callback(bctCustom, FingerCallback, m_bone_callback_params[bip01_r_finger1]);
 	//m_model->dcast_PKinematics()->LL_GetBoneInstance(bone_r_triggerfinger01).set_callback(bctCustom, FingerCallback, m_bone_callback_params[bip01_r_finger11]);
@@ -873,17 +901,25 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 	m_model->dcast_PKinematics()->LL_SetBoneVisible(l_arm, FALSE, TRUE);
 	m_model_2->dcast_PKinematics()->LL_SetBoneVisible(r_arm, FALSE, TRUE);
 
-	CInifile::Sect& _sect = pSettings->r_section(player_hud_sect);
-	CInifile::SectCIt _b = _sect.Data.begin();
-	CInifile::SectCIt _e = _sect.Data.end();
-	for (; _b != _e; ++_b)
+	// ancor ids belong to the model just bound, keep the old list if the new one is empty
+	xr_vector<u16> fresh_ancors;
+	if (pSettings->section_exist(player_hud_sect))
 	{
-		if (strstr(_b->first.c_str(), "ancor_") == _b->first.c_str())
+		CInifile::Sect& _sect = pSettings->r_section(player_hud_sect);
+		CInifile::SectCIt _b = _sect.Data.begin();
+		CInifile::SectCIt _e = _sect.Data.end();
+		for (; _b != _e; ++_b)
 		{
-			const shared_str& _bone = _b->second;
-			m_ancors.push_back(m_model->dcast_PKinematics()->LL_BoneID(_bone));
+			if (strstr(_b->first.c_str(), "ancor_") == _b->first.c_str())
+			{
+				const shared_str& _bone = _b->second;
+				fresh_ancors.push_back(m_model->dcast_PKinematics()->LL_BoneID(_bone));
+			}
 		}
 	}
+
+	if (!fresh_ancors.empty())
+		m_ancors.swap(fresh_ancors);
 
 	for (hand_motions* phm : m_hand_motions)
 	{
@@ -896,6 +932,7 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 	m_hud_offsets[1].clear();
 	script_anim_keep_freelook[0] = false;
 	script_anim_keep_freelook[1] = false;
+	m_bare_hands_idle = u8(-1);
 
 	if (!b_reload)
 	{
@@ -922,17 +959,129 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 	//--DSR-- HeatVision_end
 }
 
+void player_hud::notify_hands_changed(const shared_str& prev_sect)
+{
+	if (prev_sect == m_sect_name)
+		return;
+
 	CActor* actor = g_actor;
+	if (!actor)
+		return;
+
+	LPCSTR now = m_sect_name.size() ? m_sect_name.c_str() : "";
+	LPCSTR prev = prev_sect.size() ? prev_sect.c_str() : "";
+
+	actor->callback(GameObject::eActorHudHandsChanged)(now, prev);
+}
+
+static bool hud_visual_exists(LPCSTR visual)
+{
+	string_path fn, name;
+
+	if (0 == strext(visual))
+		strconcat(sizeof(name), name, visual, ".ogf");
+	else
+		xr_strcpy(name, sizeof(name), visual);
+
+	return !!FS.exist(visual) || !!FS.exist(fn, "$level$", name) || !!FS.exist(fn, "$game_meshes$", name);
+}
+
+static LPCSTR hands_visual_missing_part(IKinematicsAnimated* model, const LPCSTR* bones, u32 bone_count)
+{
+	IKinematics* kin = model->dcast_PKinematics();
+
+	for (u32 i = 0; i < bone_count; ++i)
+	{
+		if (kin->LL_BoneID(bones[i]) == BI_NONE)
+			return bones[i];
+	}
+
+	if (!model->ID_Cycle_Safe("hand_idle_doun").valid())
+		return "hand_idle_doun";
+
+	return nullptr;
+}
+
+bool player_hud::set_hands_visuals(LPCSTR right_visual, LPCSTR left_visual)
+{
+	if (!right_visual || !right_visual[0])
+	{
+		Msg("!player_hud::set_hands_visuals called without a right hand visual");
+		return false;
+	}
+
+	if (!left_visual || !left_visual[0])
+		left_visual = right_visual;
+
+	if (!hud_visual_exists(right_visual) || !hud_visual_exists(left_visual))
+	{
+		Msg("!player_hud::set_hands_visuals cannot find [%s] or [%s]", right_visual, left_visual);
+		return false;
+	}
+
+	::Render->hud_loading = true;
 	IRenderVisual* visual = ::Render->model_Create(right_visual);
 	IRenderVisual* visual_2 = ::Render->model_Create(left_visual);
+	::Render->hud_loading = false;
+
 	IKinematicsAnimated* model = smart_cast<IKinematicsAnimated*>(visual);
 	IKinematicsAnimated* model_2 = smart_cast<IKinematicsAnimated*>(visual_2);
+
+	if (!model || !model_2)
+	{
+		Msg("!player_hud::set_hands_visuals [%s] or [%s] is not an animated visual", right_visual, left_visual);
 
 		if (visual)
 			::Render->model_Delete(visual);
 
 		if (visual_2)
 			::Render->model_Delete(visual_2);
+
+		return false;
+	}
+
+	// setup_hands binds these bones and plays that idle so a visual without them never replaces the hands
+	static const LPCSTR right_parts[] = {"l_clavicle", "r_finger0", "r_finger01", "r_finger02"};
+	static const LPCSTR left_parts[] = {"r_clavicle"};
+
+	LPCSTR bad_visual = right_visual;
+	LPCSTR missing = hands_visual_missing_part(model, right_parts, 4);
+
+	if (!missing)
+	{
+		bad_visual = left_visual;
+		missing = hands_visual_missing_part(model_2, left_parts, 1);
+	}
+
+	if (missing)
+	{
+		Msg("!player_hud::set_hands_visuals [%s] has no [%s], hud section [%s] keeps its hands", bad_visual, missing, m_sect_name.size() ? m_sect_name.c_str() : "");
+
+		::Render->model_Delete(visual);
+		::Render->model_Delete(visual_2);
+
+		return false;
+	}
+
+	if (m_model)
+	{
+		IRenderVisual* v = m_model->dcast_RenderVisual();
+		::Render->model_Delete(v);
+	}
+	if (m_model_2)
+	{
+		IRenderVisual* v = m_model_2->dcast_RenderVisual();
+		::Render->model_Delete(v);
+	}
+
+	m_model = model;
+	m_model_2 = model_2;
+
+	setup_hands(m_sect_name, (m_attached_items[0] != nullptr || m_attached_items[1] != nullptr));
+
+	return true;
+}
+
 void player_hud::load_script(LPCSTR section)
 {
 	script_override_arms = false;
@@ -985,13 +1134,19 @@ void player_hud::render_hud()
 {
 	bool b_r0 = ((m_attached_items[0] && m_attached_items[0]->need_renderable()) || script_anim_part == 0 || script_anim_part == 2);
 	bool b_r1 = ((m_attached_items[1] && m_attached_items[1]->need_renderable()) || script_anim_part == 1 || script_anim_part == 2);
+	// bare hands are drawn with nothing attached, the cached flag is a tick behind a motion that just ended
+	if (m_bare_hands_live || bare_hands_active())
+		b_r0 = b_r1 = true;
+
 
 	if (!b_r0 && !b_r1) return;
 
 	::Render->set_Transform(&m_transform);
 	::Render->add_Visual(m_model->dcast_RenderVisual());
+	s_bare_drew_right = true;
 	::Render->set_Transform(&m_transform_2);
 	::Render->add_Visual(m_model_2->dcast_RenderVisual());
+	s_bare_drew_left = true;
 
 	if (m_attached_items[0])
 		m_attached_items[0]->render();
@@ -1111,6 +1266,8 @@ extern float psHUD_FOV;
 
 void player_hud::update(const Fmatrix& cam_trans)
 {
+	update_bare_hands();
+
 	Fmatrix trans = cam_trans;
 	Fmatrix trans_b = cam_trans;
 	CWeapon* wep = smart_cast<CWeapon*>(Actor()->inventory().ActiveItem());
@@ -1199,7 +1356,7 @@ void player_hud::update(const Fmatrix& cam_trans)
 		trans = trans_2;
 
 	// override hand offset for single hand animation
-	if (script_anim_part == 2 || (script_anim_part && !m_attached_items[0] && !m_attached_items[1]))
+	if (script_anim_part == 2 || (script_anim_part && script_anim_part != u8(-1) && !m_attached_items[0] && !m_attached_items[1]))
 	{
 		m1pos = script_anim_offset[0];
 		m2pos = script_anim_offset[0];
@@ -1447,7 +1604,7 @@ void player_hud::updateMovementLayerState()
 		anm->Stop(false);
 	}
 
-	bool need_blend = (script_anim_part != u8(-1) || (m_attached_items[0] && m_attached_items[0]->m_parent_hud_item->NeedBlendAnm()) || (m_attached_items[1] && m_attached_items[1]->m_parent_hud_item->NeedBlendAnm()));
+	bool need_blend = (script_anim_part != u8(-1) || bare_hands_active() || (m_attached_items[0] && m_attached_items[0]->m_parent_hud_item->NeedBlendAnm()) || (m_attached_items[1] && m_attached_items[1]->m_parent_hud_item->NeedBlendAnm()));
 
 	if (need_blend)
 	{
@@ -1682,7 +1839,214 @@ void play_blend(player_hud* hud, u8 pid, const MotionID& M, BOOL bMixIn, float s
 	}
 }
 
+bool player_hud::bare_hands_active() const
+{
+	return m_bare_hands_sect.size() && !m_attached_items[0] && !m_attached_items[1] && script_anim_part == u8(-1);
+}
+
+// 0 = idle, 1 = moving, 2 = sprint
+u8 player_hud::bare_hands_idle_kind()
+{
 	CActor* actor = g_actor;
+	if (!actor || !actor->AnyMove())
+		return 0;
+
+	// the movement layers carry the walk when they are on, the same gate a hud item takes
+	if (blend_move_anims_enabled())
+		return 0;
+
+	CEntity::SEntityState state;
+	actor->g_State(state);
+
+	if (state.bSprint)
+		return 2;
+
+	if (!state.bCrouch)
+		return 1;
+
+	return 0;
+}
+
+static LPCSTR bare_motion_name(IKinematicsAnimated* K, const MotionID& M)
+{
+	if (!K || !M.valid() || M.slot >= K->LL_MotionsSlotCount())
+		return "bad";
+
+	shared_motions& mots = const_cast<shared_motions&>(K->LL_MotionsSlot(M.slot));
+	accel_map* names = mots.motion_map();
+
+	for (accel_map::iterator it = names->begin(); it != names->end(); ++it)
+		if (it->second == M.idx)
+			return it->first.c_str();
+
+	return "unknown";
+}
+
+static void bare_part_blends(IKinematicsAnimated* K, u16 part, string512& out)
+{
+	if (!K)
+	{
+		xr_strcpy(out, "no model");
+		return;
+	}
+
+	xr_strcpy(out, "");
+	u32 cnt = K->LL_PartBlendsCount(part);
+
+	for (u32 i = 0; i < cnt; ++i)
+	{
+		CBlend* B = K->LL_PartBlend(part, i);
+		if (!B)
+			continue;
+
+		string128 one;
+		xr_sprintf(one, "%s%s w %.2f t %.2f p %d", out[0] ? " + " : "", bare_motion_name(K, B->motionID), B->blendAmount, B->timeCurrent, B->playing ? 1 : 0);
+		xr_strcat(out, one);
+	}
+
+	if (!out[0])
+		xr_strcpy(out, "none");
+}
+
+static LPCSTR bare_item_name(attachable_hud_item* item)
+{
+	if (!item)
+		return "null";
+
+	return item->m_sect_name.size() ? item->m_sect_name.c_str() : "unnamed";
+}
+
+void player_hud::bare_hands_debug(LPCSTR reason)
+{
+	string512 blends_right, blends_left;
+	bare_part_blends(m_model, 0, blends_right);
+	bare_part_blends(m_model_2, 0, blends_left);
+
+	const Fvector& cam = Device.vCameraPosition;
+	const Fvector& right = m_transform.c;
+	const Fvector& left = m_transform_2.c;
+
+	Msg("[hud bare] %s sect [%s] live %d script_part %d item0 [%s] item1 [%s] right_blends [%s] left_blends [%s] right_pos (%.3f %.3f %.3f) left_pos (%.3f %.3f %.3f) cam (%.3f %.3f %.3f) right_dist %.3f left_dist %.3f right_attach (%.3f %.3f %.3f) left_attach (%.3f %.3f %.3f) anim_factor %.3f hud_fov %.3f drew_right %d drew_left %d",
+		reason,
+		m_bare_hands_sect.size() ? m_bare_hands_sect.c_str() : "none",
+		m_bare_hands_live ? 1 : 0,
+		int(script_anim_part),
+		bare_item_name(m_attached_items[0]),
+		bare_item_name(m_attached_items[1]),
+		blends_right,
+		blends_left,
+		VPUSH(right),
+		VPUSH(left),
+		VPUSH(cam),
+		cam.distance_to(right),
+		cam.distance_to(left),
+		VPUSH(m_attach_offset.c),
+		VPUSH(m_attach_offset_2.c),
+		script_anim_offset_factor,
+		psHUD_FOV,
+		s_bare_drew_right ? 1 : 0,
+		s_bare_drew_left ? 1 : 0);
+
+	s_bare_drew_right = false;
+	s_bare_drew_left = false;
+}
+
+void player_hud::update_bare_hands()
+{
+	bool live = bare_hands_active();
+
+	// anything that took the hands owes the idle a replay once they are free again
+	if (!live)
+		m_bare_hands_replay = true;
+
+	if (live != m_bare_hands_live)
+	{
+		m_bare_hands_live = live;
+		updateMovementLayerState();
+
+		if (g_hud_bare_debug)
+		{
+			s_bare_trace_next = Device.dwTimeGlobal + 1000;
+			bare_hands_debug("live changed");
+		}
+	}
+	else if (live && m_bare_hands_replay)
+	{
+		// one update past the flip so a script's next clip goes first
+		m_bare_hands_replay = false;
+		m_bare_hands_idle = u8(-1);
+	}
+	else if (g_hud_bare_debug && live && Device.dwTimeGlobal >= s_bare_trace_next)
+	{
+		s_bare_trace_next = Device.dwTimeGlobal + 1000;
+		bare_hands_debug("tick");
+	}
+
+	if (!live || !m_bare_hands_motions)
+		return;
+
+	u8 kind = bare_hands_idle_kind();
+	if (kind == m_bare_hands_idle)
+		return;
+
+	m_bare_hands_idle = kind;
+
+	LPCSTR name = kind == 2 ? "anm_idle_sprint" : kind == 1 ? "anm_idle_moving" : "anm_idle";
+	player_hud_motion* pm = m_bare_hands_motions->find_motion(name);
+
+	if (!pm || pm->m_animations.empty())
+		pm = m_bare_hands_motions->find_motion("anm_idle");
+
+	if (!pm || pm->m_animations.empty())
+		return;
+
+	const motion_descr& M = pm->m_animations[Random.randI(pm->m_animations.size())];
+	play_blend(this, 0, M.mid, TRUE, 1.f);
+
+	if (g_hud_bare_debug)
+		Msg("[hud bare] played sect [%s] alias [%s] motion [%s]", m_bare_hands_sect.c_str(), pm->m_alias_name.c_str(), bare_motion_name(m_model, M.mid));
+}
+
+bool player_hud::SetBareHands(LPCSTR section)
+{
+	if (!section || !section[0])
+	{
+		m_bare_hands_sect = nullptr;
+		m_bare_hands_motions = nullptr;
+		update_bare_hands();
+
+		return true;
+	}
+
+	if (!m_model)
+	{
+		Msg("!player_hud::SetBareHands called with no hands model loaded");
+		return false;
+	}
+
+	if (!pSettings->section_exist(section))
+	{
+		Msg("!player_hud::SetBareHands section [%s] does not exist", section);
+		return false;
+	}
+
+	player_hud_motion_container* pm = get_hand_motions(section);
+	player_hud_motion* idle = pm ? pm->find_motion("anm_idle") : nullptr;
+
+	if (!idle || idle->m_animations.empty() || !m_model->ID_Cycle_Safe(idle->m_base_name).valid())
+	{
+		Msg("!player_hud::SetBareHands section [%s] has no anm_idle on the hands model", section);
+		return false;
+	}
+
+	m_bare_hands_sect = section;
+	m_bare_hands_motions = pm;
+	m_bare_hands_idle = u8(-1);
+	update_bare_hands();
+
+	return true;
+}
+
 extern BOOL print_bone_warnings;
 void player_hud::StopScriptAnim(bool forced)
 {
@@ -1710,6 +2074,8 @@ void player_hud::StopScriptAnim(bool forced)
     }
         
 	if (part < 2 && !m_attached_items[part])
+	// bare hands keep their last frame, the bare update hands the idle back itself
+	if (part < 2 && !bare_hands_active())
 		re_sync_anim(part + 1);
 	else
 		OnMovementChanged((ACTOR_DEFS::EMoveCommand)0);
@@ -2097,6 +2463,9 @@ bool player_hud::need_blend_anm(u8 part)
 {
 	if (part > 1)
 		return false;
+
+	if (bare_hands_active())
+		return true;
 
 	return ((script_anim_part == part || script_anim_part == 2) ||
 		(m_attached_items[part] && m_attached_items[part]->m_parent_hud_item->NeedBlendAnm()));

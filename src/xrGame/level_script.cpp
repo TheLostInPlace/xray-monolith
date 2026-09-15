@@ -1643,6 +1643,7 @@ u32 PlayHudMotion(u8 hand, LPCSTR itm_name, LPCSTR anm_name, bool bMixIn = true,
 	return g_player_hud->script_anim_play(hand, itm_name, anm_name, bMixIn, speed);
 }
 
+// hand 0 is the right, 1 the left, 2 both
 void SetHudMotionFreelook(u8 hand, bool keep)
 {
 	if (!g_player_hud)
@@ -1661,6 +1662,18 @@ u32 PlayHudMotionFreelook(u8 hand, LPCSTR itm_name, LPCSTR anm_name, bool bMixIn
 {
 	if (!g_player_hud)
 		return 0;
+
+	if (hand > 2)
+	{
+		Msg("!play_hud_motion called with part %d, must be 0, 1 or 2", hand);
+		return 0;
+	}
+
+	if (!itm_name || !xr_strlen(itm_name) || !pSettings->section_exist(itm_name))
+	{
+		Msg("!play_hud_motion section [%s] does not exist", itm_name ? itm_name : "");
+		return 0;
+	}
 
 	SetHudMotionFreelook(hand, keep_freelook);
 
@@ -1873,6 +1886,37 @@ void SetHudCycleTime(u8 part, float time)
 	g_player_hud->set_part_cycle_time(part, time);
 }
 
+bool SetBareHands(const ::luabind::object& section)
+{
+	if (!g_player_hud)
+		return false;
+
+	if (!section || section.type() != LUA_TSTRING)
+		return g_player_hud->SetBareHands(nullptr);
+
+	return g_player_hud->SetBareHands(::luabind::object_cast<LPCSTR>(section));
+}
+
+::luabind::object GetBareHands()
+{
+	lua_State* L = ai().script_engine().lua();
+
+	if (g_player_hud && g_player_hud->bare_hands_section().size())
+		return ::luabind::object(L, g_player_hud->bare_hands_section().c_str());
+
+	::luabind::object none(L);
+	lua_pushnil(L);
+	none.set();
+
+	return none;
+}
+
+bool BareHandsLive()
+{
+	return g_player_hud && g_player_hud->bare_hands_active();
+}
+
+// part 0 is the right hand, 1 the left hand, 2 both, angles in degrees and position in metres
 void SetHudOffset(u8 part, float x, float y, float z, float pitch, float yaw, float roll, float blend_ms)
 {
 	if (!g_player_hud)
@@ -1956,6 +2000,7 @@ bool HudVisible()
 	return !!psHUD_Flags.is(HUD_WEAPON | HUD_WEAPON_RT | HUD_WEAPON_RT2 | HUD_DRAW_RT2);
 }
 
+// slot 0 is the right hand, 1 the left hand, 2 the scope
 CScriptGameObject* HudAttachedItem(u16 slot)
 {
 	if (!g_player_hud)
@@ -3147,6 +3192,9 @@ void CLevel::script_register(lua_State* L)
 		def("hud_anm_exists", BlendAnmExists),
 		def("set_hud_cycle_speed", SetHudCycleSpeed),
 		def("set_hud_cycle_time", SetHudCycleTime),
+		def("set_bare_hands", SetBareHands),
+		def("get_bare_hands", GetBareHands),
+		def("bare_hands_live", BareHandsLive),
 		def("set_hud_offset", SetHudOffset),
 		def("clear_hud_offset", ClearHudOffset),
 		def("get_hud_fov", GetHudFov),
