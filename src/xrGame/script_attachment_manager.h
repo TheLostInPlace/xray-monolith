@@ -319,5 +319,8 @@ public:
 	::luabind::object FindChildrenByTexture(LPCSTR texture);
 	void SetShaderTextureByTexture(LPCSTR match, LPCSTR shader, LPCSTR texture);
 
+	void SetShaderParam(int id, float x, float y, float z, float w);
+	void ClearShaderParam(int id);
+
 	DECLARE_SCRIPT_REGISTER_FUNCTION
 };

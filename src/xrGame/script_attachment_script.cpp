@@ -159,6 +159,8 @@ void script_attachment::script_register(lua_State* L)
 		.def("reset_shader", &script_attachment::ResetShaderTexture)
 		.def("find_children_by_texture", &script_attachment::FindChildrenByTexture)
 		.def("set_shader_by_texture", &script_attachment::SetShaderTextureByTexture)
+		.def("set_shader_param", &script_attachment::SetShaderParam)
+		.def("clear_shader_param", &script_attachment::ClearShaderParam)
 
 		//Userdata
 		.property("userdata", &script_attachment::GetUserdata, &script_attachment::SetUserdata)
