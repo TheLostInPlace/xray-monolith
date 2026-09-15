@@ -13,6 +13,9 @@ class CUIXml;
 
 CUIXml* GetSpotXml();
 
+// reads the mini map spot and pointer node names of a spot type, false when there is no spot
+bool GetMiniMapSpotPaths(LPCSTR type, string512& spot, string512& pointer);
+
 class CMapLocation : public IPureDestroyableObject
 {
 public:
@@ -64,6 +67,10 @@ protected:
 	};
 
 	SCachedValues m_cached;
+	// exit vertex of this level on the graph path to a location on another level, cached for the two path ends
+	GameGraph::_GRAPH_ID m_exit_from = GameGraph::_GRAPH_ID(-1);
+	GameGraph::_GRAPH_ID m_exit_to = GameGraph::_GRAPH_ID(-1);
+	GameGraph::_GRAPH_ID m_exit_vertex = GameGraph::_GRAPH_ID(-1);
 private:
 	CMapLocation(const CMapLocation&)
 	{
@@ -71,7 +78,7 @@ private:
 	} //disable copy ctor
 
 protected :
-	void UpdateSpot(CUICustomMap* map, CMapSpot* sp);
+	void UpdateSpot(CUICustomMap* map, CMapSpot* sp, CMapSpotPointer* pt);
 	void UpdateSpotPointer(CUICustomMap* map, CMapSpotPointer* sp);
 	void CalcLevelName();
 	CMapSpotPointer* GetSpotPointer(CMapSpot* sp);
@@ -99,6 +106,8 @@ public:
 	void EnableSpot() { m_flags.set(eSpotEnabled,TRUE); };
 	void DisableSpot() { m_flags.set(eSpotEnabled,FALSE); };
 	virtual void UpdateMiniMap(CUICustomMap* map);
+	// draws this location on another map with the spot and pointer the caller passes in
+	virtual void UpdateMiniMap(CUICustomMap* map, CMapSpot* sp, CMapSpotPointer* pt);
 	virtual void UpdateLevelMap(CUICustomMap* map);
 
 	void CalcPosition();
@@ -144,6 +153,7 @@ public:
 	virtual bool Update();
 
 	virtual void UpdateMiniMap(CUICustomMap* map);
+	virtual void UpdateMiniMap(CUICustomMap* map, CMapSpot* sp, CMapSpotPointer* pt);
 	virtual void UpdateLevelMap(CUICustomMap* map);
 
 #ifdef DEBUG
