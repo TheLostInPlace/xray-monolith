@@ -104,6 +104,7 @@ public:
 	const Fvector2& GetPosition() { return m_cached.m_Position; }
 
 	u16 ObjectID() { return m_objectID; }
+	virtual LPCSTR CurrentSpotType() { return spot_type; }
 	virtual bool Update();
 	Fvector GetLastPosition() { return m_position_global; };
 	bool Serializable() const { return !!m_flags.test(eSerailizable); }
@@ -136,6 +137,7 @@ protected:
 public:
 	CRelationMapLocation(const shared_str& type, u16 object_id, u16 pInvOwnerActorID);
 	virtual ~CRelationMapLocation();
+	virtual LPCSTR CurrentSpotType() { return m_curr_spot_name.c_str(); }
 	virtual bool Update();
 
 	virtual void UpdateMiniMap(CUICustomMap* map);
