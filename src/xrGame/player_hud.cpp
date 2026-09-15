@@ -16,11 +16,6 @@ extern int g_nearwall;
 
 player_hud* g_player_hud = NULL;
 int g_blend_move_anims_override = -1;
-int g_hud_bare_debug = 0;
-
-static bool s_bare_drew_right = false;
-static bool s_bare_drew_left = false;
-static u32 s_bare_trace_next = 0;
 
 bool blend_move_anims_enabled()
 {
@@ -1213,10 +1208,8 @@ void player_hud::render_hud()
 
 	::Render->set_Transform(&m_transform);
 	::Render->add_Visual(m_model->dcast_RenderVisual());
-	s_bare_drew_right = true;
 	::Render->set_Transform(&m_transform_2);
 	::Render->add_Visual(m_model_2->dcast_RenderVisual());
-	s_bare_drew_left = true;
 
 	if (m_attached_items[0])
 		m_attached_items[0]->render();
@@ -1937,90 +1930,6 @@ u8 player_hud::bare_hands_idle_kind()
 	return 0;
 }
 
-static LPCSTR bare_motion_name(IKinematicsAnimated* K, const MotionID& M)
-{
-	if (!K || !M.valid() || M.slot >= K->LL_MotionsSlotCount())
-		return "bad";
-
-	shared_motions& mots = const_cast<shared_motions&>(K->LL_MotionsSlot(M.slot));
-	accel_map* names = mots.motion_map();
-
-	for (accel_map::iterator it = names->begin(); it != names->end(); ++it)
-		if (it->second == M.idx)
-			return it->first.c_str();
-
-	return "unknown";
-}
-
-static void bare_part_blends(IKinematicsAnimated* K, u16 part, string512& out)
-{
-	if (!K)
-	{
-		xr_strcpy(out, "no model");
-		return;
-	}
-
-	xr_strcpy(out, "");
-	u32 cnt = K->LL_PartBlendsCount(part);
-
-	for (u32 i = 0; i < cnt; ++i)
-	{
-		CBlend* B = K->LL_PartBlend(part, i);
-		if (!B)
-			continue;
-
-		string128 one;
-		xr_sprintf(one, "%s%s w %.2f t %.2f p %d", out[0] ? " + " : "", bare_motion_name(K, B->motionID), B->blendAmount, B->timeCurrent, B->playing ? 1 : 0);
-		xr_strcat(out, one);
-	}
-
-	if (!out[0])
-		xr_strcpy(out, "none");
-}
-
-static LPCSTR bare_item_name(attachable_hud_item* item)
-{
-	if (!item)
-		return "null";
-
-	return item->m_sect_name.size() ? item->m_sect_name.c_str() : "unnamed";
-}
-
-void player_hud::bare_hands_debug(LPCSTR reason)
-{
-	string512 blends_right, blends_left;
-	bare_part_blends(m_model, 0, blends_right);
-	bare_part_blends(m_model_2, 0, blends_left);
-
-	const Fvector& cam = Device.vCameraPosition;
-	const Fvector& right = m_transform.c;
-	const Fvector& left = m_transform_2.c;
-
-	Msg("[hud bare] %s sect [%s] live %d script_part %d item0 [%s] item1 [%s] right_blends [%s] left_blends [%s] right_pos (%.3f %.3f %.3f) left_pos (%.3f %.3f %.3f) cam (%.3f %.3f %.3f) right_dist %.3f left_dist %.3f right_attach (%.3f %.3f %.3f) left_attach (%.3f %.3f %.3f) anim_factor %.3f hud_fov %.3f drew_right %d drew_left %d",
-		reason,
-		m_bare_hands_sect.size() ? m_bare_hands_sect.c_str() : "none",
-		m_bare_hands_live ? 1 : 0,
-		int(script_anim_part),
-		bare_item_name(m_attached_items[0]),
-		bare_item_name(m_attached_items[1]),
-		blends_right,
-		blends_left,
-		VPUSH(right),
-		VPUSH(left),
-		VPUSH(cam),
-		cam.distance_to(right),
-		cam.distance_to(left),
-		VPUSH(m_attach_offset.c),
-		VPUSH(m_attach_offset_2.c),
-		script_anim_offset_factor,
-		psHUD_FOV,
-		s_bare_drew_right ? 1 : 0,
-		s_bare_drew_left ? 1 : 0);
-
-	s_bare_drew_right = false;
-	s_bare_drew_left = false;
-}
-
 void player_hud::update_bare_hands()
 {
 	bool live = bare_hands_active();
@@ -2033,23 +1942,12 @@ void player_hud::update_bare_hands()
 	{
 		m_bare_hands_live = live;
 		updateMovementLayerState();
-
-		if (g_hud_bare_debug)
-		{
-			s_bare_trace_next = Device.dwTimeGlobal + 1000;
-			bare_hands_debug("live changed");
-		}
 	}
 	else if (live && m_bare_hands_replay)
 	{
 		// one update past the flip so a script's next clip goes first
 		m_bare_hands_replay = false;
 		m_bare_hands_idle = u8(-1);
-	}
-	else if (g_hud_bare_debug && live && Device.dwTimeGlobal >= s_bare_trace_next)
-	{
-		s_bare_trace_next = Device.dwTimeGlobal + 1000;
-		bare_hands_debug("tick");
 	}
 
 	if (!live || !m_bare_hands_motions)
@@ -2072,9 +1970,6 @@ void player_hud::update_bare_hands()
 
 	const motion_descr& M = pm->m_animations[Random.randI(pm->m_animations.size())];
 	play_blend(this, 0, M.mid, TRUE, 1.f);
-
-	if (g_hud_bare_debug)
-		Msg("[hud bare] played sect [%s] alias [%s] motion [%s]", m_bare_hands_sect.c_str(), pm->m_alias_name.c_str(), bare_motion_name(m_model, M.mid));
 }
 
 bool player_hud::SetBareHands(LPCSTR section)

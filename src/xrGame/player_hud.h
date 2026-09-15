@@ -519,7 +519,6 @@ private:
 	void setup_hands(const shared_str& player_hud_sect, bool b_reload);
 	void notify_hands_changed(const shared_str& prev_sect);
 	void update_bare_hands();
-	void bare_hands_debug(LPCSTR reason);
 	u8 bare_hands_idle_kind();
 	const Fvector attach_rot(u8 part) const;
 	const Fvector attach_pos(u8 part) const;
@@ -582,7 +581,6 @@ public:
 
 extern player_hud* g_player_hud;
 
-extern int g_hud_bare_debug;
 
 // -1 follows the console flag, 0 forces the movement blend off, 1 forces it on
 extern int g_blend_move_anims_override;
