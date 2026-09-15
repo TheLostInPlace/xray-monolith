@@ -875,6 +875,13 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 		}
 	}
 
+	for (hand_motions* phm : m_hand_motions)
+	{
+		phm->pm.m_anims.clear();
+		if (pSettings->section_exist(phm->section.c_str()))
+			phm->pm.load(m_model, phm->section);
+	}
+
 	if (!b_reload)
 	{
 		m_model->PlayCycle("hand_idle_doun");
@@ -1013,6 +1020,12 @@ u32 player_hud::motion_length_script(LPCSTR section, LPCSTR anm_name, float spee
 	if (!phm)
 	{
 		Msg("!script motion [%s] not found in section [%s]", anm_name, section);
+		return 0;
+	}
+
+	if (phm->m_animations.empty())
+	{
+		Msg("!script motion [%s] in section [%s] has no animations", anm_name, section);
 		return 0;
 	}
 
@@ -1644,6 +1657,15 @@ u32 player_hud::script_anim_play(u8 hand, LPCSTR section, LPCSTR anm_name, bool 
 		return 0;
 	}
 
+	if (phm->m_animations.empty())
+	{
+		Msg("!script motion [%s] in section [%s] has no animations", anm_name, section);
+		m_bStopAtEndAnimIsRunning = true;
+		script_anim_end = Device.dwTimeGlobal;
+
+		return 0;
+	}
+
 	const motion_descr& M = phm->m_animations[Random.randI(phm->m_animations.size())];
 
 	if (script_anim_item_model)
@@ -1784,7 +1806,9 @@ void player_hud::set_part_cycle_speed(u8 part, float speed)
 	{
 		set_part_cycle_speed(1, speed);
 		set_part_cycle_speed(2, speed);
+		return;
 	}
+
 	u32 bc = part == 1 ? m_model_2->LL_PartBlendsCount(part) : m_model->LL_PartBlendsCount(part);
 	for (u32 bidx = 0; bidx < bc; ++bidx)
 	{
