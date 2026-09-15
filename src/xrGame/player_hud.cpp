@@ -732,6 +732,8 @@ player_hud::player_hud()
 	m_adjust_mode = false;
 	script_anim_part = u8(-1);
 	script_anim_last_part = u8(-1);
+	script_anim_keep_freelook[0] = false;
+	script_anim_keep_freelook[1] = false;
 	script_anim_offset_factor = 0.f;
 	m_item_pos.identity();
 	script_override_arms = false;
@@ -889,6 +891,11 @@ void player_hud::load(const shared_str& player_hud_sect, bool force)
 		if (pSettings->section_exist(phm->section.c_str()))
 			phm->pm.load(m_model, phm->section);
 	}
+
+	m_hud_offsets[0].clear();
+	m_hud_offsets[1].clear();
+	script_anim_keep_freelook[0] = false;
+	script_anim_keep_freelook[1] = false;
 
 	if (!b_reload)
 	{
@@ -1198,8 +1205,12 @@ void player_hud::update(const Fmatrix& cam_trans)
 		m2pos = script_anim_offset[0];
 		m1rot = script_anim_offset[1];
 		m2rot = script_anim_offset[1];
-		trans = trans_b;
-		trans_2 = trans_b;
+
+		if (!script_anim_keep_freelook[0])
+			trans = trans_b;
+
+		if (!script_anim_keep_freelook[1])
+			trans_2 = trans_b;
 	}
 	else if (script_anim_offset_factor != 0.f)
 	{
@@ -1210,16 +1221,16 @@ void player_hud::update(const Fmatrix& cam_trans)
 
 		if (blend_hand_0)
 		{
-			trans_b.inertion(trans, script_anim_offset_factor);
-			trans = trans_b;
 			m1pos.lerp(m1pos, script_anim_offset[0], script_anim_offset_factor);
 			m1rot.lerp(m1rot, script_anim_offset[1], script_anim_offset_factor);
 
+			if (!script_anim_keep_freelook[0])
+			{
 				Fmatrix base = trans_b;
 				base.inertion(trans, script_anim_offset_factor);
 				trans = base;
+			}
 		}
-		else
 
 		if (blend_hand_1)
 		{
@@ -1312,6 +1323,26 @@ void player_hud::update(const Fmatrix& cam_trans)
 			else
 				m_transform_2.mulB_43(blend);
         }
+	}
+
+	for (u8 part = 0; part < 2; ++part)
+	{
+		hud_offset& off = m_hud_offsets[part];
+
+		if (off.active)
+			off.blend_amount += Device.fTimeDelta / off.m_fade_time;
+		else
+			off.blend_amount -= Device.fTimeDelta / off.m_fade_time;
+
+		clamp(off.blend_amount, 0.f, 1.f);
+
+		if (off.blend_amount == 0.f)
+			continue;
+
+		if (part == 0)
+			m_transform.mulB_43(off.XFORM());
+		else
+			m_transform_2.mulB_43(off.XFORM());
 	}
 
 	bool need_blend[2];
@@ -1546,6 +1577,57 @@ bool player_hud::BlendAnmState(LPCSTR name, bool& active, float& blend)
 	return false;
 }
 
+void player_hud::SetHudOffset(u8 part, const Fvector& pos, const Fvector& rot, float fade_time)
+{
+	if (part == 2)
+	{
+		SetHudOffset(0, pos, rot, fade_time);
+		SetHudOffset(1, pos, rot, fade_time);
+		return;
+	}
+
+	if (part > 1)
+		return;
+
+	hud_offset& off = m_hud_offsets[part];
+	off.m_pos = pos;
+	off.m_rot = rot;
+	off.m_fade_time = _max(fade_time, .001f);
+	off.active = true;
+}
+
+void player_hud::ClearHudOffset(u8 part, float fade_time)
+{
+	if (part == 2)
+	{
+		ClearHudOffset(0, fade_time);
+		ClearHudOffset(1, fade_time);
+		return;
+	}
+
+	if (part > 1)
+		return;
+
+	hud_offset& off = m_hud_offsets[part];
+	off.m_fade_time = _max(fade_time, .001f);
+	off.active = false;
+}
+
+void player_hud::SetScriptAnimFreelook(u8 part, bool keep)
+{
+	if (part == 2)
+	{
+		script_anim_keep_freelook[0] = keep;
+		script_anim_keep_freelook[1] = keep;
+		return;
+	}
+
+	if (part > 1)
+		return;
+
+	script_anim_keep_freelook[part] = keep;
+}
+
 void player_hud::StopAllBlendAnms(bool bForce)
 {
 	for (script_layer* anm : m_script_layers)
@@ -1613,6 +1695,8 @@ void player_hud::StopScriptAnim(bool forced)
 	script_anim_lead_gun = false;
 	script_anim_section = nullptr;
 	script_anim_name = nullptr;
+	script_anim_keep_freelook[0] = false;
+	script_anim_keep_freelook[1] = false;
 
 	updateMovementLayerState();
 

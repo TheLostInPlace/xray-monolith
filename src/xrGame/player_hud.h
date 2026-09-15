@@ -220,6 +220,56 @@ struct script_layer
 	}
 };
 
+struct hud_offset
+{
+	Fvector m_pos;
+	Fvector m_rot;
+	float blend_amount;
+	float m_fade_time;
+	bool active;
+	Fmatrix blend;
+
+	hud_offset()
+	{
+		clear();
+	}
+
+	void clear()
+	{
+		m_pos.set(0.f, 0.f, 0.f);
+		m_rot.set(0.f, 0.f, 0.f);
+		blend_amount = 0.f;
+		m_fade_time = .4f;
+		active = false;
+		blend.identity();
+	}
+
+	const Fmatrix& XFORM()
+	{
+		auto min_jerk_interp = [](float t) {
+			return 10*t*t*t - 15*t*t*t*t + 6*t*t*t*t*t;
+		};
+
+		float eased = min_jerk_interp(blend_amount);
+
+		Fvector ypr = m_rot;
+		ypr.mul(PI / 180.f);
+
+		Fmatrix full;
+		full.setHPB(ypr.x, ypr.y, ypr.z);
+
+		Fquaternion qA; qA.identity();
+		Fquaternion qB; qB.set(full);
+		Fquaternion q; q.slerp(qA, qB, eased);
+
+		Fvector t = m_pos;
+		t.mul(eased);
+
+		blend.mk_xform(q, t);
+		return blend;
+	}
+};
+
 struct BoneCallbackParams
 {
 	Fvector m_current;
@@ -389,6 +439,8 @@ public:
 	u8 script_anim_part;
 	// the part of the last script motion, kept while the offset blends back out
 	u8 script_anim_last_part;
+	bool script_anim_keep_freelook[2];
+	hud_offset m_hud_offsets[2];
 	Fvector script_anim_offset[2];
 	shared_str script_anim_section;
 	shared_str script_anim_name;
@@ -429,6 +481,9 @@ public:
 	void SetBlendAnmPriority(LPCSTR name, int priority);
 	bool BlendAnmState(LPCSTR name, bool& active, float& blend);
 
+	void SetHudOffset(u8 part, const Fvector& pos, const Fvector& rot, float fade_time);
+	void ClearHudOffset(u8 part, float fade_time);
+	void SetScriptAnimFreelook(u8 part, bool keep);
 
 	void detach_all_items()
 	{
