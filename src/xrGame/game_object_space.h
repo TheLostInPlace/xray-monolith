@@ -100,6 +100,8 @@ namespace GameObject
         eNetSpawnAfter,
 #endif
 
+		eActorHudScriptAnimEnd,
+
 		eDummy = u32(-1),
 	};
 };

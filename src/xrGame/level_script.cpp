@@ -1639,9 +1639,12 @@ u32 PlayHudMotion(u8 hand, LPCSTR itm_name, LPCSTR anm_name, bool bMixIn = true,
 	return g_player_hud->script_anim_play(hand, itm_name, anm_name, bMixIn, speed);
 }
 
+	if (!g_player_hud)
+		return 0;
+
 void StopHudMotion()
 {
-	g_player_hud->StopScriptAnim();
+	g_player_hud->StopScriptAnim(true);
 }
 
 float MotionLength(LPCSTR section, LPCSTR name, float speed)
@@ -1652,6 +1655,65 @@ float MotionLength(LPCSTR section, LPCSTR name, float speed)
 bool AllowHudMotion()
 {
 	return g_player_hud->allow_script_anim();
+}
+
+bool HudMotionExists(LPCSTR section, LPCSTR anm_name)
+{
+	if (!g_player_hud || !g_player_hud->m_model)
+		return false;
+
+	if (!section || !section[0] || !anm_name || !anm_name[0])
+	{
+		Msg("!hud_motion_exists called with an empty section or motion name");
+		return false;
+	}
+
+	if (!pSettings->section_exist(section))
+	{
+		Msg("!hud_motion_exists section [%s] does not exist", section);
+		return false;
+	}
+
+	player_hud_motion_container* pm = g_player_hud->get_hand_motions(section);
+	player_hud_motion* phm = pm ? pm->find_motion(anm_name) : nullptr;
+
+	return phm && !phm->m_animations.empty() && g_player_hud->m_model->ID_Cycle_Safe(phm->m_base_name).valid();
+}
+
+int HudMotionBlockedReason()
+{
+	if (!g_player_hud)
+		return 0;
+
+	return g_player_hud->script_anim_blocked_reason();
+}
+
+::luabind::object HudMotionPart()
+{
+	lua_State* L = ai().script_engine().lua();
+
+	if (g_player_hud && g_player_hud->script_anim_part < 3)
+		return ::luabind::object(L, int(g_player_hud->script_anim_part));
+
+	::luabind::object none(L);
+	lua_pushnil(L);
+	none.set();
+
+	return none;
+}
+
+bool HudNeedsBlend(u8 part)
+{
+	if (!g_player_hud)
+		return false;
+
+	if (part > 1)
+	{
+		Msg("!hud_needs_blend called with part %d, must be 0 or 1", part);
+		return false;
+	}
+
+	return g_player_hud->need_blend_anm(part);
 }
 
 bool MotionExists(LPCSTR model_path, LPCSTR motion_name)
@@ -1671,6 +1733,17 @@ void PlayBlendAnm(LPCSTR name, u8 part, float speed, float power, bool bLooped, 
 	g_player_hud->PlayBlendAnm(name, part, speed, power, bLooped, no_restart, pivot_bone);
 }
 
+// short call forms kept as exact arities so overload matching still finds a body
+void PlayBlendAnm6(LPCSTR name, u8 part, float speed, float power, bool bLooped, bool no_restart)
+{
+	PlayBlendAnm(name, part, speed, power, bLooped, no_restart, "");
+}
+
+void PlayBlendAnm5(LPCSTR name, u8 part, float speed, float power, bool bLooped)
+{
+	PlayBlendAnm(name, part, speed, power, bLooped, false, "");
+}
+
 void StopBlendAnm(LPCSTR name, bool bForce)
 {
 	g_player_hud->StopBlendAnm(name, bForce);
@@ -1684,6 +1757,86 @@ void StopAllBlendAnms(bool bForce)
 float SetBlendAnmTime(LPCSTR name, float time)
 {
 	return g_player_hud->SetBlendAnmTime(name, time);
+}
+
+void PlayBlendAnmPrio(LPCSTR name, u8 part, float speed, float power, bool bLooped, bool no_restart, LPCSTR pivot_bone, int priority)
+{
+	if (!g_player_hud)
+		return;
+
+	g_player_hud->PlayBlendAnm(name, part, speed, power, bLooped, no_restart, pivot_bone);
+	g_player_hud->SetBlendAnmPriority(name, priority);
+}
+
+void SetBlendAnmPriority(LPCSTR name, int priority)
+{
+	if (!g_player_hud)
+		return;
+
+	g_player_hud->SetBlendAnmPriority(name, priority);
+}
+
+void StopBlendAnmFade(LPCSTR name, bool bForce, float fade_ms)
+{
+	if (!g_player_hud)
+		return;
+
+	g_player_hud->StopBlendAnmFade(name, bForce, fade_ms / 1000.f);
+}
+
+bool BlendAnmState(LPCSTR name, bool& active, float& blend)
+{
+	if (!g_player_hud)
+	{
+		active = false;
+		blend = 0.f;
+		return false;
+	}
+
+	return g_player_hud->BlendAnmState(name, active, blend);
+}
+
+bool BlendAnmExists(LPCSTR name)
+{
+	if (!name || !name[0])
+	{
+		Msg("!hud_anm_exists called with an empty name");
+		return false;
+	}
+
+	string_path full_path;
+
+	return !!FS.exist(full_path, "$level$", name) || !!FS.exist(full_path, "$game_anims$", name);
+}
+
+// part 0 is the root, 1 the left hand, 2 the right hand
+void SetHudCycleSpeed(u8 part, float speed)
+{
+	if (!g_player_hud || !g_player_hud->m_model || !g_player_hud->m_model_2)
+		return;
+
+	if (part > 2)
+	{
+		Msg("!set_hud_cycle_speed called with part %d, must be 0, 1 or 2", part);
+		return;
+	}
+
+	g_player_hud->set_part_cycle_speed(part, speed);
+}
+
+void SetHudCycleTime(u8 part, float time)
+{
+	if (!g_player_hud || !g_player_hud->m_model || !g_player_hud->m_model_2)
+		return;
+
+	if (part > 2)
+	{
+		Msg("!set_hud_cycle_time called with part %d, must be 0, 1 or 2", part);
+		return;
+	}
+
+	clamp(time, 0.f, 1.f);
+	g_player_hud->set_part_cycle_time(part, time);
 }
 
 void block_all_except_movement(bool b)
@@ -1732,6 +1885,9 @@ void remove_hud_model(LPCSTR section)
 
 const u32 ActorMovingState()
 {
+	if (!g_actor)
+		return 0;
+
 	return g_actor->MovingState();
 }
 
@@ -2831,10 +2987,23 @@ void CLevel::script_register(lua_State* L)
 		def("get_motion_length", MotionLength),
 		def("hud_motion_allowed", AllowHudMotion),
 		def("motion_exists", MotionExists),
+		def("hud_motion_exists", HudMotionExists),
+		def("hud_motion_blocked_reason", HudMotionBlockedReason),
+		def("hud_motion_part", HudMotionPart),
+		def("hud_needs_blend", HudNeedsBlend),
 		def("play_hud_anm", PlayBlendAnm),
+		def("play_hud_anm", PlayBlendAnmPrio),
+		def("play_hud_anm", PlayBlendAnm6),
+		def("play_hud_anm", PlayBlendAnm5),
+		def("set_hud_anm_priority", SetBlendAnmPriority),
 		def("stop_hud_anm", StopBlendAnm),
+		def("stop_hud_anm", StopBlendAnmFade),
 		def("stop_all_hud_anms", StopAllBlendAnms),
 		def("set_hud_anm_time", SetBlendAnmTime),
+		def("hud_anm_state", BlendAnmState, pure_out_value<2>() + pure_out_value<3>()),
+		def("hud_anm_exists", BlendAnmExists),
+		def("set_hud_cycle_speed", SetHudCycleSpeed),
+		def("set_hud_cycle_time", SetHudCycleTime),
 		def("only_allow_movekeys", block_all_except_movement),
 		def("only_movekeys_allowed", only_movement_allowed),
 		def("set_actor_allow_ladder", set_actor_allow_ladder),

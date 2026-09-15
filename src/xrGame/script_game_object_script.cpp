@@ -137,7 +137,8 @@ void CScriptGameObject::script_register(lua_State* L)
 			//-AVO
 			value("on_foot_step", int(GameObject::eOnFootStep)),
 
-			value("map_location_added", int(GameObject::eMapLocationAdded))
+			value("map_location_added", int(GameObject::eMapLocationAdded)),
+
 		],
 
 		def("buy_condition", (void (*)(CScriptIniFile*, LPCSTR))(&::buy_condition)),
