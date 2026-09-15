@@ -129,6 +129,30 @@ void CUIStatic::DrawText()
 
 #include "../../Include/xrRender/UIShader.h"
 
+static bool push_draw_clip(CUIWindow* w, C2DFrustum& f)
+{
+	if (!CUIWindow::AnyClipEnabled())
+		return false;
+
+	for (CUIWindow* p = w; p; p = p->GetParent())
+	{
+		if (!p->IsClipEnabled())
+			continue;
+
+		Frect r;
+		p->GetClipRect(r);
+
+		Fvector2 lt, rb;
+		UI().ClientToScreenScaled(lt, r.x1, r.y1);
+		UI().ClientToScreenScaled(rb, r.x2, r.y2);
+		f.CreateFromRect(Frect().set(lt.x, lt.y, rb.x, rb.y));
+		UI().PushClipFrustum(&f);
+		return true;
+	}
+
+	return false;
+}
+
 void CUIStatic::DrawTexture()
 {
 	if (m_bTextureEnable && GetShader() && GetShader()->inited())
@@ -173,12 +197,18 @@ void CUIStatic::DrawTexture()
 			m_UIStaticItem.SetSize(Fvector2().set(rect.width(), rect.height()));
 		}
 
+		C2DFrustum clip;
+		const bool clipped = push_draw_clip(this, clip);
+
 		if (Heading())
 		{
 			m_UIStaticItem.Render(GetHeading());
 		}
 		else
 			m_UIStaticItem.Render();
+
+		if (clipped)
+			UI().PopClipFrustum();
 	}
 }
 
