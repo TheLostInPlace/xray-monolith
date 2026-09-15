@@ -1058,6 +1058,7 @@ public:
 
 	//Any class that is derived from CHudItem
 	u32 PlayHudMotion(LPCSTR M, bool bMixIn, u32 state, float speed = 0.f, float end = 0.f);
+	bool NeedBlendAnm();
 	void SwitchState(u32 state);
 	u32 GetState();
 	Fvector hud_fire_point();
