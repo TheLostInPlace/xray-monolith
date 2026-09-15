@@ -433,6 +433,10 @@ public:
 	u32 anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotionDef*& md, float speed, u16 override_part = u16(-1));
 	u32 script_anim_play(u8 hand, LPCSTR itm_name, LPCSTR anm_name, bool bMixIn = true, float speed = 1.f);
 	const shared_str& section_name() const { return m_sect_name; }
+	bool set_hands_visuals(LPCSTR right_visual, LPCSTR left_visual);
+	bool SetBareHands(LPCSTR section);
+	const shared_str& bare_hands_section() const { return m_bare_hands_sect; }
+	bool bare_hands_active() const;
 	void OnFrame();
 	void net_Relcase(CObject* obj);
 
@@ -508,9 +512,18 @@ public:
 
 private:
 	void sort_script_layers();
+	void setup_hands(const shared_str& player_hud_sect, bool b_reload);
+	void notify_hands_changed(const shared_str& prev_sect);
+	void update_bare_hands();
+	u8 bare_hands_idle_kind();
 	const Fvector attach_rot(u8 part) const;
 	const Fvector attach_pos(u8 part) const;
 	shared_str m_sect_name;
+	shared_str m_bare_hands_sect;
+	player_hud_motion_container* m_bare_hands_motions;
+	u8 m_bare_hands_idle;
+	bool m_bare_hands_live;
+	bool m_bare_hands_replay;
 	xr_vector<u16> m_ancors;
 	attachable_hud_item* m_attached_items[3];
 	static void _BCL FingerCallback(CBoneInstance* B);
@@ -562,3 +575,4 @@ public:
 };
 
 extern player_hud* g_player_hud;
+
