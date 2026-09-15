@@ -15,11 +15,21 @@
 extern int g_nearwall;
 
 player_hud* g_player_hud = NULL;
+int g_blend_move_anims_override = -1;
 int g_hud_bare_debug = 0;
 
 static bool s_bare_drew_right = false;
 static bool s_bare_drew_left = false;
 static u32 s_bare_trace_next = 0;
+
+bool blend_move_anims_enabled()
+{
+	if (g_blend_move_anims_override >= 0)
+		return g_blend_move_anims_override > 0;
+
+	return !!psDeviceFlags2.test(rsBlendMoveAnims);
+}
+
 Fvector _ancor_pos;
 Fvector _wpn_root_pos;
 
@@ -2073,11 +2083,11 @@ void player_hud::StopScriptAnim(bool forced)
         }
     }
         
-	if (part < 2 && !m_attached_items[part])
 	// bare hands keep their last frame, the bare update hands the idle back itself
 	if (part < 2 && !bare_hands_active())
 		re_sync_anim(part + 1);
-	else
+
+	if (part > 1 || m_attached_items[part])
 		OnMovementChanged((ACTOR_DEFS::EMoveCommand)0);
 
 	// fires last so a handler that starts the next motion is not resynced over
@@ -2303,13 +2313,28 @@ void player_hud::attach_item(CHudItem* item)
 	}
 }
 
+static void sync_part_cycle(IKinematicsAnimated* model, u16 pid, const MotionID& M, const CBlend* src)
+{
+	CBlend* B = model->PlayCycle(pid, M, TRUE);
+	if (!B)
+		return;
+
+	B->timeCurrent = src->timeCurrent;
+	B->speed = src->speed;
+}
+
 //sync anim of other part to selected part (1 = sync to left hand anim; 2 = sync to right hand anim)
 void player_hud::re_sync_anim(u8 part)
 {
-	u32 bc = part == 1 ? m_model_2->LL_PartBlendsCount(part) : m_model->LL_PartBlendsCount(part);
+	if (part != 1 && part != 2)
+		return;
+
+	IKinematicsAnimated* src = part == 1 ? m_model_2 : m_model;
+
+	u32 bc = src->LL_PartBlendsCount(part);
 	for (u32 bidx = 0; bidx < bc; ++bidx)
 	{
-		CBlend* BR = part == 1 ? m_model_2->LL_PartBlend(part, bidx) : m_model->LL_PartBlend(part, bidx);
+		CBlend* BR = src->LL_PartBlend(part, bidx);
 		if (!BR)
 			continue;
 
@@ -2318,21 +2343,12 @@ void player_hud::re_sync_anim(u8 part)
 		u16 pc = m_model->partitions().count(); //same on both armatures
 		for (u16 pid = 0; pid < pc; ++pid)
 		{
-			if (pid == 0)
-			{
-				CBlend* B = m_model->PlayCycle(0, M, TRUE);
-				B->timeCurrent = BR->timeCurrent;
-				B->speed = BR->speed;
-				B = m_model_2->PlayCycle(0, M, TRUE);
-				B->timeCurrent = BR->timeCurrent;
-				B->speed = BR->speed;
-			}
-			else if (pid != part)
-			{
-				CBlend* B = part == 1 ? m_model->PlayCycle(pid, M, TRUE) : m_model_2->PlayCycle(pid, M, TRUE);
-				B->timeCurrent = BR->timeCurrent;
-				B->speed = BR->speed;
-			}
+			// the right arm armature never drives its left hand partition, the source already plays
+			if (pid != 1 && !(src == m_model && pid == part))
+				sync_part_cycle(m_model, pid, M, BR);
+
+			if (!(src == m_model_2 && pid == part))
+				sync_part_cycle(m_model_2, pid, M, BR);
 		}
 	}
 }

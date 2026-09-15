@@ -1886,6 +1886,36 @@ void SetHudCycleTime(u8 part, float time)
 	g_player_hud->set_part_cycle_time(part, time);
 }
 
+void ResyncHudAnim(u8 part)
+{
+	if (!g_player_hud || !g_player_hud->m_model || !g_player_hud->m_model_2)
+		return;
+
+	if (part != 1 && part != 2)
+	{
+		Msg("!resync_hud_anim called with part %d, must be 1 or 2", part);
+		return;
+	}
+
+	g_player_hud->re_sync_anim(part);
+}
+
+void SetBlendMoveAnimsOverride(const ::luabind::object& mode)
+{
+	if (!mode || mode.type() != LUA_TBOOLEAN)
+		g_blend_move_anims_override = -1;
+	else
+		g_blend_move_anims_override = ::luabind::object_cast<bool>(mode) ? 1 : 0;
+
+	if (g_player_hud)
+		g_player_hud->updateMovementLayerState();
+}
+
+bool GetBlendMoveAnims()
+{
+	return blend_move_anims_enabled();
+}
+
 bool SetBareHands(const ::luabind::object& section)
 {
 	if (!g_player_hud)
@@ -3192,6 +3222,9 @@ void CLevel::script_register(lua_State* L)
 		def("hud_anm_exists", BlendAnmExists),
 		def("set_hud_cycle_speed", SetHudCycleSpeed),
 		def("set_hud_cycle_time", SetHudCycleTime),
+		def("resync_hud_anim", ResyncHudAnim),
+		def("set_blend_move_anims_override", SetBlendMoveAnimsOverride),
+		def("get_blend_move_anims", GetBlendMoveAnims),
 		def("set_bare_hands", SetBareHands),
 		def("get_bare_hands", GetBareHands),
 		def("bare_hands_live", BareHandsLive),
