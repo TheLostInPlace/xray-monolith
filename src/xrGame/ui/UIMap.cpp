@@ -1002,7 +1002,8 @@ void CUIMiniMapWidget::init_global(const shared_str& level)
 
 	if (m_global_rect.width() <= EPS_L || m_global_rect.height() <= EPS_L) return;
 
-	m_global->InitTextureEx(pGameIni->r_string("global_map", "texture"), m_shader.c_str());
+	m_global_default = pGameIni->r_string("global_map", "texture");
+	m_global->InitTextureEx(m_global_texture.size() ? m_global_texture.c_str() : m_global_default.c_str(), m_shader.c_str());
 	m_global->SetStretchTexture(true);
 	m_global->SetTextureColor(m_texture_color);
 	m_global_ready = true;
@@ -1149,9 +1150,10 @@ void CUIMiniMapWidget::set_pointer_texture(LPCSTR texture, float x, float y, flo
 
 void CUIMiniMapWidget::clear_pointer_texture()
 {
-	if (!m_pointer_texture.size()) return;
+	if (!m_pointer_texture.size() && m_pointer_icons.empty()) return;
 
 	m_pointer_texture = "";
+	m_pointer_icons.clear();
 	clear_pool();
 }
 
@@ -1288,6 +1290,47 @@ void CUIMiniMapWidget::set_spot_texture(LPCSTR spot_type, LPCSTR texture, float 
 	clear_pool();
 }
 
+void CUIMiniMapWidget::set_spot_height_textures(LPCSTR spot_type, LPCSTR above, LPCSTR below)
+{
+	if (!spot_type || !xr_strlen(spot_type)) return;
+
+	SIconOverride& ov = m_icons[shared_str(spot_type)];
+	ov.above = above ? above : "";
+	ov.below = below ? below : "";
+	clear_pool();
+}
+
+// icons and pointers may draw through their own shader while the map keeps the one init took
+void CUIMiniMapWidget::set_spot_shader(LPCSTR shader)
+{
+	shared_str next = (shader && xr_strlen(shader)) ? shader : "";
+	if (next == m_spot_shader) return;
+
+	m_spot_shader = next;
+	clear_pool();
+}
+
+// the world map under the level, "" restores the texture the game ini names
+void CUIMiniMapWidget::set_global_texture(LPCSTR texture)
+{
+	m_global_texture = (texture && xr_strlen(texture)) ? texture : "";
+	if (!m_global_ready) return;
+
+	m_global->InitTextureEx(m_global_texture.size() ? m_global_texture.c_str() : m_global_default.c_str(), m_shader.c_str());
+	m_global->SetStretchTexture(true);
+	m_global->SetTextureColor(m_texture_color);
+}
+
+void CUIMiniMapWidget::set_pointer_texture(LPCSTR spot_type, LPCSTR texture, float x, float y, float w, float h)
+{
+	if (!spot_type || !xr_strlen(spot_type) || !texture || !xr_strlen(texture) || w <= 0.f || h <= 0.f) return;
+
+	SPointerOverride& ov = m_pointer_icons[shared_str(spot_type)];
+	ov.texture = texture;
+	ov.rect.set(x, y, x + w, y + h);
+	clear_pool();
+}
+
 void CUIMiniMapWidget::clear_spot_textures()
 {
 	if (m_icons.empty()) return;
@@ -1343,12 +1386,17 @@ CUIMiniMapWidget::SPoolEntry* CUIMiniMapWidget::acquire(CMapLocation* loc)
 	// a spot with a heading keeps its native pixel size otherwise, the screen wants the scaled window
 	e.spot->SetStretchTexture(true);
 
-	e.spot->SetIconShader(m_shader.c_str());
+	e.spot->SetIconShader(spot_shader());
 	auto ov = m_icons.find(shared_str(type));
 	if (ov != m_icons.end())
 	{
-		e.spot->SetNormalIcon(ov->second.texture.c_str(), m_shader.c_str());
-		e.spot->SetWndSize(Fvector2().set(ov->second.width, ov->second.height));
+		if (ov->second.texture.size())
+		{
+			e.spot->SetNormalIcon(ov->second.texture.c_str(), spot_shader());
+			e.spot->SetWndSize(Fvector2().set(ov->second.width, ov->second.height));
+		}
+		if (ov->second.above.size() || ov->second.below.size())
+			e.spot->SetHeightIcons(ov->second.above.c_str(), ov->second.below.c_str(), spot_shader());
 	}
 	scale_spot(e.spot, m_spot_scale);
 	arm_spot_anim(e.spot, GetSpotXml(), spot_path);
@@ -1359,14 +1407,21 @@ CUIMiniMapWidget::SPoolEntry* CUIMiniMapWidget::acquire(CMapLocation* loc)
 		e.pointer->Load(GetSpotXml(), pointer_path);
 		e.pointer->m_stat_hint_text = "";
 		e.pointer->SetStretchTexture(true);
-		if (m_pointer_texture.size())
+		auto pov = m_pointer_icons.find(shared_str(type));
+		if (pov != m_pointer_icons.end())
 		{
-			e.pointer->InitTextureEx(m_pointer_texture.c_str(), m_shader.c_str());
+			e.pointer->InitTextureEx(pov->second.texture.c_str(), spot_shader());
+			e.pointer->SetTextureRect(pov->second.rect);
+			e.pointer->SetWndSize(Fvector2().set(pov->second.rect.width(), pov->second.rect.height()));
+		}
+		else if (m_pointer_texture.size())
+		{
+			e.pointer->InitTextureEx(m_pointer_texture.c_str(), spot_shader());
 			e.pointer->SetTextureRect(m_pointer_rect);
 			e.pointer->SetWndSize(Fvector2().set(m_pointer_rect.width(), m_pointer_rect.height()));
 		}
 		else if (!e.pointer->m_TextureName.empty())
-			e.pointer->InitTextureEx(e.pointer->m_TextureName.c_str(), m_shader.c_str());
+			e.pointer->InitTextureEx(e.pointer->m_TextureName.c_str(), spot_shader());
 		scale_spot(e.pointer, (m_pointer_scale > 0.f) ? m_pointer_scale : m_spot_scale);
 		arm_spot_anim(e.pointer, GetSpotXml(), pointer_path);
 	}

@@ -285,6 +285,27 @@ void CMiniMapSpot::SetNormalIcon(LPCSTR texture, LPCSTR sh)
 	m_icon_normal = m_UIStaticItem.GetShader();
 }
 
+// the icons shown above and below the player, each with the rect its texture registers
+void CMiniMapSpot::SetHeightIcons(LPCSTR above, LPCSTR below, LPCSTR sh)
+{
+	if (above && xr_strlen(above))
+	{
+		m_tex_above = above;
+		CUITextureMaster::InitTexture(m_tex_above, &m_UIStaticItem, sh);
+		m_tex_rect_above = m_UIStaticItem.GetTextureRect();
+		m_icon_above = m_UIStaticItem.GetShader();
+	}
+	if (below && xr_strlen(below))
+	{
+		m_tex_below = below;
+		CUITextureMaster::InitTexture(m_tex_below, &m_UIStaticItem, sh);
+		m_tex_rect_below = m_UIStaticItem.GetTextureRect();
+		m_icon_below = m_UIStaticItem.GetShader();
+	}
+	m_UIStaticItem.SetShader(m_icon_normal);
+	m_UIStaticItem.SetTextureRect(m_tex_rect_normal);
+}
+
 void CMiniMapSpot::Draw()
 {
 	CObject* O = Level().CurrentViewEntity();
