@@ -380,7 +380,9 @@ AttachmentScriptLight* script_attachment::DetachLight(LPCSTR name)
 	script_attachment_light* slot = FindLight(name);
 	if (!slot) return nullptr;
 
+	// the slot keeps its bone so a light attached again lands where the last one did
 	AttachmentScriptLight* ret = slot->m_light;
+	slot->m_light = nullptr;
 	return ret;
 }
 
@@ -951,6 +953,12 @@ void script_attachment::SetScriptUI(LPCSTR name, LPCSTR ui_func)
 	if (!ui_func || !xr_strlen(ui_func))
 	{
 		Msg("![Script Attachment]: No script UI functor given for slot [%s]", name ? name : "");
+		return;
+	}
+
+	if (!name || !xr_strlen(name))
+	{
+		Msg("![Script Attachment]: UI slot name is empty");
 		return;
 	}
 

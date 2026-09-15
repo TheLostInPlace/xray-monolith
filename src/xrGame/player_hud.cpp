@@ -646,6 +646,7 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
 	float speed, bool bMixIn2)
 {
 	player_hud_motion* anm = find_motion(anm_name_b);
+	if (!anm || anm->m_animations.empty())
 	{
 		Msg("!hud motion [%s] in section [%s] has no animations", anm_name_b.c_str(), m_sect_name.c_str());
 		md = nullptr;
@@ -758,6 +759,7 @@ player_hud::player_hud()
 	m_bare_hands_idle = u8(-1);
 	m_bare_hands_live = false;
 	m_bare_hands_replay = false;
+	m_bare_skipped = 0;
 
 	//Bone Callback Params
 	m_bone_callback_params.insert(mk_pair(r_finger0, xr_new<BoneCallbackParams>()));
@@ -1099,9 +1101,46 @@ void player_hud::load_script(LPCSTR section)
 	script_override_arms = true;
 }
 
+bool player_hud::hud_attachment_render_always()
+{
+	if (!g_actor) return false;
+
+	for (auto& pair : *g_actor->GetAttachments())
+	{
+		script_attachment* att = pair.second;
+		if (att->GetType() == eSA_HUD && att->HasRenderAlways())
+			return true;
+	}
+
+	return false;
+}
+
+void player_hud::render_hud_attachments_always()
+{
+	for (auto& pair : *g_actor->GetAttachments())
+	{
+		script_attachment* att = pair.second;
+
+		if (att->GetType() != eSA_HUD || !att->HasRenderAlways()) continue;
+
+		// Left arm
+		if (att->GetParentBone() < 21)
+			att->Render(m_model_2->dcast_PKinematics(), &m_transform_2);
+
+		// Right arm
+		else
+			att->Render(m_model->dcast_PKinematics(), &m_transform);
+	}
+}
+
+bool player_hud::bare_hands_scripted() const
+{
+	return m_bare_hands_sect.size() && script_anim_part != u8(-1);
+}
+
 bool player_hud::render_item_ui_query()
 {
-	bool res = false;
+	bool res = m_bare_hands_live || bare_hands_active() || bare_hands_scripted() || hud_attachment_render_always();
 	if (m_attached_items[0])
 		res |= m_attached_items[0]->render_item_ui_query();
 
@@ -1110,6 +1149,9 @@ bool player_hud::render_item_ui_query()
 
 	if (m_attached_items[SCOPE_ATTACH_IDX])
 		res |= m_attached_items[SCOPE_ATTACH_IDX]->render_item_ui_query();
+
+	if (!res && m_bare_hands_sect.size() && !m_attached_items[0] && !m_attached_items[1])
+		++m_bare_skipped;
 
 	return res;
 }
@@ -1135,8 +1177,18 @@ void player_hud::render_item_ui()
 	if (g_actor->GetAttachments()->size())
 	{
 		for (auto& pair : *g_actor->GetAttachments())
-			if (pair.second->GetType() == eSA_HUD)
-				pair.second->RenderUI();
+		{
+			if (pair.second->GetType() != eSA_HUD) continue;
+
+			if (!m_bare_hands_live && !bare_hands_active() && !bare_hands_scripted() && !m_attached_items[0] && !m_attached_items[1] && !pair.second->HasRenderAlways())
+			{
+				if (m_bare_hands_sect.size())
+					++m_bare_skipped;
+				continue;
+			}
+
+			pair.second->RenderUI();
+		}
 	}
 }
 
@@ -1148,6 +1200,14 @@ void player_hud::render_hud()
 	if (m_bare_hands_live || bare_hands_active())
 		b_r0 = b_r1 = true;
 
+	if (!b_r0 && !b_r1 && m_bare_hands_sect.size() && !m_attached_items[0] && !m_attached_items[1])
+		++m_bare_skipped;
+
+	if (!b_r0 && !b_r1 && hud_attachment_render_always())
+	{
+		render_hud_attachments_always();
+		return;
+	}
 
 	if (!b_r0 && !b_r1) return;
 
