@@ -502,6 +502,39 @@ CUIStatic* map_get_minimap_spot_static(u16 id, LPCSTR spot_type)
 	return table;
 }
 
+::luabind::object map_get_all_object_spots()
+{
+	::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
+
+	if (!g_pGameLevel)
+		return table;
+
+	Locations& locations = Level().MapManager().Locations();
+	int i = 1;
+	for (Locations_it it = locations.begin(); it != locations.end(); ++it)
+	{
+		CMapLocation* ml = (*it).location;
+		if (!ml) continue;
+
+		::luabind::object spot = ::luabind::newtable(ai().script_engine().lua());
+		spot["id"] = ml->ObjectID();
+		spot["spot_type"] = ml->spot_type;
+		spot["current_spot_type"] = ml->CurrentSpotType();
+		spot["hint"] = ml->GetHint();
+		spot["level_name"] = ml->GetLevelName().c_str();
+
+		Fvector pos = ml->GetLastPosition();
+		spot["x"] = pos.x;
+		spot["y"] = pos.y;
+		spot["z"] = pos.z;
+
+		table[i] = spot;
+		i++;
+	}
+
+	return table;
+}
+
 u16 map_has_object_spot(u16 id, LPCSTR spot_type)
 {
 	return Level().MapManager().HasMapLocation(spot_type, id);
@@ -2587,6 +2620,7 @@ void CLevel::script_register(lua_State* L)
 			def("map_get_object_spot_static", map_get_spot_static),
 			def("map_get_object_minimap_spot_static", map_get_minimap_spot_static),
 			def("map_get_object_spots_by_id", map_get_object_spots_by_id),
+			def("map_get_all_object_spots", map_get_all_object_spots),
 
 			def("map_pan_to", &map_pan_to),
 			def("map_pan_to_level", &map_pan_to_level),
