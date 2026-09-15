@@ -1406,7 +1406,7 @@ void player_hud::update(const Fmatrix& cam_trans)
 
 void player_hud::updateMovementLayerState()
 {
-	CActor* pActor = Actor();
+	CActor* pActor = g_actor;
 
 	if (!pActor)
 		return;

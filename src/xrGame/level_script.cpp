@@ -502,6 +502,9 @@ CUIStatic* map_get_minimap_spot_static(u16 id, LPCSTR spot_type)
 	return table;
 }
 
+	if (!g_pGameLevel)
+		return table;
+
 u16 map_has_object_spot(u16 id, LPCSTR spot_type)
 {
 	return Level().MapManager().HasMapLocation(spot_type, id);
@@ -1568,6 +1571,7 @@ void reload_language()
 }
 
 #include "player_hud.h"
+#include "../xrEngine/CameraBase.h"
 
 void hud_adj_offs(int off, int idx, float x, float y, float z)
 {
@@ -1644,16 +1648,25 @@ u32 PlayHudMotion(u8 hand, LPCSTR itm_name, LPCSTR anm_name, bool bMixIn = true,
 
 void StopHudMotion()
 {
+	if (!g_player_hud)
+		return;
+
 	g_player_hud->StopScriptAnim(true);
 }
 
 float MotionLength(LPCSTR section, LPCSTR name, float speed)
 {
+	if (!g_player_hud)
+		return 0.f;
+
 	return g_player_hud->motion_length_script(section, name, speed);
 }
 
 bool AllowHudMotion()
 {
+	if (!g_player_hud)
+		return false;
+
 	return g_player_hud->allow_script_anim();
 }
 
@@ -1837,6 +1850,76 @@ void SetHudCycleTime(u8 part, float time)
 
 	clamp(time, 0.f, 1.f);
 	g_player_hud->set_part_cycle_time(part, time);
+}
+
+ENGINE_API extern float psHUD_FOV;
+
+float GetHudFov()
+{
+	return psHUD_FOV;
+}
+
+// 0 = disabled, 1 = enabling, 2 = enabled, 3 = disabling
+int ActorFreelookState()
+{
+	CActor* actor = g_actor;
+	if (!actor)
+		return 0;
+
+	switch (actor->cam_freelook)
+	{
+	case eflEnabling:
+		return 1;
+	case eflEnabled:
+		return 2;
+	case eflDisabling:
+		return 3;
+	default:
+		return 0;
+	}
+}
+
+float ActorFreelookFactor()
+{
+	CActor* actor = g_actor;
+
+	return actor ? actor->freelook_cam_control : 0.f;
+}
+
+// signed radians between the body yaw and the camera yaw
+float ActorFreelookYawSplit()
+{
+	CActor* actor = g_actor;
+	if (!actor || !actor->cam_FirstEye())
+		return 0.f;
+
+	float body_yaw = -angle_normalize_signed(actor->old_torso_yaw);
+	float cam_yaw = -angle_normalize_signed(actor->cam_FirstEye()->yaw);
+
+	return angle_difference_signed(body_yaw, cam_yaw);
+}
+
+bool HudVisible()
+{
+	return !!psHUD_Flags.is(HUD_WEAPON | HUD_WEAPON_RT | HUD_WEAPON_RT2 | HUD_DRAW_RT2);
+}
+
+CScriptGameObject* HudAttachedItem(u16 slot)
+{
+	if (!g_player_hud)
+		return nullptr;
+
+	if (slot > SCOPE_ATTACH_IDX)
+	{
+		Msg("!hud_attached_item called with slot %d, must be 0, 1 or 2", slot);
+		return nullptr;
+	}
+
+	attachable_hud_item* item = g_player_hud->attached_item(slot);
+	if (!item || !item->m_parent_hud_item || !item->m_parent_hud_item->has_object())
+		return nullptr;
+
+	return item->m_parent_hud_item->object().lua_game_object();
 }
 
 void block_all_except_movement(bool b)
@@ -2338,6 +2421,9 @@ void iterate_nearest(const Fvector& pos, float radius, const ::luabind::functor<
 	}
 }
 
+	if (!g_pGameLevel)
+		return nullptr;
+
 LPCSTR PickMaterial(const Fvector& start_pos, const Fvector& dir, float trace_dist, CScriptGameObject* ignore_obj)
 {
 	collide::rq_result result;
@@ -2819,6 +2905,9 @@ void CLevel::script_register(lua_State* L)
 			def("hold_action", &LevelHoldAction),
 
 			def("actor_moving_state", &ActorMovingState),
+			def("actor_freelook_state", &ActorFreelookState),
+			def("actor_freelook_factor", &ActorFreelookFactor),
+			def("actor_freelook_yaw_split", &ActorFreelookYawSplit),
 			def("get_env_rads", &get_env_rads),
 			def("iterate_nearest", &iterate_nearest),
 			def("pick_material", &PickMaterial),
@@ -3004,6 +3093,9 @@ void CLevel::script_register(lua_State* L)
 		def("hud_anm_exists", BlendAnmExists),
 		def("set_hud_cycle_speed", SetHudCycleSpeed),
 		def("set_hud_cycle_time", SetHudCycleTime),
+		def("get_hud_fov", GetHudFov),
+		def("hud_visible", HudVisible),
+		def("hud_attached_item", HudAttachedItem),
 		def("only_allow_movekeys", block_all_except_movement),
 		def("only_movekeys_allowed", only_movement_allowed),
 		def("set_actor_allow_ladder", set_actor_allow_ladder),
