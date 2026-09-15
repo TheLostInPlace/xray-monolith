@@ -9,6 +9,9 @@ class CMapSpotPointer;
 class CComplexMapSpot;
 class CUICustomMap;
 class CInventoryOwner;
+class CUIXml;
+
+CUIXml* GetSpotXml();
 
 class CMapLocation : public IPureDestroyableObject
 {
