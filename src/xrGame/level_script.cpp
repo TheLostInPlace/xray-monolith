@@ -1640,8 +1640,29 @@ u32 PlayHudMotion(u8 hand, LPCSTR itm_name, LPCSTR anm_name, bool bMixIn = true,
 	return g_player_hud->script_anim_play(hand, itm_name, anm_name, bMixIn, speed);
 }
 
+void SetHudMotionFreelook(u8 hand, bool keep)
+{
+	if (!g_player_hud)
+		return;
+
+	if (hand > 2)
+	{
+		Msg("!set_hud_motion_freelook called with part %d, must be 0, 1 or 2", hand);
+		return;
+	}
+
+	g_player_hud->SetScriptAnimFreelook(hand, keep);
+}
+
+u32 PlayHudMotionFreelook(u8 hand, LPCSTR itm_name, LPCSTR anm_name, bool bMixIn, float speed, bool keep_freelook)
+{
 	if (!g_player_hud)
 		return 0;
+
+	SetHudMotionFreelook(hand, keep_freelook);
+
+	return g_player_hud->script_anim_play(hand, itm_name, anm_name, bMixIn, speed);
+}
 
 void StopHudMotion()
 {
@@ -1847,6 +1868,37 @@ void SetHudCycleTime(u8 part, float time)
 
 	clamp(time, 0.f, 1.f);
 	g_player_hud->set_part_cycle_time(part, time);
+}
+
+void SetHudOffset(u8 part, float x, float y, float z, float pitch, float yaw, float roll, float blend_ms)
+{
+	if (!g_player_hud)
+		return;
+
+	if (part > 2)
+	{
+		Msg("!set_hud_offset called with part %d, must be 0, 1 or 2", part);
+		return;
+	}
+
+	Fvector pos = { x, y, z };
+	Fvector rot = { yaw, pitch, roll };
+
+	g_player_hud->SetHudOffset(part, pos, rot, blend_ms / 1000.f);
+}
+
+void ClearHudOffset(u8 part, float blend_ms)
+{
+	if (!g_player_hud)
+		return;
+
+	if (part > 2)
+	{
+		Msg("!clear_hud_offset called with part %d, must be 0, 1 or 2", part);
+		return;
+	}
+
+	g_player_hud->ClearHudOffset(part, blend_ms / 1000.f);
 }
 
 ENGINE_API extern float psHUD_FOV;
@@ -3066,6 +3118,8 @@ void CLevel::script_register(lua_State* L)
 		def("reload_language", &reload_language),
 		def("get_resolutions", &vid_modes_string),
 		def("play_hud_motion", PlayHudMotion),
+		def("play_hud_motion", PlayHudMotionFreelook),
+		def("set_hud_motion_freelook", SetHudMotionFreelook),
 		def("stop_hud_motion", StopHudMotion),
 		def("get_motion_length", MotionLength),
 		def("hud_motion_allowed", AllowHudMotion),
@@ -3087,6 +3141,8 @@ void CLevel::script_register(lua_State* L)
 		def("hud_anm_exists", BlendAnmExists),
 		def("set_hud_cycle_speed", SetHudCycleSpeed),
 		def("set_hud_cycle_time", SetHudCycleTime),
+		def("set_hud_offset", SetHudOffset),
+		def("clear_hud_offset", ClearHudOffset),
 		def("get_hud_fov", GetHudFov),
 		def("hud_visible", HudVisible),
 		def("hud_attached_item", HudAttachedItem),
