@@ -69,6 +69,7 @@ public:
 	virtual void Draw();
 	void SetIconShader(LPCSTR sh);
 	void SetNormalIcon(LPCSTR texture, LPCSTR sh);
+	void SetHeightIcons(LPCSTR above, LPCSTR below, LPCSTR sh);
 };
 
 // -------------------------------------------------------------------------------------------------

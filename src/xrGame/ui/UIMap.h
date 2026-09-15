@@ -194,8 +194,16 @@ class CUIMiniMapWidget : public CUIWindow
 	struct SIconOverride
 	{
 		shared_str texture;
-		float width;
-		float height;
+		shared_str above;
+		shared_str below;
+		float width = 0.f;
+		float height = 0.f;
+	};
+
+	struct SPointerOverride
+	{
+		shared_str texture;
+		Frect rect;
 	};
 
 	CUICustomMap* m_map;
@@ -203,6 +211,10 @@ class CUIMiniMapWidget : public CUIWindow
 
 	xr_map<CMapLocation*, SPoolEntry> m_pool;
 	xr_map<shared_str, SIconOverride> m_icons;
+	xr_map<shared_str, SPointerOverride> m_pointer_icons;
+	shared_str m_spot_shader;
+	shared_str m_global_texture;
+	shared_str m_global_default;
 	xr_map<u16, u32> m_spot_colors;
 	xr_set<shared_str> m_hidden_types;
 	bool m_pointers_visible = true;
@@ -253,7 +265,10 @@ public:
 	u32 spot_count() const { return m_spot_count; }
 	u32 pointer_count() const { return m_pointer_count; }
 	void set_global_visible(bool b);
+	void set_global_texture(LPCSTR texture);
+	void set_spot_shader(LPCSTR shader);
 	void set_spot_texture(LPCSTR spot_type, LPCSTR texture, float width, float height);
+	void set_spot_height_textures(LPCSTR spot_type, LPCSTR above, LPCSTR below);
 	void clear_spot_textures();
 	void set_spot_type_visible(LPCSTR spot_type, bool visible);
 	void clear_spot_type_filter();
@@ -263,6 +278,7 @@ public:
 	void set_pointer_target(u16 object_id);
 	void clear_pointer_target();
 	void set_pointer_texture(LPCSTR texture, float x, float y, float w, float h);
+	void set_pointer_texture(LPCSTR spot_type, LPCSTR texture, float x, float y, float w, float h);
 	void clear_pointer_texture();
 	u16 spot_at(float x, float y);
 
@@ -277,6 +293,7 @@ protected:
 	SPoolEntry* acquire(CMapLocation* loc);
 	bool pointer_allowed(CMapLocation* loc) const;
 	void refit_pointers();
+	LPCSTR spot_shader() const { return m_spot_shader.size() ? m_spot_shader.c_str() : m_shader.c_str(); }
 	void scale_spot(CUIStatic* sp, float scale);
 	void init_global(const shared_str& level);
 	void place_global();
