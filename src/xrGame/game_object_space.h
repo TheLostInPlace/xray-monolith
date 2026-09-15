@@ -103,6 +103,8 @@ namespace GameObject
 		eActorHudScriptAnimEnd,
 		eActorHudHandsChanged,
 
+		eMapLocationRemoved,
+
 		eDummy = u32(-1),
 	};
 };

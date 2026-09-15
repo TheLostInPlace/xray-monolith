@@ -138,6 +138,7 @@ void CScriptGameObject::script_register(lua_State* L)
 			value("on_foot_step", int(GameObject::eOnFootStep)),
 
 			value("map_location_added", int(GameObject::eMapLocationAdded)),
+			value("map_location_removed", int(GameObject::eMapLocationRemoved)),
 
 			value("hud_script_anim_end", int(GameObject::eActorHudScriptAnimEnd)),
 
