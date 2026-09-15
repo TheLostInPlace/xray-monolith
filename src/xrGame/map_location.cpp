@@ -61,6 +61,7 @@ CMapLocation::CMapLocation(LPCSTR type, u16 object_id)
 
 	EnableSpot();
 	m_cached.m_Position.set(10000, 10000);
+	m_position_global.set(0.f, 0.f, 0.f);
 	m_cached.m_updatedFrame = u32(-1);
 	m_cached.m_graphID = GameGraph::_GRAPH_ID(-1);
 	if (!IsGameTypeSingle())
