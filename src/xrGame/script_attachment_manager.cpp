@@ -1448,3 +1448,55 @@ void script_attachment::SetShaderTextureByTexture(LPCSTR match, LPCSTR shader, L
 				child->SetShaderTexture(shader, texture);
 		}
 }
+
+static bool apply_shader_param(IRenderVisual* visual, int id, const Fvector4& p, bool set)
+{
+	xr_vector<IRenderVisual*>* children = visual->get_children();
+	xr_vector<IRenderVisual*>* children_invisible = visual->get_children_invisible();
+
+	if (!children && !children_invisible)
+		return set ? visual->SetShaderParam(p.x, p.y, p.z, p.w) : visual->ClearShaderParam();
+
+	bool applied = false;
+
+	if (children)
+		for (auto* child : *children)
+		{
+			if (id > 0 && child->getID() != u32(id)) continue;
+			if (set ? child->SetShaderParam(p.x, p.y, p.z, p.w) : child->ClearShaderParam())
+				applied = true;
+		}
+
+	if (children_invisible)
+		for (auto* child : *children_invisible)
+		{
+			if (id > 0 && child->getID() != u32(id)) continue;
+			if (set ? child->SetShaderParam(p.x, p.y, p.z, p.w) : child->ClearShaderParam())
+				applied = true;
+		}
+
+	return applied;
+}
+
+// an id below 1 addresses every child
+void script_attachment::SetShaderParam(int id, float x, float y, float z, float w)
+{
+	if (!renderable.visual) return;
+
+	Fvector4 p;
+	p.set(x, y, z, w);
+
+	if (!apply_shader_param(renderable.visual, id, p, true))
+		Msg("![SetShaderParam]: no skinned child [%d] on [%s]", id, GetName());
+}
+
+void script_attachment::ClearShaderParam(int id)
+{
+	if (!renderable.visual) return;
+
+	Fvector4 p;
+	p.set(0.f, 0.f, 0.f, 0.f);
+
+	if (!apply_shader_param(renderable.visual, id, p, false))
+		Msg("![ClearShaderParam]: no skinned child [%d] on [%s]", id, GetName());
+}

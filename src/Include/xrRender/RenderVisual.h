@@ -37,6 +37,9 @@ public:
 	virtual LPCSTR _BCL getDebugShaderDef() { return nullptr; }
 	virtual LPCSTR _BCL getDebugTextureDef() { return nullptr; }
 
+	virtual bool SetShaderParam(float x, float y, float z, float w) { return false; };
+	virtual bool ClearShaderParam() { return false; };
+
 	virtual xr_vector<IRenderVisual*>* get_children() { return nullptr; };
 	virtual xr_vector<IRenderVisual*>* get_children_invisible() { return nullptr; };
 
