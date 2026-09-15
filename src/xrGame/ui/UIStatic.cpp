@@ -78,6 +78,29 @@ void CUIStatic::InitTextureEx(LPCSTR tex_name, LPCSTR sh_name)
 	m_TextureName = tex_name;
 }
 
+float CUIStatic::SetLineTo(float x1, float y1, float x2, float y2, float thickness)
+{
+	const float kx = ui_core::get_current_kx();
+	const float dx = x2 - x1;
+	const float dy = y2 - y1;
+	// heading rotates around the screen aspect the renderer applies, so the length follows it
+	const float cdx = (kx > EPS_L) ? dx / kx : dx;
+	const float length = _sqrt(cdx * cdx + dy * dy);
+
+	if (length < EPS_L)
+	{
+		SetWndSize(Fvector2().set(0.0f, thickness));
+		return 0.0f;
+	}
+
+	SetWndSize(Fvector2().set(length, thickness));
+	SetWndPos(Fvector2().set(x1 + dx * 0.5f - length * 0.5f, y1 + dy * 0.5f - thickness * 0.5f));
+	EnableHeading(true);
+	SetHeading(atan2f(-cdx, -dy) + PI_DIV_2);
+
+	return length;
+}
+
 void CUIStatic::Draw()
 {
 	DrawTexture();
