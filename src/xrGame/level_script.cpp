@@ -1943,6 +1943,11 @@ bool BareHandsLive()
 	return g_player_hud && g_player_hud->bare_hands_active();
 }
 
+u32 BareHandsSkipped()
+{
+	return g_player_hud ? g_player_hud->bare_hands_skipped() : 0;
+}
+
 // part 0 is the right hand, 1 the left hand, 2 both, angles in degrees and position in metres
 void SetHudOffset(u8 part, float x, float y, float z, float pitch, float yaw, float roll, float blend_ms)
 {
@@ -3222,6 +3227,7 @@ void CLevel::script_register(lua_State* L)
 		def("set_bare_hands", SetBareHands),
 		def("get_bare_hands", GetBareHands),
 		def("bare_hands_live", BareHandsLive),
+		def("bare_hands_skipped", BareHandsSkipped),
 		def("set_hud_offset", SetHudOffset),
 		def("clear_hud_offset", ClearHudOffset),
 		def("get_hud_fov", GetHudFov),

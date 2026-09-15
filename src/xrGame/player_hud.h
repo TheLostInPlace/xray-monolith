@@ -437,6 +437,8 @@ public:
 	bool SetBareHands(LPCSTR section);
 	const shared_str& bare_hands_section() const { return m_bare_hands_sect; }
 	bool bare_hands_active() const;
+	bool bare_hands_scripted() const;
+	u32 bare_hands_skipped() const { return m_bare_skipped; }
 	void OnFrame();
 	void net_Relcase(CObject* obj);
 
@@ -524,6 +526,7 @@ private:
 	u8 m_bare_hands_idle;
 	bool m_bare_hands_live;
 	bool m_bare_hands_replay;
+	u32 m_bare_skipped;
 	xr_vector<u16> m_ancors;
 	attachable_hud_item* m_attached_items[3];
 	static void _BCL FingerCallback(CBoneInstance* B);
