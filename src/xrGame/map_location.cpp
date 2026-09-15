@@ -92,13 +92,20 @@ void CMapLocation::destroy()
 
 CUIXml* g_uiSpotXml = NULL;
 
-void CMapLocation::LoadSpot(LPCSTR type, bool bReload)
+CUIXml* GetSpotXml()
 {
 	if (!g_uiSpotXml)
 	{
 		g_uiSpotXml = xr_new<CUIXml>();
 		g_uiSpotXml->Load(CONFIG_PATH, UI_PATH, "map_spots.xml");
 	}
+
+	return g_uiSpotXml;
+}
+
+void CMapLocation::LoadSpot(LPCSTR type, bool bReload)
+{
+	GetSpotXml();
 
 	XML_NODE* node = NULL;
 	string512 path_base, path;

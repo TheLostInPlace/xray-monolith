@@ -28,6 +28,8 @@
 #include "map_manager.h"
 #include "map_spot.h"
 #include "map_location.h"
+#include "ui/xrUIXmlParser.h"
+#include "../Include/xrRender/UIRender.h"
 #include "physics_world_scripted.h"
 #include "alife_simulator.h"
 #include "alife_time_manager.h"
@@ -533,6 +535,36 @@ CUIStatic* map_get_minimap_spot_static(u16 id, LPCSTR spot_type)
 	}
 
 	return table;
+}
+
+::luabind::object map_get_spot_declaration(LPCSTR spot_type)
+{
+	::luabind::object declaration = ::luabind::newtable(ai().script_engine().lua());
+
+	if (!spot_type || !spot_type[0])
+	{
+		Msg("!map_get_spot_declaration: empty spot type");
+		return declaration;
+	}
+
+	CUIXml* xml = GetSpotXml();
+	string512 path;
+	strconcat(sizeof(path), path, spot_type, ":mini_map");
+	if (!xml->NavigateToNode(path, 0))
+		return declaration;
+
+	LPCSTR spot = xml->ReadAttrib(path, 0, "spot", "");
+	if (!xr_strlen(spot))
+		return declaration;
+
+	strconcat(sizeof(path), path, spot, ":texture");
+	if (!xml->NavigateToNode(path, 0))
+		return declaration;
+
+	declaration["texture"] = xml->Read(path, 0, "");
+	declaration["width"] = xml->ReadAttribFlt(spot, 0, "width", 0.0f);
+	declaration["height"] = xml->ReadAttribFlt(spot, 0, "height", 0.0f);
+	return declaration;
 }
 
 u16 map_has_object_spot(u16 id, LPCSTR spot_type)
@@ -2356,6 +2388,21 @@ void ui2world_offscreen(Fvector& pos, Fvector& res, u16& obj_id)
 	ui2world_offscreen(Fvector2().set(pos.x, pos.y), res, obj_id);
 }
 
+Fvector2 get_texture_size(LPCSTR name)
+{
+	Fvector2 size;
+	size.set(0.f, 0.f);
+
+	if (!name || !name[0])
+	{
+		Msg("!get_texture_size: empty texture name");
+		return size;
+	}
+
+	UIRender->GetTextureResolution(name, size);
+	return size;
+}
+
 const float get_env_rads()
 {
 	if (!CurrentGameUI())
@@ -2613,8 +2660,48 @@ void iterate_nearest(const Fvector& pos, float radius, const ::luabind::functor<
 	}
 }
 
+CScriptGameObject* nearest_object_of_class(const Fvector& pos, float radius, int clsid, float& distance)
+{
+	distance = 0.f;
+
 	if (!g_pGameLevel)
 		return nullptr;
+
+	if (radius <= 0.f)
+	{
+		Msg("!nearest_object: bad radius %f", radius);
+		return nullptr;
+	}
+
+	xr_vector<CObject*> nearest;
+	Level().ObjectSpace.GetNearest(nearest, pos, radius, NULL);
+
+	CGameObject* best = nullptr;
+	float best_dist = flt_max;
+	for (CObject* o : nearest)
+	{
+		CGameObject* obj = smart_cast<CGameObject*>(o);
+		if (!obj) continue;
+		if (clsid >= 0 && obj->clsid() != clsid) continue;
+
+		float d = obj->Position().distance_to_sqr(pos);
+		if (d < best_dist)
+		{
+			best_dist = d;
+			best = obj;
+		}
+	}
+
+	if (!best) return nullptr;
+
+	distance = _sqrt(best_dist);
+	return best->lua_game_object();
+}
+
+CScriptGameObject* nearest_object(const Fvector& pos, float radius, float& distance)
+{
+	return nearest_object_of_class(pos, radius, -1, distance);
+}
 
 LPCSTR PickMaterial(const Fvector& start_pos, const Fvector& dir, float trace_dist, CScriptGameObject* ignore_obj)
 {
@@ -3024,6 +3111,7 @@ void CLevel::script_register(lua_State* L)
 			def("map_get_object_minimap_spot_static", map_get_minimap_spot_static),
 			def("map_get_object_spots_by_id", map_get_object_spots_by_id),
 			def("map_get_all_object_spots", map_get_all_object_spots),
+			def("map_get_spot_declaration", map_get_spot_declaration),
 
 			def("map_pan_to", &map_pan_to),
 			def("map_pan_to_level", &map_pan_to_level),
@@ -3105,7 +3193,10 @@ void CLevel::script_register(lua_State* L)
 			def("actor_freelook_factor", &ActorFreelookFactor),
 			def("actor_freelook_yaw_split", &ActorFreelookYawSplit),
 			def("get_env_rads", &get_env_rads),
+			def("get_texture_size", &get_texture_size),
 			def("iterate_nearest", &iterate_nearest),
+			def("nearest_object", &nearest_object, pure_out_value<3>()),
+			def("nearest_object", &nearest_object_of_class, pure_out_value<4>()),
 			def("pick_material", &PickMaterial),
 			def("add_bullet", ((void (*)(Fvector, Fvector, float, float, float, u16, ALife::EHitType, float, LPCSTR, float))& AddBullet)),
 			def("add_bullet", ((void (*)(::luabind::object))& AddBullet)),
