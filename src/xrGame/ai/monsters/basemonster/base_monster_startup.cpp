@@ -430,6 +430,11 @@ void CBaseMonster::settings_read(CInifile const* ini, LPCSTR section, SMonsterSe
 	if (ini->line_exist(section, "satiety_decay_per_sec"))
 		data.satiety_decay_per_sec = ini->r_float(section, "satiety_decay_per_sec");
 
+	// stock leaves the rest states owning the anomaly detector
+	if (ini == pSettings) data.anomaly_detect_always = false;
+	if (ini->line_exist(section, "anomaly_detect_always"))
+		data.anomaly_detect_always = !!ini->r_bool(section, "anomaly_detect_always");
+
 	READ_SETTINGS(data.m_fDamagedThreshold, "DamagedThreshold", r_float, ini, section);
 
 	READ_SETTINGS(data.m_dwIdleSndDelay, "idle_sound_delay", r_u32, ini, section);

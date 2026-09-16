@@ -23,6 +23,7 @@ struct SMonsterSettings
 	u32 m_dwDayTimeEnd;
 	float satiety_threshold;
 	float satiety_decay_per_sec;
+	bool anomaly_detect_always;
 
 	// ----------------------------------------------------------- 
 

@@ -27,10 +27,15 @@ void CAnomalyDetector::reinit()
 	m_active = false;
 }
 
+// scanning stays on outside rest when the species key is set
+bool CAnomalyDetector::active()
+{
+	return m_active || (g_ai_monster_alt && m_object->db().anomaly_detect_always);
+}
 
 void CAnomalyDetector::update_schedule()
 {
-	if (m_active)
+	if (active())
 		m_object->feel_touch_update(m_object->Position(), m_radius);
 
 	if (m_storage.empty())
@@ -79,7 +84,7 @@ void CAnomalyDetector::update_schedule()
 
 void CAnomalyDetector::on_contact(CObject* obj)
 {
-	if (!m_active) return;
+	if (!active()) return;
 
 	CCustomZone* custom_zone = smart_cast<CCustomZone*>(obj);
 	if (!custom_zone) return;
