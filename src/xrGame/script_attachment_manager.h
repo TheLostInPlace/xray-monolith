@@ -267,6 +267,18 @@ public:
 	void SetRenderAlways(bool render_always) { m_render_always = render_always; }
 	bool GetRenderAlways() { return m_render_always; }
 
+	bool HasRenderAlways()
+	{
+		if (m_render_always)
+			return true;
+
+		for (auto& pair : m_children)
+			if (pair.second->HasRenderAlways())
+				return true;
+
+		return false;
+	}
+
 	u32 PlayMotion(LPCSTR name, bool mixin = true, float speed = 1.f);
 	u32 motion_length(const MotionID& M, const CMotionDef*& md, float speed);
 	
