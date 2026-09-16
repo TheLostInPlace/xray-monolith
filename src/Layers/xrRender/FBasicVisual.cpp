@@ -123,6 +123,18 @@ void dxRender_Visual::MarkAsGlowing(bool is_glowing)
 
 void dxRender_Visual::SetShaderTexture(LPCSTR s_shader, LPCSTR s_texture)
 {
+	if (shader._get())
+	{
+		bool same_shader = !s_shader || !s_shader[0]
+			|| (!strstr(s_shader, "$no_shadows") && !flags.test(IRenderVisualFlags::eNoShadow)
+				&& dbg_shader.size() && 0 == xr_strcmp(dbg_shader.c_str(), s_shader));
+		bool same_texture = !s_texture || !s_texture[0]
+			|| (dbg_texture.size() && 0 == xr_strcmp(dbg_texture.c_str(), s_texture));
+
+		if (same_shader && same_texture)
+			return;
+	}
+
 	if (s_shader && strlen(s_shader))
 	{
 		char* shader = xr_strdup(s_shader);
