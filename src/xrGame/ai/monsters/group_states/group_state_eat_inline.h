@@ -179,6 +179,7 @@ void CStateGroupEatAbstract::reselect_state()
 	if (prev_substate == eStateEat_Eat)
 	{
 		m_time_last_eat = time();
+		object->ChangeSatiety(1.f);
 
 		if (!hungry())
 			select_state(eStateEat_WalkAway);
@@ -344,6 +345,9 @@ bool CStateGroupEatAbstract::check_start_conditions()
 TEMPLATE_SPECIALIZATION
 bool CStateGroupEatAbstract::hungry()
 {
+	if (g_ai_monster_alt && (object->db().satiety_decay_per_sec > 0.f))
+		return (object->GetSatiety() <= object->db().satiety_threshold);
+
 	return ((m_time_last_eat == 0) || (m_time_last_eat + TIME_NOT_HUNGRY < time()));
 }
 

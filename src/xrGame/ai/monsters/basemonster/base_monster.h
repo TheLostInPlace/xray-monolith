@@ -170,10 +170,11 @@ public:
 	}
 
 	virtual void on_before_sell(CInventoryItem* item);
-	float GetSatiety() { return 0.5f; }
+	float GetSatiety() { return (db().satiety_decay_per_sec > 0.f) ? m_satiety : 0.5f; }
 
 	void ChangeSatiety(float v)
 	{
+		m_satiety = _min(1.f, m_satiety + v);
 	}
 
 	// ---------------------------------------------------------------------------------
@@ -310,6 +311,7 @@ public:
 	CMonsterCorpseManager CorpseMan;
 
 	const CEntityAlive* EatedCorpse;
+	float m_satiety;
 	// Lain: added
 	bool check_eated_corpse_draggable();
 	virtual bool is_base_monster_with_enemy() { return EnemyMan.get_enemy() != NULL; }

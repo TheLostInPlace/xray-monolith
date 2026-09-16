@@ -95,6 +95,9 @@ void CMonsterCorpseMemory::remove_non_actual()
 
 		if (const_cast<CEntityAlive *>(it->first)->is_locked_corpse())
 		{
+			// a corpse this monster locked to eat stays in memory
+			if (it->first == monster->EatedCorpse) continue;
+
 			m_objects.erase(it);
 			continue;
 		}

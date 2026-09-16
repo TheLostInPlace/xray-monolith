@@ -287,6 +287,8 @@ void CBaseMonster::reinit()
 
 	Morale.reinit();
 
+	m_satiety = 1.f;
+
 	m_bDamaged = false;
 	m_bAngry = false;
 	m_bAggressive = false;
@@ -422,6 +424,11 @@ void CBaseMonster::settings_read(CInifile const* ini, LPCSTR section, SMonsterSe
 
 	READ_SETTINGS(data.m_fDistToCorpse, "distance_to_corpse", r_float, ini, section);
 	READ_SETTINGS(data.satiety_threshold, "satiety_threshold", r_float, ini, section);
+
+	// zero decay keeps the stock eat timer
+	if (ini == pSettings) data.satiety_decay_per_sec = 0.f;
+	if (ini->line_exist(section, "satiety_decay_per_sec"))
+		data.satiety_decay_per_sec = ini->r_float(section, "satiety_decay_per_sec");
 
 	READ_SETTINGS(data.m_fDamagedThreshold, "DamagedThreshold", r_float, ini, section);
 

@@ -105,6 +105,7 @@ CBaseMonster::CBaseMonster() : m_psy_aura(this, "psy"),
 	com_man().add_ability(ControlCom::eComCriticalWound);
 
 	EatedCorpse = NULL;
+	m_satiety = 1.f;
 
 	m_steer_manager = NULL;
 	m_grouping_behaviour = NULL;
@@ -388,6 +389,9 @@ void CBaseMonster::shedule_Update(u32 dt)
 	control().update_schedule();
 
 	Morale.update_schedule(dt);
+
+	if (g_ai_monster_alt && (db().satiety_decay_per_sec > 0.f))
+		m_satiety = _max(0.f, m_satiety - db().satiety_decay_per_sec * float(dt) / 1000);
 
 	m_anomaly_detector->update_schedule();
 
