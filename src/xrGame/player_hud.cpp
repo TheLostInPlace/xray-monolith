@@ -1220,7 +1220,7 @@ void player_hud::render_hud(IDSGraphManager* DM)
 
 	if (!b_r0 && !b_r1 && hud_attachment_render_always())
 	{
-		render_hud_attachments_always();
+		render_hud_attachments_always(DM);
 		return;
 	}
 
