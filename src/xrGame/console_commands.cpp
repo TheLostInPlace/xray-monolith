@@ -2737,6 +2737,12 @@ void CCC_RegisterCommands()
     extern u32 g_ai_aim_queue_inertia_time;
     CMD4(CCC_Integer, "ai_aim_inertia_time", (int*)&g_ai_aim_inertia_time, 0, 10000);
     CMD4(CCC_Integer, "ai_aim_queue_inertia_time", (int*)&g_ai_aim_queue_inertia_time, 0, 10000);
+
+    extern int g_ai_monster_sound_log;
+    extern int g_ai_monster_alt;
+    CMD4(CCC_Integer, "ai_monster_sound_log", &g_ai_monster_sound_log, 0, 1);
+    CMD4(CCC_Integer, "ai_monster_alt", &g_ai_monster_alt, 0, 1);
+
     // Danger perception multipliers: 1.0 = original engine behaviour, 0.0 = disabled, 5.0 = 5x urgency
     extern float g_ai_danger_ricochet_mult;
     extern float g_ai_danger_attack_sound_mult;

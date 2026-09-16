@@ -58,6 +58,9 @@
 #pragma warning (disable:4355)
 #pragma warning (push)
 
+int g_ai_monster_sound_log = 0;
+int g_ai_monster_alt = 1;
+
 CBaseMonster::CBaseMonster() : m_psy_aura(this, "psy"),
                                m_fire_aura(this, "fire"),
                                m_radiation_aura(this, "radiation"),
@@ -618,6 +621,17 @@ void CBaseMonster::set_state_sound(u32 type, bool once)
 
 			sound().play(type, 0, 0, delay);
 		}
+	}
+
+	if (g_ai_monster_sound_log)
+	{
+		// logs the section, fsm state, sound branch and actor distance for every announce
+		LPCSTR branch = (type == MonsterSound::eMonsterSoundIdleDistant)
+			                ? "distant"
+			                : ((type == MonsterSound::eMonsterSoundIdle) ? "idle" : "other");
+		float dist = Actor() ? Actor()->Position().distance_to(Position()) : -1.f;
+		int state_id = StateMan ? int(StateMan->get_state_type()) : -1;
+		Msg("[MSND] %s state=%d branch=%s dist=%.1f", cNameSect().c_str(), state_id, branch, dist);
 	}
 
 	m_prev_sound_type = type;
