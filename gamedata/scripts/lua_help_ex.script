@@ -570,7 +570,7 @@
         string get_bare_hands() // the bare hands section, nil when none is set
         bool bare_hands_live() // true while the bare hands idle is the thing being drawn
         u32 bare_hands_skipped() // hud draws and ui queries skipped since the hud was created while a bare hands section was set
-        void set_hud_offset(u8 part, float x, float y, float z, float pitch, float yaw, float roll, float blend_ms) // part 0 right, 1 left, 2 both, position in metres, angles in degrees, eased in over blend_ms milliseconds
+        void set_hud_offset(u8 part, float x, float y, float z, float pitch, float yaw, float roll, float blend_ms) // part 0 right, 1 left, 2 both, position in metres, angles in degrees with the aim_hud_offset_rot signs, eased in over blend_ms milliseconds
         void clear_hud_offset(u8 part, float blend_ms) // part 0 right, 1 left, 2 both, eases the offset back out over blend_ms milliseconds
         float get_hud_fov() // the hud fov the renderer is using
         bool hud_visible() // true while any of the hud weapon draw flags is set
