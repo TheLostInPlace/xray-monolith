@@ -435,6 +435,26 @@ void CBaseMonster::settings_read(CInifile const* ini, LPCSTR section, SMonsterSe
 	if (ini->line_exist(section, "anomaly_detect_always"))
 		data.anomaly_detect_always = !!ini->r_bool(section, "anomaly_detect_always");
 
+	// 1.0 keeps the stock sight and hearing ranges
+	if (ini == pSettings)
+	{
+		data.night_eye_range_mult = 1.f;
+		data.night_hear_mult = 1.f;
+		data.rain_eye_range_mult = 1.f;
+		data.rain_hear_mult = 1.f;
+		data.dark_eye_range_mult = 1.f;
+	}
+	if (ini->line_exist(section, "night_eye_range_mult"))
+		data.night_eye_range_mult = ini->r_float(section, "night_eye_range_mult");
+	if (ini->line_exist(section, "night_hear_mult"))
+		data.night_hear_mult = ini->r_float(section, "night_hear_mult");
+	if (ini->line_exist(section, "rain_eye_range_mult"))
+		data.rain_eye_range_mult = ini->r_float(section, "rain_eye_range_mult");
+	if (ini->line_exist(section, "rain_hear_mult"))
+		data.rain_hear_mult = ini->r_float(section, "rain_hear_mult");
+	if (ini->line_exist(section, "dark_eye_range_mult"))
+		data.dark_eye_range_mult = ini->r_float(section, "dark_eye_range_mult");
+
 	READ_SETTINGS(data.m_fDamagedThreshold, "DamagedThreshold", r_float, ini, section);
 
 	READ_SETTINGS(data.m_dwIdleSndDelay, "idle_sound_delay", r_u32, ini, section);

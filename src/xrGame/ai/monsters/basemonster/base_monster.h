@@ -114,6 +114,9 @@ public:
 
 	virtual void UpdateCL();
 	virtual void shedule_Update(u32 dt);
+	virtual void update_range_fov(float& new_range, float& new_fov, float start_range, float start_fov);
+	float environment_sight_mult();
+	float environment_hear_mult();
 
 	virtual void InitThink()
 	{
