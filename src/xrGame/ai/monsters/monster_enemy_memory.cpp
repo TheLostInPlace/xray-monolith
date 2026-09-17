@@ -119,6 +119,28 @@ void CMonsterEnemyMemory::update()
 		}
 	}
 
+	if (g_ai_monster_alt && monster->has_prey_classes() && monster->hungry_for_prey())
+	{
+		float const hunt_range = monster->get_prey_hunt_range();
+		typedef CVisualMemoryManager::VISIBLES visibles_list;
+		visibles_list const& visibles = monster->memory().visual().objects();
+
+		for (visibles_list::const_iterator I = visibles.begin(); I != visibles.end(); ++I)
+		{
+			const CEntityAlive* prey = smart_cast<const CEntityAlive*>((*I).m_object);
+			if (!prey || !prey->g_Alive()) continue;
+
+			float const dist = monster->Position().distance_to(prey->Position());
+			if ((dist > hunt_range) || !monster->is_prey(prey)) continue;
+
+			add_enemy(prey);
+
+			if (g_ai_monster_sound_log)
+				Msg("[MPREY] %s hunts %s dist=%.1f", monster->cNameSect().c_str(),
+				    prey->cNameSect().c_str(), dist);
+		}
+	}
+
 	// удалить устаревших врагов
 	remove_non_actual();
 
@@ -184,13 +206,16 @@ void CMonsterEnemyMemory::remove_non_actual()
 	{
 		nit = it;
 		++nit;
+		// prey is not a relation enemy so the team and useful tests would drop it
+		const bool prey = it->first && monster->is_prey(it->first);
+
 		// проверить условия удаления
 		if (!it->first ||
 			!it->first->g_Alive() ||
 			it->first->getDestroy() ||
 			(it->second.time + time_memory < cur_time) ||
-			(it->first->g_Team() == monster->g_Team()) ||
-			!monster->memory().enemy().is_useful(it->first))
+			(!prey && (it->first->g_Team() == monster->g_Team())) ||
+			(!prey && !monster->memory().enemy().is_useful(it->first)))
 		{
 			m_objects.erase(it);
 		}

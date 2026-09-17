@@ -615,6 +615,27 @@ float CBaseMonster::evaluate(const CItemManager* manager, const CGameObject* obj
 	return (0.f);
 }
 
+bool CBaseMonster::is_prey(const CEntityAlive* entity)
+{
+	if (!g_ai_monster_alt || m_prey_classes.empty() || !entity) return false;
+
+	const CBaseMonster* other = smart_cast<const CBaseMonster*>(entity);
+	if (!other || (other == this)) return false;
+
+	for (u32 i = 0; i < m_prey_classes.size(); ++i)
+		if (m_prey_classes[i] == other->cNameSect()) return true;
+
+	return false;
+}
+
+bool CBaseMonster::hungry_for_prey()
+{
+	// without satiety decay the eat timer lives in the state and the hunt stays open
+	if (db().satiety_decay_per_sec > 0.f) return (m_satiety <= db().satiety_threshold);
+
+	return true;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 void CBaseMonster::ChangeTeam(int team, int squad, int group)

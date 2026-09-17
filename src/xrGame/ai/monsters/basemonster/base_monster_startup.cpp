@@ -90,6 +90,22 @@ void CBaseMonster::Load(LPCSTR section)
 	m_melee_rotation_factor = READ_IF_EXISTS(pSettings, r_float, section, "Melee_Rotation_Factor", 1.5f);
 	berserk_always = !!READ_IF_EXISTS(pSettings, r_bool, section, "berserk_always", false);
 
+	// no listed sections means the monster never hunts another monster
+	m_prey_hunt_range = READ_IF_EXISTS(pSettings, r_float, section, "prey_hunt_range", 30.f);
+	m_prey_classes.clear();
+	pcstr prey = READ_IF_EXISTS(pSettings, r_string, section, "prey_classes", NULL);
+	if (prey)
+	{
+		u32 const prey_count = _GetItemCount(prey, ',');
+		m_prey_classes.resize(prey_count);
+		for (u32 i = 0; i < prey_count; ++i)
+		{
+			char prey_name[1024];
+			_GetItem(prey, i, prey_name, ',');
+			m_prey_classes[i] = prey_name;
+		}
+	}
+
 	m_feel_enemy_who_just_hit_max_distance = READ_IF_EXISTS(pSettings, r_float, section,
 	                                                        "feel_enemy_who_just_hit_max_distance",
 	                                                        detail::base_monster::feel_enemy_who_just_hit_max_distance);

@@ -550,6 +550,11 @@ public:
 	float get_feel_enemy_max_distance() { return m_feel_enemy_max_distance; }
 	virtual bool can_use_agressive_jump(const CObject*) { return false; }
 
+	bool is_prey(const CEntityAlive* entity);
+	bool hungry_for_prey();
+	bool has_prey_classes() const { return !m_prey_classes.empty(); }
+	float get_prey_hunt_range() const { return m_prey_hunt_range; }
+
 private:
 	steering_behaviour::manager* m_steer_manager;
 	squad_grouping_behaviour* m_grouping_behaviour; // freed by manager
@@ -563,6 +568,9 @@ private:
 	float m_feel_enemy_who_made_sound_max_distance;
 	float m_feel_enemy_who_just_hit_max_distance;
 	float m_feel_enemy_max_distance;
+
+	xr_vector<shared_str> m_prey_classes;
+	float m_prey_hunt_range;
 
 	//-------------------------------------------------------------------
 	// CBaseMonster's  Atack on Move Parameters
