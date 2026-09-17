@@ -179,6 +179,7 @@ public:
 	void ChangeSatiety(float v)
 	{
 		m_satiety = _min(1.f, m_satiety + v);
+		m_satiety = _max(0.f, m_satiety);
 	}
 
 	// ---------------------------------------------------------------------------------

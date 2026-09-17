@@ -94,6 +94,8 @@ float CBaseMonster::environment_sight_mult()
 		mult *= 1.f + (db().dark_eye_range_mult - 1.f) * dark;
 	}
 
+	// a bad key can no longer blind or over range the monster
+	clamp(mult, 0.05f, 5.f);
 	return mult;
 }
 
@@ -113,6 +115,8 @@ float CBaseMonster::environment_hear_mult()
 		mult *= 1.f + (db().rain_hear_mult - 1.f) * rain;
 	}
 
+	// a bad key can no longer deafen or over range the monster
+	clamp(mult, 0.05f, 5.f);
 	return mult;
 }
 
@@ -131,7 +135,6 @@ void CBaseMonster::update_range_fov(float& new_range, float& new_fov, float star
 	if (g_ai_monster_log)
 		Msg("[MENV] %s range=%3.2f mult=%3.2f", *cNameSect(), new_range, mult);
 }
-
 CBaseMonster::CBaseMonster() : m_psy_aura(this, "psy"),
                                m_fire_aura(this, "fire"),
                                m_radiation_aura(this, "radiation"),
