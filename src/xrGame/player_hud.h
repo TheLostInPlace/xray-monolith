@@ -256,7 +256,8 @@ struct hud_offset
 		ypr.mul(PI / 180.f);
 
 		Fmatrix full;
-		full.setHPB(ypr.x, ypr.y, ypr.z);
+		// rotation signs match aim_hud_offset_rot
+		full.setHPB(-ypr.x, -ypr.y, -ypr.z);
 
 		Fquaternion qA; qA.identity();
 		Fquaternion qB; qB.set(full);
