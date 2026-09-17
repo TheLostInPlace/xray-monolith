@@ -451,6 +451,11 @@ void CBaseMonster::settings_read(CInifile const* ini, LPCSTR section, SMonsterSe
 	if (ini->line_exist(section, "anomaly_detect_always"))
 		data.anomaly_detect_always = !!ini->r_bool(section, "anomaly_detect_always");
 
+	// stock abilities aim at the actor only
+	if (ini == pSettings) data.ability_target_any_enemy = false;
+	if (ini->line_exist(section, "ability_target_any_enemy"))
+		data.ability_target_any_enemy = !!ini->r_bool(section, "ability_target_any_enemy");
+
 	// 1.0 keeps the stock sight and hearing ranges
 	if (ini == pSettings)
 	{
