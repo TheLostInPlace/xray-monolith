@@ -8,6 +8,11 @@ extern Fvector get_valid_position(const CEntity* entity, const Fvector& actual_p
 // возвращает true, если объект entity находится на ноде
 extern bool object_position_valid(const CEntity* entity);
 
+class CBaseMonster;
+class CEntityAlive;
+// the enemy an ability aims at, the actor unless the species targets any enemy
+extern CEntityAlive* ability_target(CBaseMonster* monster);
+
 IC Fvector random_position(const Fvector& center, float R)
 {
 	Fvector v;

@@ -333,4 +333,5 @@ private:
 	void tele_fire_objects();
 
 	bool trace_object(CObject* obj, const Fvector& target);
+	CEntityAlive* target() { return ability_target(m_object); }
 };

@@ -53,7 +53,7 @@ void CPolterTele::update_schedule()
 	if (!m_object->g_Alive() || m_object->get_actor_ignore())
 		return;
 
-	Fvector const actor_pos = Actor()->Position();
+	Fvector const actor_pos = target()->Position();
 	float const dist2actor = actor_pos.distance_to(m_object->Position());
 
 	if (dist2actor > m_pmt_distance)
@@ -183,7 +183,7 @@ bool CPolterTele::trace_object(CObject* obj, const Fvector& target)
 	collide::rq_result l_rq;
 	if (Level().ObjectSpace.RayPick(trace_from, dir, range, collide::rqtBoth, l_rq, obj))
 	{
-		if (l_rq.O == Actor()) return true;
+		if (l_rq.O == this->target()) return true;
 	}
 
 	return false;
@@ -215,9 +215,9 @@ void CPolterTele::tele_find_objects(xr_vector<CObject*>& objects, const Fvector&
 
 
 		Fvector center;
-		Actor()->Center(center);
+		target()->Center(center);
 
-		if (trace_object(obj, center) || trace_object(obj, get_head_position(Actor())))
+		if (trace_object(obj, center) || trace_object(obj, get_head_position(target())))
 			objects.push_back(obj);
 	}
 }
@@ -229,15 +229,15 @@ bool CPolterTele::tele_raise_objects()
 	tele_objects.reserve(20);
 
 	// получить список объектов вокруг врага
-	tele_find_objects(tele_objects, Actor()->Position());
+	tele_find_objects(tele_objects, target()->Position());
 
 	// получить список объектов вокруг монстра
 	tele_find_objects(tele_objects, m_object->Position());
 
 	// получить список объектов между монстром и врагом
-	float dist = Actor()->Position().distance_to(m_object->Position());
+	float dist = target()->Position().distance_to(m_object->Position());
 	Fvector dir;
-	dir.sub(Actor()->Position(), m_object->Position());
+	dir.sub(target()->Position(), m_object->Position());
 	dir.normalize();
 
 	Fvector pos;
@@ -246,7 +246,7 @@ bool CPolterTele::tele_raise_objects()
 
 	// сортировать и оставить только необходимое количество объектов
 	std::sort(tele_objects.begin(), tele_objects.end(),
-	          best_object_predicate2(m_object->Position(), Actor()->Position()));
+	          best_object_predicate2(m_object->Position(), target()->Position()));
 
 	// оставить уникальные объекты
 	tele_objects.erase(
@@ -330,7 +330,7 @@ void CPolterTele::tele_fire_objects()
 			CPhysicsShellHolder* hobj = tele_object.get_object();
 			VERIFY(hobj);
 
-            const Fvector enemy_pos = get_head_position(Actor());
+            const Fvector enemy_pos = get_head_position(target());
             const float fire_time = hobj->Position().distance_to(enemy_pos) / m_pmt_fly_velocity;
 			hobj->set_collision_hit_callback(xr_new<SCollisionHitCallback>(m_object, m_pmt_object_collision_damage));
 			m_object->CTelekinesis::fire_t(hobj, enemy_pos, fire_time);

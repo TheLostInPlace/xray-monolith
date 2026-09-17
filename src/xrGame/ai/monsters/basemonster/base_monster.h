@@ -55,6 +55,11 @@ namespace debug { class text_tree; }
 
 class anti_aim_ability;
 
+// monster diagnostic log and the alternate behaviour kill switch
+extern int g_ai_monster_log;
+extern int g_ai_monster_alt;
+extern int g_ai_monster_tube_abort_lost_target;
+
 class CBaseMonster : public CCustomMonster, public CStepManager
 {
 protected:
@@ -110,6 +115,9 @@ public:
 
 	virtual void UpdateCL();
 	virtual void shedule_Update(u32 dt);
+	virtual void update_range_fov(float& new_range, float& new_fov, float start_range, float start_fov);
+	float environment_sight_mult();
+	float environment_hear_mult();
 
 	virtual void InitThink()
 	{
@@ -166,10 +174,12 @@ public:
 	}
 
 	virtual void on_before_sell(CInventoryItem* item);
-	float GetSatiety() { return 0.5f; }
+	float GetSatiety() { return (db().satiety_decay_per_sec > 0.f) ? m_satiety : 0.5f; }
 
 	void ChangeSatiety(float v)
 	{
+		m_satiety = _min(1.f, m_satiety + v);
+		m_satiety = _max(0.f, m_satiety);
 	}
 
 	// ---------------------------------------------------------------------------------
@@ -306,6 +316,7 @@ public:
 	CMonsterCorpseManager CorpseMan;
 
 	const CEntityAlive* EatedCorpse;
+	float m_satiety;
 	// Lain: added
 	bool check_eated_corpse_draggable();
 	virtual bool is_base_monster_with_enemy() { return EnemyMan.get_enemy() != NULL; }
@@ -541,6 +552,11 @@ public:
 	float get_feel_enemy_max_distance() { return m_feel_enemy_max_distance; }
 	virtual bool can_use_agressive_jump(const CObject*) { return false; }
 
+	bool is_prey(const CEntityAlive* entity);
+	bool hungry_for_prey();
+	bool has_prey_classes() const { return !m_prey_classes.empty(); }
+	float get_prey_hunt_range() const { return m_prey_hunt_range; }
+
 private:
 	steering_behaviour::manager* m_steer_manager;
 	squad_grouping_behaviour* m_grouping_behaviour; // freed by manager
@@ -554,6 +570,9 @@ private:
 	float m_feel_enemy_who_made_sound_max_distance;
 	float m_feel_enemy_who_just_hit_max_distance;
 	float m_feel_enemy_max_distance;
+
+	xr_vector<shared_str> m_prey_classes;
+	float m_prey_hunt_range;
 
 	//-------------------------------------------------------------------
 	// CBaseMonster's  Atack on Move Parameters

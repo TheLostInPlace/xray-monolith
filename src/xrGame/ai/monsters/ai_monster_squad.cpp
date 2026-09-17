@@ -46,8 +46,16 @@ void CMonsterSquad::RemoveMember(CEntity* pE)
 	// если удаляемый елемент является лидером - переназначить лидера
 	if (leader == pE)
 	{
-		if (m_goals.empty()) leader = 0;
-		else leader = m_goals.begin()->first;
+		leader = 0;
+
+		// the member with the most health takes over
+		for (MEMBER_GOAL_MAP_IT it = m_goals.begin(); it != m_goals.end(); it++)
+			if (!leader || (it->first->GetfHealth() > leader->GetfHealth()))
+				leader = it->first;
+
+		extern int g_ai_monster_log;
+		if (g_ai_monster_log && leader)
+			Msg("[MPACK] squad leader %s hands over to %s", pE->cNameSect().c_str(), leader->cNameSect().c_str());
 	}
 
 	// усли последний элемент, очистить залоченные каверы

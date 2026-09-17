@@ -4,6 +4,8 @@
 
 class CPsyHitEffectorCam;
 class CPsyHitEffectorPP;
+class CEntityAlive;
+extern CEntityAlive* ability_target(CBaseMonster* monster);
 
 class CControllerPsyHit : public CControl_ComCustom<>
 {
@@ -29,6 +31,12 @@ class CControllerPsyHit : public CControl_ComCustom<>
 
 	// internal flag if weapon was hidden
 	bool m_blocked;
+
+	// true once this tube put the actor side up, so only it tears down the actor hud and effector
+	bool m_at_actor;
+
+	// the object this tube installed against, the tube commits to it for damage and teardown
+	u16 m_tube_target_id;
 
 	u32 m_time_last_tube;
 
@@ -57,4 +65,6 @@ private:
 	void hit();
 	bool check_conditions_final();
 	bool see_enemy();
+	CEntityAlive* tube_target();
+	CEntityAlive* target() { return ability_target(m_object); }
 };

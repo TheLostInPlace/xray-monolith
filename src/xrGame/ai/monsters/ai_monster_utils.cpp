@@ -6,6 +6,7 @@
 #include "../../level_graph.h"
 #include "../../../Include/xrRender/Kinematics.h"
 #include "basemonster/base_monster.h"
+#include "../../actor.h"
 // проверить, находится ли объект entity на ноде
 // возвращает позицию объекта, если он находится на ноде, или центр его ноды
 Fvector get_valid_position(const CEntity* entity, const Fvector& actual_position)
@@ -50,4 +51,20 @@ Fvector get_head_position(CObject* object)
 	}
 
 	return get_bone_position(object, bone_name);
+}
+
+CEntityAlive* ability_target(CBaseMonster* monster)
+{
+	if (g_ai_monster_alt && monster->db().ability_target_any_enemy)
+	{
+		CEntityAlive* const enemy = const_cast<CEntityAlive*>(monster->EnemyMan.get_enemy());
+		if (enemy && enemy->g_Alive())
+		{
+			// only a target stock would not have picked says the addition fired
+			if (g_ai_monster_log && enemy != Actor())
+				Msg("[MABIL] %s targets %s", monster->cNameSect().c_str(), enemy->cNameSect().c_str());
+			return enemy;
+		}
+	}
+	return Actor();
 }

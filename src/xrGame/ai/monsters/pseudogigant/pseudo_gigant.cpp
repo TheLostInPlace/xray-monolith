@@ -372,47 +372,55 @@ void CPseudoGigant::on_threaten_execute()
 	// играть партиклы
 	PlayParticles(m_kick_particles, pos, Direction());
 
-	CActor* pA = const_cast<CActor *>(smart_cast<const CActor *>(EnemyMan.get_enemy()));
-	if (!pA) return;
-	if ((pA->MovingState() & ACTOR_DEFS::mcJump) != 0) return;
-    if (pseudogiantDodgeWhileFalling && (pA->MovingState() & ACTOR_DEFS::mcFall) != 0) return;
+	// the stomp reaches any enemy when the species key is set
+	CEntityAlive* target = const_cast<CEntityAlive*>(EnemyMan.get_enemy());
+	CActor* pA = smart_cast<CActor*>(target);
+	if (!(g_ai_monster_alt && db().ability_target_any_enemy))
+		target = pA;
+	if (!target) return;
+	if (pA && (pA->MovingState() & ACTOR_DEFS::mcJump) != 0) return;
+    if (pA && pseudogiantDodgeWhileFalling && (pA->MovingState() & ACTOR_DEFS::mcFall) != 0) return;
 
-	float dist_to_enemy = pA->Position().distance_to(Position());
+	float dist_to_enemy = target->Position().distance_to(Position());
 	float hit_value;
 	hit_value = m_kick_damage - m_kick_damage * dist_to_enemy / m_threaten_dist_max;
 	clamp(hit_value, 0.f, 1.f);
 
-	// запустить эффектор
-	Actor()->Cameras().AddCamEffector(xr_new<CMonsterEffectorHit>(m_threaten_effector.ce_time,
-	                                                              m_threaten_effector.ce_amplitude * hit_value,
-	                                                              m_threaten_effector.ce_period_number,
-	                                                              m_threaten_effector.ce_power * hit_value));
-	Actor()->Cameras().AddPPEffector(xr_new<CMonsterEffector>(m_threaten_effector.ppi, m_threaten_effector.time,
-	                                                          m_threaten_effector.time_attack,
-	                                                          m_threaten_effector.time_release, hit_value));
-
-	// развернуть камеру
-	if (pA->cam_Active())
+	if (pA)
 	{
-		pA->cam_Active()->Move(Random.randI(2) ? kRIGHT : kLEFT, Random.randF(0.3f * hit_value));
-		pA->cam_Active()->Move(Random.randI(2) ? kUP : kDOWN, Random.randF(0.3f * hit_value));
-	}
+		// запустить эффектор
+		Actor()->Cameras().AddCamEffector(xr_new<CMonsterEffectorHit>(m_threaten_effector.ce_time,
+		                                                              m_threaten_effector.ce_amplitude * hit_value,
+		                                                              m_threaten_effector.ce_period_number,
+		                                                              m_threaten_effector.ce_power * hit_value));
+		Actor()->Cameras().AddPPEffector(xr_new<CMonsterEffector>(m_threaten_effector.ppi, m_threaten_effector.time,
+		                                                          m_threaten_effector.time_attack,
+		                                                          m_threaten_effector.time_release, hit_value));
 
-	Actor()->lock_accel_for(m_time_kick_actor_slow_down);
+		// развернуть камеру
+		if (pA->cam_Active())
+		{
+			pA->cam_Active()->Move(Random.randI(2) ? kRIGHT : kLEFT, Random.randF(0.3f * hit_value));
+			pA->cam_Active()->Move(Random.randI(2) ? kUP : kDOWN, Random.randF(0.3f * hit_value));
+		}
+
+		Actor()->lock_accel_for(m_time_kick_actor_slow_down);
+	}
 
 	// Нанести хит
 	NET_Packet l_P;
 	SHit HS;
 
-	HS.GenHeader(GE_HIT, pA->ID()); //	u_EventGen	(l_P,GE_HIT, pA->ID());
+	HS.GenHeader(GE_HIT, target->ID()); //	u_EventGen	(l_P,GE_HIT, pA->ID());
 	HS.whoID = (ID()); //	l_P.w_u16	(ID());
 	HS.weaponID = (ID()); //	l_P.w_u16	(ID());
 	HS.dir = (Fvector().set(0.f, 1.f, 0.f)); //	l_P.w_dir	(Fvector().set(0.f,1.f,0.f));
 	HS.power = (hit_value); //	l_P.w_float	(m_kick_damage);
-	HS.boneID = (smart_cast<IKinematics*>(pA->Visual())->LL_GetBoneRoot());
+	HS.boneID = (smart_cast<IKinematics*>(target->Visual())->LL_GetBoneRoot());
 	//	l_P.w_s16	(smart_cast<IKinematics*>(pA->Visual())->LL_GetBoneRoot());
 	HS.p_in_bone_space = (Fvector().set(0.f, 0.f, 0.f)); //	l_P.w_vec3	(Fvector().set(0.f,0.f,0.f));
-	HS.impulse = (80 * pA->character_physics_support()->movement()->GetMass());
+	CCharacterPhysicsSupport* cps = target->character_physics_support();
+	HS.impulse = (cps ? 80 * cps->movement()->GetMass() : 0.f);
 	//	l_P.w_float	(20 * pA->movement_control()->GetMass());
 	HS.hit_type = (ALife::eHitTypeStrike); //	l_P.w_u16	( u16(ALife::eHitTypeWound) );
 	HS.Write_Packet(l_P);

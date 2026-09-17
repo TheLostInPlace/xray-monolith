@@ -109,6 +109,8 @@ void CChimera::Load(LPCSTR section)
 	m_attack_params.force_attack_distance = READ_IF_EXISTS(pSettings, r_float, section, "force_attack_distance", 8);
 	m_attack_params.num_attack_jumps = READ_IF_EXISTS(pSettings, r_u32, section, "num_attack_jumps", 4);
 	m_attack_params.num_prepare_jumps = READ_IF_EXISTS(pSettings, r_u32, section, "num_prepare_jumps", 2);
+
+	((CStateManagerChimera*)StateMan)->load_optional_states(section);
 #ifdef DEBUG
 	anim().accel_chain_test					();
 #endif

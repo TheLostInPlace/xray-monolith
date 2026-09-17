@@ -51,6 +51,8 @@
 #include "../../../level_debug.h"
 #include "../../../../xrEngine/xrLevel.h"
 #include "../../../level_graph.h"
+#include "../../../date_time.h"
+#include "../../../GamePersistent.h"
 #ifdef DEBUG
 #include "debug_text_tree.h"
 #endif
@@ -58,6 +60,81 @@
 #pragma warning (disable:4355)
 #pragma warning (push)
 
+int g_ai_monster_log = 0;
+int g_ai_monster_alt = 1;
+int g_ai_monster_tube_abort_lost_target = 0;
+
+// night follows the same hours the dog uses
+static bool env_is_night()
+{
+	u32 year = 0, month = 0, day = 0, hours = 0, mins = 0, secs = 0, milisecs = 0;
+	split_time(Level().GetGameTime(), year, month, day, hours, mins, secs, milisecs);
+	return (hours <= 6 || hours >= 21);
+}
+
+float CBaseMonster::environment_sight_mult()
+{
+	float mult = 1.f;
+
+	if (!fsimilar(db().night_eye_range_mult, 1.f) && env_is_night())
+		mult *= db().night_eye_range_mult;
+
+	if (!fsimilar(db().rain_eye_range_mult, 1.f))
+	{
+		float rain = GamePersistent().Environment().CurrentEnv->rain_density;
+		clamp(rain, 0.f, 1.f);
+		mult *= 1.f + (db().rain_eye_range_mult - 1.f) * rain;
+	}
+
+	if (!fsimilar(db().dark_eye_range_mult, 1.f) && renderable_ROS())
+	{
+		// same hemi level the engine reads for the indoor test
+		float dark = 1.f - renderable_ROS()->get_luminocity_hemi() / 0.05f;
+		clamp(dark, 0.f, 1.f);
+		mult *= 1.f + (db().dark_eye_range_mult - 1.f) * dark;
+	}
+
+	// a bad key can no longer blind or over range the monster
+	clamp(mult, 0.05f, 5.f);
+	return mult;
+}
+
+float CBaseMonster::environment_hear_mult()
+{
+	if (!g_ai_monster_alt) return 1.f;
+
+	float mult = 1.f;
+
+	if (!fsimilar(db().night_hear_mult, 1.f) && env_is_night())
+		mult *= db().night_hear_mult;
+
+	if (!fsimilar(db().rain_hear_mult, 1.f))
+	{
+		float rain = GamePersistent().Environment().CurrentEnv->rain_density;
+		clamp(rain, 0.f, 1.f);
+		mult *= 1.f + (db().rain_hear_mult - 1.f) * rain;
+	}
+
+	// a bad key can no longer deafen or over range the monster
+	clamp(mult, 0.05f, 5.f);
+	return mult;
+}
+
+// weather and light scale the stock sight range
+void CBaseMonster::update_range_fov(float& new_range, float& new_fov, float start_range, float start_fov)
+{
+	inherited::update_range_fov(new_range, new_fov, start_range, start_fov);
+
+	if (!g_ai_monster_alt) return;
+
+	float mult = environment_sight_mult();
+	if (fsimilar(mult, 1.f)) return;
+
+	new_range *= mult;
+
+	if (g_ai_monster_log)
+		Msg("[MENV] %s range=%3.2f mult=%3.2f", *cNameSect(), new_range, mult);
+}
 CBaseMonster::CBaseMonster() : m_psy_aura(this, "psy"),
                                m_fire_aura(this, "fire"),
                                m_radiation_aura(this, "radiation"),
@@ -102,6 +179,7 @@ CBaseMonster::CBaseMonster() : m_psy_aura(this, "psy"),
 	com_man().add_ability(ControlCom::eComCriticalWound);
 
 	EatedCorpse = NULL;
+	m_satiety = 1.f;
 
 	m_steer_manager = NULL;
 	m_grouping_behaviour = NULL;
@@ -388,6 +466,9 @@ void CBaseMonster::shedule_Update(u32 dt)
 
 	Morale.update_schedule(dt);
 
+	if (g_ai_monster_alt && (db().satiety_decay_per_sec > 0.f))
+		m_satiety = _max(0.f, m_satiety - db().satiety_decay_per_sec * float(dt) / 1000);
+
 	m_anomaly_detector->update_schedule();
 
 	m_pPhysics_support->in_shedule_Update(dt);
@@ -540,6 +621,27 @@ float CBaseMonster::evaluate(const CItemManager* manager, const CGameObject* obj
 	return (0.f);
 }
 
+bool CBaseMonster::is_prey(const CEntityAlive* entity)
+{
+	if (!g_ai_monster_alt || m_prey_classes.empty() || !entity) return false;
+
+	const CBaseMonster* other = smart_cast<const CBaseMonster*>(entity);
+	if (!other || (other == this)) return false;
+
+	for (u32 i = 0; i < m_prey_classes.size(); ++i)
+		if (m_prey_classes[i] == other->cNameSect()) return true;
+
+	return false;
+}
+
+bool CBaseMonster::hungry_for_prey()
+{
+	// without satiety decay the eat timer lives in the state and the hunt stays open
+	if (db().satiety_decay_per_sec > 0.f) return (m_satiety <= db().satiety_threshold);
+
+	return true;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 void CBaseMonster::ChangeTeam(int team, int squad, int group)
@@ -620,6 +722,17 @@ void CBaseMonster::set_state_sound(u32 type, bool once)
 
 			sound().play(type, 0, 0, delay);
 		}
+	}
+
+	if (g_ai_monster_log)
+	{
+		// logs the section, fsm state, sound branch and actor distance for every announce
+		LPCSTR branch = (type == MonsterSound::eMonsterSoundIdleDistant)
+			                ? "distant"
+			                : ((type == MonsterSound::eMonsterSoundIdle) ? "idle" : "other");
+		float dist = Actor() ? Actor()->Position().distance_to(Position()) : -1.f;
+		int state_id = StateMan ? int(StateMan->get_state_type()) : -1;
+		Msg("[MSND] %s state=%d branch=%s dist=%.1f", cNameSect().c_str(), state_id, branch, dist);
 	}
 
 	m_prev_sound_type = type;

@@ -219,7 +219,7 @@ void CPolterFlame::update_schedule()
 
 	bool const detected = m_object->get_current_detection_level() >= m_object->get_detection_success_level();
 
-	CEntityAlive const* enemy = Actor();
+	CEntityAlive const* enemy = ability_target(m_object);
 	// check if we can create another flame
 	if (m_object->g_Alive() &&
 		enemy &&

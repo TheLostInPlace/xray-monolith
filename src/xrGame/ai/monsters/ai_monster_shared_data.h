@@ -22,8 +22,16 @@ struct SMonsterSettings
 	u32 m_dwDayTimeBegin;
 	u32 m_dwDayTimeEnd;
 	float satiety_threshold;
+	float satiety_decay_per_sec;
+	bool anomaly_detect_always;
+	bool ability_target_any_enemy;
+	float night_eye_range_mult;
+	float night_hear_mult;
+	float rain_eye_range_mult;
+	float rain_hear_mult;
+	float dark_eye_range_mult;
 
-	// ----------------------------------------------------------- 
+	// -----------------------------------------------------------
 
 	float m_fSoundThreshold;
 

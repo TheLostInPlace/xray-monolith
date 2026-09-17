@@ -19,21 +19,37 @@
 
 #include "chimera_attack_state.h"
 
+extern int g_ai_monster_alt;
+extern int g_ai_monster_log;
+
 CStateManagerChimera::CStateManagerChimera(CChimera* obj) : inherited(obj)
 {
+	m_threaten_enabled = false;
+	m_hitted_enabled = false;
+
 	add_state(eStateRest, xr_new<CStateMonsterRest<CChimera>>(obj));
 	add_state(eStatePanic, xr_new<CStateMonsterPanic<CChimera>>(obj));
 	add_state(eStateAttack, xr_new<ChimeraAttackState<CChimera>>(obj));
 	add_state(eStateEat, xr_new<CStateMonsterEat<CChimera>>(obj));
 	add_state(eStateHearInterestingSound, xr_new<CStateMonsterHearInterestingSound<CChimera>>(obj));
 	add_state(eStateHearDangerousSound, xr_new<CStateMonsterHearDangerousSound<CChimera>>(obj));
-	// 	add_state(eStateHitted,					xr_new<CStateMonsterHitted<CChimera> >					(obj));
-	// 	add_state(eStateThreaten,				xr_new<CStateChimeraThreaten<CChimera> >				(obj));
 	// 	add_state(eStateCustom,					xr_new<CStateMonsterTestState<CChimera> >				(obj));
 }
 
 CStateManagerChimera::~CStateManagerChimera()
 {
+}
+
+void CStateManagerChimera::load_optional_states(LPCSTR section)
+{
+	m_threaten_enabled = !!READ_IF_EXISTS(pSettings, r_bool, section, "threaten_enabled", false);
+	m_hitted_enabled = !!READ_IF_EXISTS(pSettings, r_bool, section, "hitted_enabled", false);
+
+	if (m_threaten_enabled)
+		add_state(eStateThreaten, xr_new<CStateChimeraThreaten<CChimera>>(object));
+
+	if (m_hitted_enabled)
+		add_state(eStateHitted, xr_new<CStateMonsterHitted<CChimera>>(object));
 }
 
 void CStateManagerChimera::execute()
@@ -44,16 +60,28 @@ void CStateManagerChimera::execute()
 
 	if (enemy)
 	{
-		//if (check_state(eStateThreaten)) state_id = eStateThreaten;
-		switch (object->EnemyMan.get_danger_type())
+		if (m_threaten_enabled && g_ai_monster_alt && check_state(eStateThreaten))
 		{
-		case eStrong: state_id = eStatePanic;
-			break;
-		case eWeak: state_id = eStateAttack;
-			break;
+			state_id = eStateThreaten;
+			if (g_ai_monster_log)
+				Msg("[MCHIM] %s threaten", object->cNameSect().c_str());
 		}
-		// 	else if (object->HitMemory.is_hit()) {
-		// 		state_id = eStateHitted;
+		else
+		{
+			switch (object->EnemyMan.get_danger_type())
+			{
+			case eStrong: state_id = eStatePanic;
+				break;
+			case eWeak: state_id = eStateAttack;
+				break;
+			}
+		}
+	}
+	else if (m_hitted_enabled && g_ai_monster_alt && object->HitMemory.is_hit())
+	{
+		state_id = eStateHitted;
+		if (g_ai_monster_log)
+			Msg("[MCHIM] %s hitted", object->cNameSect().c_str());
 	}
 	else if (object->hear_dangerous_sound)
 	{

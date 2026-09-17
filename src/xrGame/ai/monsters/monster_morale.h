@@ -13,6 +13,12 @@ class CMonsterMorale
 	float m_v_stable;
 	float m_despondent_threshold;
 
+	// optional retreat state machine, off unless the section turns it on
+	bool m_fsm_enabled;
+	float m_take_heart_threshold;
+	float m_despondent_time;
+	float m_take_heart_time;
+	float m_state_time_left;
 
 	CBaseMonster* m_object;
 

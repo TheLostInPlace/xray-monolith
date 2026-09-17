@@ -39,6 +39,8 @@ class CAnomalyDetector
 	DEFINE_VECTOR(SAnomalyInfo, ANOMALY_INFO_VEC, ANOMALY_INFO_VEC_IT);
 	ANOMALY_INFO_VEC m_storage;
 
+	bool active();
+
 public:
 	CAnomalyDetector(CBaseMonster* monster);
 	virtual ~CAnomalyDetector();

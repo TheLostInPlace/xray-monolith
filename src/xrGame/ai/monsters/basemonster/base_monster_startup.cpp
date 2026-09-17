@@ -90,6 +90,22 @@ void CBaseMonster::Load(LPCSTR section)
 	m_melee_rotation_factor = READ_IF_EXISTS(pSettings, r_float, section, "Melee_Rotation_Factor", 1.5f);
 	berserk_always = !!READ_IF_EXISTS(pSettings, r_bool, section, "berserk_always", false);
 
+	// no listed sections means the monster never hunts another monster
+	m_prey_hunt_range = READ_IF_EXISTS(pSettings, r_float, section, "prey_hunt_range", 30.f);
+	m_prey_classes.clear();
+	pcstr prey = READ_IF_EXISTS(pSettings, r_string, section, "prey_classes", NULL);
+	if (prey)
+	{
+		u32 const prey_count = _GetItemCount(prey, ',');
+		m_prey_classes.resize(prey_count);
+		for (u32 i = 0; i < prey_count; ++i)
+		{
+			char prey_name[1024];
+			_GetItem(prey, i, prey_name, ',');
+			m_prey_classes[i] = prey_name;
+		}
+	}
+
 	m_feel_enemy_who_just_hit_max_distance = READ_IF_EXISTS(pSettings, r_float, section,
 	                                                        "feel_enemy_who_just_hit_max_distance",
 	                                                        detail::base_monster::feel_enemy_who_just_hit_max_distance);
@@ -287,6 +303,8 @@ void CBaseMonster::reinit()
 
 	Morale.reinit();
 
+	m_satiety = 1.f;
+
 	m_bDamaged = false;
 	m_bAngry = false;
 	m_bAggressive = false;
@@ -422,6 +440,41 @@ void CBaseMonster::settings_read(CInifile const* ini, LPCSTR section, SMonsterSe
 
 	READ_SETTINGS(data.m_fDistToCorpse, "distance_to_corpse", r_float, ini, section);
 	READ_SETTINGS(data.satiety_threshold, "satiety_threshold", r_float, ini, section);
+
+	// zero decay keeps the stock eat timer
+	if (ini == pSettings) data.satiety_decay_per_sec = 0.f;
+	if (ini->line_exist(section, "satiety_decay_per_sec"))
+		data.satiety_decay_per_sec = ini->r_float(section, "satiety_decay_per_sec");
+
+	// stock leaves the rest states owning the anomaly detector
+	if (ini == pSettings) data.anomaly_detect_always = false;
+	if (ini->line_exist(section, "anomaly_detect_always"))
+		data.anomaly_detect_always = !!ini->r_bool(section, "anomaly_detect_always");
+
+	// stock abilities aim at the actor only
+	if (ini == pSettings) data.ability_target_any_enemy = false;
+	if (ini->line_exist(section, "ability_target_any_enemy"))
+		data.ability_target_any_enemy = !!ini->r_bool(section, "ability_target_any_enemy");
+
+	// 1.0 keeps the stock sight and hearing ranges
+	if (ini == pSettings)
+	{
+		data.night_eye_range_mult = 1.f;
+		data.night_hear_mult = 1.f;
+		data.rain_eye_range_mult = 1.f;
+		data.rain_hear_mult = 1.f;
+		data.dark_eye_range_mult = 1.f;
+	}
+	if (ini->line_exist(section, "night_eye_range_mult"))
+		data.night_eye_range_mult = ini->r_float(section, "night_eye_range_mult");
+	if (ini->line_exist(section, "night_hear_mult"))
+		data.night_hear_mult = ini->r_float(section, "night_hear_mult");
+	if (ini->line_exist(section, "rain_eye_range_mult"))
+		data.rain_eye_range_mult = ini->r_float(section, "rain_eye_range_mult");
+	if (ini->line_exist(section, "rain_hear_mult"))
+		data.rain_hear_mult = ini->r_float(section, "rain_hear_mult");
+	if (ini->line_exist(section, "dark_eye_range_mult"))
+		data.dark_eye_range_mult = ini->r_float(section, "dark_eye_range_mult");
 
 	READ_SETTINGS(data.m_fDamagedThreshold, "DamagedThreshold", r_float, ini, section);
 
