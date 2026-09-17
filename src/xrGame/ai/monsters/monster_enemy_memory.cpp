@@ -135,7 +135,7 @@ void CMonsterEnemyMemory::update()
 
 			add_enemy(prey);
 
-			if (g_ai_monster_sound_log)
+			if (g_ai_monster_log)
 				Msg("[MPREY] %s hunts %s dist=%.1f", monster->cNameSect().c_str(),
 				    prey->cNameSect().c_str(), dist);
 		}

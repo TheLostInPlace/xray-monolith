@@ -20,6 +20,7 @@
 #include "../group_states/group_state_hear_danger_sound.h"
 
 extern int g_ai_monster_alt;
+extern int g_ai_monster_log;
 
 CStateManagerBoar::CStateManagerBoar(CAI_Boar* monster) : inherited(monster)
 {
@@ -94,8 +95,12 @@ void CStateManagerBoar::execute()
 
 	if (m_pack_fsm_enabled && g_ai_monster_alt)
 	{
+		u32 const replaced = state_id;
 		if (state_id == eStatePanic) state_id = eStatePackPanic;
 		else if (state_id == eStateHearDangerousSound) state_id = eStatePackHearDangerousSound;
+
+		if (g_ai_monster_log && state_id != replaced)
+			Msg("[MPACK] %s pack state replaces %d with %d", object->cNameSect().c_str(), replaced, state_id);
 	}
 
 	select_state(state_id);

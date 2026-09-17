@@ -42,7 +42,8 @@ void CMonsterMorale::on_hit()
 	{
 		set_despondent();
 		m_state_time_left = m_despondent_time;
-		Msg("[MMOR] %s despondent morale=%.2f", m_object->cNameSect().c_str(), m_morale);
+		if (g_ai_monster_log)
+			Msg("[MMOR] %s despondent morale=%.2f", m_object->cNameSect().c_str(), m_morale);
 	}
 }
 
@@ -54,7 +55,8 @@ void CMonsterMorale::on_attack_success()
 	{
 		set_take_heart();
 		m_state_time_left = m_take_heart_time;
-		Msg("[MMOR] %s take heart morale=%.2f", m_object->cNameSect().c_str(), m_morale);
+		if (g_ai_monster_log)
+			Msg("[MMOR] %s take heart morale=%.2f", m_object->cNameSect().c_str(), m_morale);
 	}
 }
 
@@ -66,7 +68,8 @@ void CMonsterMorale::update_schedule(u32 dt)
 		if (m_state_time_left <= 0.f)
 		{
 			set_normal_state();
-			Msg("[MMOR] %s stable morale=%.2f", m_object->cNameSect().c_str(), m_morale);
+			if (g_ai_monster_log)
+				Msg("[MMOR] %s stable morale=%.2f", m_object->cNameSect().c_str(), m_morale);
 		}
 	}
 

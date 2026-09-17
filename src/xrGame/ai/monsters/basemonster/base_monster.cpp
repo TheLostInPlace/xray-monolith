@@ -60,7 +60,7 @@
 #pragma warning (disable:4355)
 #pragma warning (push)
 
-int g_ai_monster_sound_log = 0;
+int g_ai_monster_log = 0;
 int g_ai_monster_alt = 1;
 int g_ai_monster_tube_abort_lost_target = 0;
 
@@ -128,7 +128,7 @@ void CBaseMonster::update_range_fov(float& new_range, float& new_fov, float star
 
 	new_range *= mult;
 
-	if (g_ai_monster_sound_log)
+	if (g_ai_monster_log)
 		Msg("[MENV] %s range=%3.2f mult=%3.2f", *cNameSect(), new_range, mult);
 }
 
@@ -719,7 +719,7 @@ void CBaseMonster::set_state_sound(u32 type, bool once)
 		}
 	}
 
-	if (g_ai_monster_sound_log)
+	if (g_ai_monster_log)
 	{
 		// logs the section, fsm state, sound branch and actor distance for every announce
 		LPCSTR branch = (type == MonsterSound::eMonsterSoundIdleDistant)

@@ -181,6 +181,10 @@ void CStateGroupEatAbstract::reselect_state()
 		m_time_last_eat = time();
 		object->ChangeSatiety(1.f);
 
+		extern int g_ai_monster_log;
+		if (g_ai_monster_log)
+			Msg("[MEAT] %s eats slice=1.00 satiety=%.2f", object->cNameSect().c_str(), object->GetSatiety());
+
 		if (!hungry())
 			select_state(eStateEat_WalkAway);
 		else

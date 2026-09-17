@@ -55,8 +55,8 @@ namespace debug { class text_tree; }
 
 class anti_aim_ability;
 
-// monster sound probe and the alternate behaviour kill switch
-extern int g_ai_monster_sound_log;
+// monster diagnostic log and the alternate behaviour kill switch
+extern int g_ai_monster_log;
 extern int g_ai_monster_alt;
 extern int g_ai_monster_tube_abort_lost_target;
 

@@ -38,6 +38,11 @@ void CStateGroupEatingAbstract::execute()
 		object->ChangeSatiety(object->db().m_fEatSlice);
 		corpse->m_fFood -= object->db().m_fEatSliceWeight;
 		time_last_eat = Device.dwTimeGlobal;
+
+		extern int g_ai_monster_log;
+		if (g_ai_monster_log)
+			Msg("[MEAT] %s eats slice=%.2f satiety=%.2f", object->cNameSect().c_str(),
+			    object->db().m_fEatSlice, object->GetSatiety());
 	}
 }
 

@@ -30,7 +30,11 @@ void CAnomalyDetector::reinit()
 // scanning stays on outside rest when the species key is set
 bool CAnomalyDetector::active()
 {
-	return m_active || (g_ai_monster_alt && m_object->db().anomaly_detect_always);
+	bool const alt_active = g_ai_monster_alt && m_object->db().anomaly_detect_always;
+	if (g_ai_monster_log && !m_active && alt_active)
+		Msg("[MANOM] %s detector stays on", m_object->cNameSect().c_str());
+
+	return m_active || alt_active;
 }
 
 void CAnomalyDetector::update_schedule()

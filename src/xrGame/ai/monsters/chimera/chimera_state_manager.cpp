@@ -20,6 +20,7 @@
 #include "chimera_attack_state.h"
 
 extern int g_ai_monster_alt;
+extern int g_ai_monster_log;
 
 CStateManagerChimera::CStateManagerChimera(CChimera* obj) : inherited(obj)
 {
@@ -62,6 +63,8 @@ void CStateManagerChimera::execute()
 		if (m_threaten_enabled && g_ai_monster_alt && check_state(eStateThreaten))
 		{
 			state_id = eStateThreaten;
+			if (g_ai_monster_log)
+				Msg("[MCHIM] %s threaten", object->cNameSect().c_str());
 		}
 		else
 		{
@@ -77,6 +80,8 @@ void CStateManagerChimera::execute()
 	else if (m_hitted_enabled && g_ai_monster_alt && object->HitMemory.is_hit())
 	{
 		state_id = eStateHitted;
+		if (g_ai_monster_log)
+			Msg("[MCHIM] %s hitted", object->cNameSect().c_str());
 	}
 	else if (object->hear_dangerous_sound)
 	{

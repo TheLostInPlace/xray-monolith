@@ -2738,10 +2738,10 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "ai_aim_inertia_time", (int*)&g_ai_aim_inertia_time, 0, 10000);
     CMD4(CCC_Integer, "ai_aim_queue_inertia_time", (int*)&g_ai_aim_queue_inertia_time, 0, 10000);
 
-    extern int g_ai_monster_sound_log;
+    extern int g_ai_monster_log;
     extern int g_ai_monster_alt;
     extern int g_ai_monster_tube_abort_lost_target;
-    CMD4(CCC_Integer, "ai_monster_sound_log", &g_ai_monster_sound_log, 0, 1);
+    CMD4(CCC_Integer, "ai_monster_log", &g_ai_monster_log, 0, 1);
     CMD4(CCC_Integer, "ai_monster_alt", &g_ai_monster_alt, 0, 1);
     CMD4(CCC_Integer, "ai_monster_tube_abort_lost_target", &g_ai_monster_tube_abort_lost_target, 0, 1);
 

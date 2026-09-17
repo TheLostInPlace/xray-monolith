@@ -59,7 +59,12 @@ CEntityAlive* ability_target(CBaseMonster* monster)
 	{
 		CEntityAlive* const enemy = const_cast<CEntityAlive*>(monster->EnemyMan.get_enemy());
 		if (enemy && enemy->g_Alive())
+		{
+			// only a target stock would not have picked says the addition fired
+			if (g_ai_monster_log && enemy != Actor())
+				Msg("[MABIL] %s targets %s", monster->cNameSect().c_str(), enemy->cNameSect().c_str());
 			return enemy;
+		}
 	}
 	return Actor();
 }
