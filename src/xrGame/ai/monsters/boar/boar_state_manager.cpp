@@ -16,9 +16,15 @@
 #include "../states/monster_state_hitted.h"
 #include "../states/monster_state_controlled.h"
 #include "../states/monster_state_help_sound.h"
+#include "../group_states/group_state_panic.h"
+#include "../group_states/group_state_hear_danger_sound.h"
+
+extern int g_ai_monster_alt;
 
 CStateManagerBoar::CStateManagerBoar(CAI_Boar* monster) : inherited(monster)
 {
+	m_pack_fsm_enabled = false;
+
 	add_state(eStateRest, xr_new<CStateMonsterRest<CAI_Boar>>(monster));
 	add_state(eStatePanic, xr_new<CStateMonsterPanic<CAI_Boar>>(monster));
 
@@ -32,6 +38,16 @@ CStateManagerBoar::CStateManagerBoar(CAI_Boar* monster) : inherited(monster)
 	add_state(eStateHitted, xr_new<CStateMonsterHitted<CAI_Boar>>(monster));
 	add_state(eStateControlled, xr_new<CStateMonsterControlled<CAI_Boar>>(monster));
 	add_state(eStateHearHelpSound, xr_new<CStateMonsterHearHelpSound<CAI_Boar>>(monster));
+}
+
+void CStateManagerBoar::load_optional_states(LPCSTR section)
+{
+	m_pack_fsm_enabled = !!READ_IF_EXISTS(pSettings, r_bool, section, "pack_fsm_enabled", false);
+
+	if (!m_pack_fsm_enabled) return;
+
+	add_state(eStatePackPanic, xr_new<CStateGroupPanic<CAI_Boar>>(object));
+	add_state(eStatePackHearDangerousSound, xr_new<CStateGroupHearDangerousSound<CAI_Boar>>(object));
 }
 
 void CStateManagerBoar::execute()
@@ -75,6 +91,12 @@ void CStateManagerBoar::execute()
 		}
 	}
 	else state_id = eStateControlled;
+
+	if (m_pack_fsm_enabled && g_ai_monster_alt)
+	{
+		if (state_id == eStatePanic) state_id = eStatePackPanic;
+		else if (state_id == eStateHearDangerousSound) state_id = eStatePackHearDangerousSound;
+	}
 
 	select_state(state_id);
 

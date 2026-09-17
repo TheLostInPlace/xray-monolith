@@ -16,10 +16,15 @@
 #include "../states/monster_state_hear_int_sound.h"
 #include "../states/monster_state_hear_danger_sound.h"
 #include "../states/monster_state_hitted.h"
+#include "../group_states/group_state_panic.h"
+#include "../group_states/group_state_hear_danger_sound.h"
 
+extern int g_ai_monster_alt;
 
 CStateManagerPseudodog::CStateManagerPseudodog(CAI_PseudoDog* monster) : inherited(monster)
 {
+	m_pack_fsm_enabled = false;
+
 	add_state(eStateRest, xr_new<CStateMonsterRest<CAI_PseudoDog>>(monster));
 	add_state(eStatePanic, xr_new<CStateMonsterPanic<CAI_PseudoDog>>(monster));
 
@@ -32,6 +37,16 @@ CStateManagerPseudodog::CStateManagerPseudodog(CAI_PseudoDog* monster) : inherit
 	add_state(eStateHearInterestingSound, xr_new<CStateMonsterHearInterestingSound<CAI_PseudoDog>>(monster));
 	add_state(eStateHearDangerousSound, xr_new<CStateMonsterHearDangerousSound<CAI_PseudoDog>>(monster));
 	add_state(eStateHitted, xr_new<CStateMonsterHitted<CAI_PseudoDog>>(monster));
+}
+
+void CStateManagerPseudodog::load_optional_states(LPCSTR section)
+{
+	m_pack_fsm_enabled = !!READ_IF_EXISTS(pSettings, r_bool, section, "pack_fsm_enabled", false);
+
+	if (!m_pack_fsm_enabled) return;
+
+	add_state(eStatePackPanic, xr_new<CStateGroupPanic<CAI_PseudoDog>>(object));
+	add_state(eStatePackHearDangerousSound, xr_new<CStateGroupHearDangerousSound<CAI_PseudoDog>>(object));
 }
 
 #define MIN_ANGRY_TIME		10000
@@ -69,6 +84,12 @@ void CStateManagerPseudodog::execute()
 	{
 		if (can_eat()) state_id = eStateEat;
 		else state_id = eStateRest;
+	}
+
+	if (m_pack_fsm_enabled && g_ai_monster_alt)
+	{
+		if (state_id == eStatePanic) state_id = eStatePackPanic;
+		else if (state_id == eStateHearDangerousSound) state_id = eStatePackHearDangerousSound;
 	}
 
 	select_state(state_id);

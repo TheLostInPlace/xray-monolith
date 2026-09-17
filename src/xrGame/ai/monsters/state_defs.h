@@ -146,6 +146,11 @@ enum EMonsterState
 
 	// -------------------------------------------------------------
 
+	eStatePackPanic = eGlobalState << 12,
+	eStatePackHearDangerousSound = eGlobalState << 13,
+
+	// -------------------------------------------------------------
+
 	eStateCustom = eGlobalState << 15,
 
 	eStateBurerScanning = eStateCustom | 1,
@@ -278,6 +283,8 @@ xr_string make_xrstr(EMonsterState state)
 	case eStateSquad_Rest_WalkAroundLeader: return "Squad_Rest_WalkAroundLeader";
 	case eStateSquad_RestFollow_Idle: return "Squad_RestFollow_Idle";
 	case eStateSquad_RestFollow_WalkToPoint: return "Squad_RestFollow_WalkToPoint";
+	case eStatePackPanic: return "PackPanic";
+	case eStatePackHearDangerousSound: return "PackHearDangerousSound";
 	case eStateCustom: return "Custom";
 	case eStateBurerScanning: return "BurerScanning";
 	case eStateCustomMoveToRestrictor: return "CustomMoveToRestrictor";

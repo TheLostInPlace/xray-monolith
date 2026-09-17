@@ -17,9 +17,15 @@
 #include "../states/state_test_look_actor.h"
 #include "../../../entitycondition.h"
 #include "../states/monster_state_help_sound.h"
+#include "../group_states/group_state_panic.h"
+#include "../group_states/group_state_hear_danger_sound.h"
+
+extern int g_ai_monster_alt;
 
 CStateManagerCat::CStateManagerCat(CCat* obj) : inherited(obj)
 {
+	m_pack_fsm_enabled = false;
+
 	add_state(eStateRest, xr_new<CStateMonsterRest<CCat>>(obj));
 	add_state(eStatePanic, xr_new<CStateMonsterPanic<CCat>>(obj));
 	add_state(eStateAttack, xr_new<CStateMonsterAttack<CCat>>(obj));
@@ -36,6 +42,16 @@ CStateManagerCat::CStateManagerCat(CCat* obj) : inherited(obj)
 
 CStateManagerCat::~CStateManagerCat()
 {
+}
+
+void CStateManagerCat::load_optional_states(LPCSTR section)
+{
+	m_pack_fsm_enabled = !!READ_IF_EXISTS(pSettings, r_bool, section, "pack_fsm_enabled", false);
+
+	if (!m_pack_fsm_enabled) return;
+
+	add_state(eStatePackPanic, xr_new<CStateGroupPanic<CCat>>(object));
+	add_state(eStatePackHearDangerousSound, xr_new<CStateGroupHearDangerousSound<CCat>>(object));
 }
 
 #define ROTATION_JUMP_DELAY		3000
@@ -78,6 +94,12 @@ void CStateManagerCat::execute()
 	{
 		if (can_eat()) state_id = eStateEat;
 		else state_id = eStateRest;
+	}
+
+	if (m_pack_fsm_enabled && g_ai_monster_alt)
+	{
+		if (state_id == eStatePanic) state_id = eStatePackPanic;
+		else if (state_id == eStateHearDangerousSound) state_id = eStatePackHearDangerousSound;
 	}
 
 	select_state(state_id);

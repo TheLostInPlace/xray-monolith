@@ -129,6 +129,8 @@ void CAI_Boar::Load(LPCSTR section)
 	anim().accel_chain_test		();
 #endif
 
+	((CStateManagerBoar*)StateMan)->load_optional_states(section);
+
 	PostLoad(section);
 }
 

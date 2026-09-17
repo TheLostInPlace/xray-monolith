@@ -85,6 +85,8 @@ void CCat::Load(LPCSTR section)
 	anim().accel_chain_test		();
 #endif
 
+	((CStateManagerCat*)StateMan)->load_optional_states(section);
+
 	PostLoad(section);
 }
 

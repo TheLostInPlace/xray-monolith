@@ -134,6 +134,8 @@ void CAI_PseudoDog::Load(LPCSTR section)
 	anim().accel_chain_test		();
 #endif
 
+	((CStateManagerPseudodog*)StateMan)->load_optional_states(section);
+
 	PostLoad(section);
 }
 
