@@ -37,6 +37,7 @@ void CControllerPsyHit::reinit()
 	m_time_last_tube = 0;
 	m_sound_state = eNone;
 	m_at_actor = false;
+	m_tube_target_id = u16(-1);
 }
 
 
@@ -89,7 +90,11 @@ void CControllerPsyHit::activate()
 
 	//////////////////////////////////////////////////////////////////////////
 	m_current_index = 0;
-	m_at_actor = target() && target()->cast_actor() != nullptr;
+
+	// a fresh tube owns nothing and has committed to nothing until it installs
+	m_at_actor = false;
+	m_tube_target_id = u16(-1);
+
 	play_anim();
 
 	m_blocked = false;
@@ -223,6 +228,15 @@ bool CControllerPsyHit::check_conditions_final()
 	return see_enemy();
 }
 
+CEntityAlive* CControllerPsyHit::tube_target()
+{
+	if (m_tube_target_id == u16(-1))
+		return nullptr;
+
+	CEntityAlive* const e = smart_cast<CEntityAlive*>(Level().Objects.net_Find(m_tube_target_id));
+	return (e && e->g_Alive()) ? e : nullptr;
+}
+
 void CControllerPsyHit::death_glide_start()
 {
 	if (!check_conditions_final())
@@ -234,11 +248,21 @@ void CControllerPsyHit::death_glide_start()
 	CEntityAlive* const tgt = target();
 	const bool at_actor = tgt && tgt->cast_actor() != nullptr;
 
-	// the latch follows what this tube actually installs, stop() undoes exactly that
-	m_at_actor = at_actor;
+	// another tube already owns the actor, a second one would stack effectors
+	if (at_actor && Actor()->Cameras().GetCamEffector(eCEControllerPsyHit))
+	{
+		m_man->deactivate(this);
+		return;
+	}
+
+	// the tube commits to this target, the hit and the abort both read the latch
+	m_tube_target_id = tgt ? tgt->ID() : u16(-1);
 
 	if (at_actor)
 	{
+		// set once the actor side is really going up, stop() undoes exactly what this installed
+		m_at_actor = true;
+
 		HUD().SetRenderable(false);
 
 		if (CController* controller = smart_cast<CController*>(m_object))
@@ -246,10 +270,6 @@ void CControllerPsyHit::death_glide_start()
 			controller->CControlledActor::install();
 			controller->CControlledActor::dont_need_turn();
 		}
-
-		// Start effector
-		CEffectorCam* ce = Actor()->Cameras().GetCamEffector(eCEControllerPsyHit);
-		VERIFY(!ce);
 	}
 
     // demonized: replace m_object->Position() with position of eye bone
@@ -342,13 +362,16 @@ void CControllerPsyHit::death_glide_end()
 	CController* monster = smart_cast<CController *>(m_object);
 	monster->draw_fire_particles();
 
-	if (target()->cast_actor())
+	CEntityAlive* const tgt = tube_target();
+
+	if (tgt && tgt->cast_actor())
 	{
 		monster->m_sound_tube_hit_left.play_at_pos(Actor(), Fvector().set(-1.f, 0.f, 1.f), sm_2D);
 		monster->m_sound_tube_hit_right.play_at_pos(Actor(), Fvector().set(1.f, 0.f, 1.f), sm_2D);
 	}
 
-	m_object->Hit_Psy(target(), monster->m_tube_damage);
+	if (tgt)
+		m_object->Hit_Psy(tgt, monster->m_tube_damage);
 
 	m_time_last_tube = Device.dwTimeGlobal;
 	stop();
@@ -356,6 +379,14 @@ void CControllerPsyHit::death_glide_end()
 
 void CControllerPsyHit::update_frame()
 {
+	// experimental, drop the tube as soon as its target is gone instead of finishing it
+	if (g_ai_monster_alt && g_ai_monster_tube_abort_lost_target && m_tube_target_id != u16(-1) && !tube_target())
+	{
+		stop();
+		m_man->deactivate(this);
+		return;
+	}
+
 	//if (m_sound_state == eStart) {
 	//	CController *monster = smart_cast<CController *>(m_object);
 	//	if (!monster->m_sound_tube_start._feedback()) {

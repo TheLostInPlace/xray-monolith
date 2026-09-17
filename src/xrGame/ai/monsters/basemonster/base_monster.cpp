@@ -62,6 +62,7 @@
 
 int g_ai_monster_sound_log = 0;
 int g_ai_monster_alt = 1;
+int g_ai_monster_tube_abort_lost_target = 0;
 
 // night follows the same hours the dog uses
 static bool env_is_night()

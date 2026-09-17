@@ -58,6 +58,7 @@ class anti_aim_ability;
 // monster sound probe and the alternate behaviour kill switch
 extern int g_ai_monster_sound_log;
 extern int g_ai_monster_alt;
+extern int g_ai_monster_tube_abort_lost_target;
 
 class CBaseMonster : public CCustomMonster, public CStepManager
 {
