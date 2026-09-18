@@ -73,6 +73,7 @@ script_attachment::script_attachment(LPCSTR name, LPCSTR model_name)
 	m_bStopAtEndAnimIsRunning = false;
 	m_anim_end = 0;
 	m_type = eSA_World;
+	m_hud_shaders_type = eSA_undefined;
 	m_last_upd_frame = 0;
 	m_current_motion = "idle";
 	m_model_name = "";
@@ -180,6 +181,12 @@ void script_attachment::Update()
 {
 	if (m_last_upd_frame == Device.dwFrame) return;
 	m_last_upd_frame = Device.dwFrame;
+
+	if (m_hud_shaders_type != m_type && renderable.visual)
+	{
+		renderable.visual->SetHudShaders(m_type == eSA_HUD);
+		m_hud_shaders_type = m_type;
+	}
 
 	for (auto& pair : m_script_uis)
 	{
@@ -805,6 +812,7 @@ void script_attachment::LoadModel(LPCSTR model_name, bool keep_bc)
 	R_ASSERT(renderable.visual);
 	m_kinematics = renderable.visual->dcast_PKinematics();
 	R_ASSERT(m_kinematics);
+	m_hud_shaders_type = eSA_undefined;
 
 	spatial_move();
 
