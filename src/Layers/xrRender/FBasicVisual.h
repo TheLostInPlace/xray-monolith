@@ -69,6 +69,7 @@ public:
 	ref_shader replaced_shader; // held past a hud shader swap until the next one or destruction
 	s32 skinning;
     bool hud;
+	bool hud_def; // hud state at load, restored when the instance returns to the pool
 
 	virtual void Render(float LOD)
 	{

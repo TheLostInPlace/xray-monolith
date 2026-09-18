@@ -46,6 +46,7 @@ void dxRender_Visual::Load(const char* N, IReader* data, u32)
 	dbg_id = 1;
 	skinning = ::Render->m_skinning;
     hud = ::Render->hud_loading;
+	hud_def = hud;
 
 	// header
 	VERIFY(data);
@@ -208,4 +209,5 @@ void dxRender_Visual::Copy(dxRender_Visual* pFrom)
 	PCOPY(dbg_texture_def);
 	PCOPY(skinning);
     PCOPY(hud);
+	PCOPY(hud_def);
 }
