@@ -170,6 +170,25 @@ void dxRender_Visual::ResetShaderTexture()
 		SetShaderTexture(*dbg_shader_def, *dbg_texture_def);
 }
 
+void dxRender_Visual::SetHudShaders(bool hud_state)
+{
+    if (hud == hud_state)
+        return;
+
+    hud = hud_state;
+    if (dbg_shader.size())
+    {
+        s32 prev_skinning = ::Render->m_skinning;
+        bool prev_hud = ::Render->hud_loading;
+        replaced_shader = shader;
+        ::Render->m_skinning = skinning;
+        ::Render->hud_loading = hud;
+        shader.create(*dbg_shader, *dbg_texture);
+        ::Render->hud_loading = prev_hud;
+        ::Render->m_skinning = prev_skinning;
+    }
+}
+
 #define PCOPY(a)	a = pFrom->a
 
 void dxRender_Visual::Copy(dxRender_Visual* pFrom)

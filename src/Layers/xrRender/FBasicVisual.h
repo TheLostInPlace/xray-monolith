@@ -66,6 +66,7 @@ public:
 	u32 Type; // visual's type
 	vis_data vis; // visibility-data
 	ref_shader shader; // pipe state, shared
+	ref_shader replaced_shader; // held past a hud shader swap until the next one or destruction
 	s32 skinning;
     bool hud;
 
@@ -90,6 +91,7 @@ public:
 
 	virtual void SetShaderTexture(LPCSTR shader, LPCSTR texture);
 	virtual void ResetShaderTexture();
+	virtual void SetHudShaders(bool hud);
 
 	virtual vis_data& _BCL getVisData() { return vis; }
 	virtual u32 getType() { return Type; }

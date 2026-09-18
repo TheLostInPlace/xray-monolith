@@ -45,6 +45,7 @@ public:
 
 	virtual void SetShaderTexture(LPCSTR shader, LPCSTR texture) {};
 	virtual void ResetShaderTexture() {};
+	virtual void SetHudShaders(bool hud) {};
 	virtual void MarkAsHot(bool is_hot) {};				//--DSR-- HeatVision
 	virtual void MarkAsGlowing(bool is_glowing) {};		//--DSR-- SilencerOverheat
 

@@ -106,6 +106,7 @@ private:
 	u32 m_anim_end;
 
 	u16 m_type;
+	u16 m_hud_shaders_type;
 	script_attachment* m_parent_attachment;
 	CGameObject* m_parent_object;
 	bool m_parent_level;
