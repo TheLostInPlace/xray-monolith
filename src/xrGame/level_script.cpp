@@ -1571,6 +1571,12 @@ void reload_language()
 
 void hud_adj_offs(int off, int idx, float x, float y, float z)
 {
+	if (off < 0 || off > 1 || ((idx < 0 || idx > 12) && idx != 20))
+	{
+		Msg("! [hud_adjust] set_vector refused idx %d off %d", idx, off);
+		return;
+	}
+
 	// Script UI
 	if (idx == 20)
 	{
