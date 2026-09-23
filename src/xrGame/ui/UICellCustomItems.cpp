@@ -504,7 +504,7 @@ void CUIWeaponCellItem::Update()
 
 	if (object()->ScopeAttachable())
 	{
-		if (object()->IsScopeAttached())
+		if (object()->IsScopeAttached() && object()->HasValidScopeIndex())
 		{
 			if (!GetIcon(eScope) || bForceReInitAddons)
 			{

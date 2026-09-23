@@ -283,11 +283,15 @@ public:
 	//äëÿ îòîáðîàæåíèÿ èêîíîê àïãðåéäîâ â èíòåðôåéñå
 	int GetScopeX()
 	{
+		if (!HasValidScopeIndex())
+			return 0;
 		return pSettings->r_s32(m_scopes[m_cur_scope], "scope_x");
 	}
 
 	int GetScopeY()
 	{
+		if (!HasValidScopeIndex())
+			return 0;
 		return pSettings->r_s32(m_scopes[m_cur_scope], "scope_y");
 	}
 
@@ -318,7 +322,7 @@ public:
 
 	const shared_str GetScopeName() const
 	{
-		if (m_scopes.size() < 1)
+		if (!HasValidScopeIndex())
 		{
 			return {};
 		}
@@ -1034,6 +1038,7 @@ public:
 	DEFINE_VECTOR(shared_str, SCOPES_VECTOR, SCOPES_VECTOR_IT);
 	SCOPES_VECTOR m_scopes;
 	u8 m_cur_scope;
+	bool HasValidScopeIndex() const { return m_cur_scope < m_scopes.size(); }
 
 	bool m_altAimPos;
 	u8 m_zoomtype;

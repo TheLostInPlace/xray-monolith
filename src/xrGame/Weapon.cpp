@@ -334,7 +334,7 @@ void CWeapon::UpdateZoomParams() {
 		if (g_player_hud->m_adjust_mode)
 		{
 			m_zoom_params.m_fScopeZoomFactor = g_player_hud->m_adjust_zoom_factor[0] / zoom_multiple;
-		} else if (ALife::eAddonPermanent != m_eScopeStatus && 0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && m_scopes.size())
+		} else if (ALife::eAddonPermanent != m_eScopeStatus && 0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && HasValidScopeIndex())
 		{
 			m_zoom_params.m_fScopeZoomFactor = pSettings->r_float(GetScopeName(), "scope_zoom_factor") / zoom_multiple;
 			if (m_modular_attachments) {
@@ -374,7 +374,7 @@ void CWeapon::UpdateUIScope()
 	shared_str scope_tex_name;
 	if (m_zoomtype == 0)
 	{
-		if (0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && m_scopes.size())
+		if (0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && HasValidScopeIndex())
 		{
 			if (!m_primary_scope_tex_name || m_modular_attachments) {
 				m_primary_scope_tex_name = pSettings->r_string(GetScopeName(), "scope_texture");
@@ -433,7 +433,7 @@ void CWeapon::SwitchZoomType()
 {
 	if (!useSeparateUBGLKeybind)
     {
-		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
+		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && HasValidScopeIndex() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
 		{
             SetZoomTypeAndParams(1);
 		}
@@ -451,7 +451,7 @@ void CWeapon::SwitchZoomType()
 	}
     else
     {
-		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
+		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && HasValidScopeIndex() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
 		{
 			SetZoomTypeAndParams(1);
 		}
@@ -2209,7 +2209,7 @@ void CWeapon::reload(LPCSTR section)
 	else
 		m_can_be_strapped = false;
 
-	if (m_eScopeStatus == ALife::eAddonAttachable && m_scopes.size())
+	if (m_eScopeStatus == ALife::eAddonAttachable && HasValidScopeIndex())
 	{
 		m_addon_holder_range_modifier = READ_IF_EXISTS(pSettings, r_float, GetScopeName(), "holder_range_modifier",
 		                                               m_holder_range_modifier);
@@ -3080,7 +3080,7 @@ float CWeapon::Weight() const
 	{
 		res += pSettings->r_float(GetGrenadeLauncherName(), "inv_weight");
 	}
-	if (IsScopeAttached() && m_scopes.size())
+	if (IsScopeAttached() && HasValidScopeIndex())
 	{
 		res += pSettings->r_float(GetScopeName(), "inv_weight");
 	}
@@ -3297,7 +3297,7 @@ u32 CWeapon::Cost() const
 	{
 		res += pSettings->r_u32(GetGrenadeLauncherName(), "cost");
 	}
-	if (IsScopeAttached() && m_scopes.size())
+	if (IsScopeAttached() && HasValidScopeIndex())
 	{
 		res += pSettings->r_u32(GetScopeName(), "cost");
 	}

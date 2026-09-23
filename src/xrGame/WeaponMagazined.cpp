@@ -633,7 +633,7 @@ void CWeaponMagazined::on_a_hud_attach()
 
 	if (m_eScopeStatus == ALife::eAddonAttachable &&
 		0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope)
-		&& m_modular_attachments)
+		&& m_modular_attachments && HasValidScopeIndex())
 	{
 		if (!m_scopeItem) {
 			m_scopeItem = xr_new<CAnonHudItem>();
@@ -1323,7 +1323,7 @@ bool CWeaponMagazined::CanDetach(const char* item_section_name)
 {
 	if (m_eScopeStatus == ALife::eAddonAttachable &&
 		0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope)
-		&& (!m_modular_attachments || m_scopes[m_cur_scope] == item_section_name)) /* &&
+		&& (!m_modular_attachments || (HasValidScopeIndex() && m_scopes[m_cur_scope] == item_section_name))) /* &&
 																		   (m_scopes[cur_scope]->m_sScopeName	== item_section_name))*/
 	{
 		SCOPES_VECTOR_IT it = m_scopes.begin();
@@ -1512,7 +1512,8 @@ bool CWeaponMagazined::Detach(const char* item_section_name, bool b_spawn_item)
 extern int scope_2dtexactive; //crookr
 void CWeaponMagazined::InitAddons()
 {
-	if (IsScopeAttached())
+	if (IsScopeAttached()
+		&& (m_eScopeStatus != ALife::eAddonAttachable || HasValidScopeIndex()))
 	{
 		shared_str scope_tex_name;
 		if (m_eScopeStatus == ALife::eAddonAttachable)
@@ -1609,6 +1610,7 @@ void CWeaponMagazined::LoadSilencerKoeffs()
 void CWeaponMagazined::LoadScopeKoeffs()
 {
 	if (m_eScopeStatus == ALife::eAddonAttachable
+		&& HasValidScopeIndex()
 		&& (!m_modular_attachments || (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope)))
 	{
 		LPCSTR sect = GetScopeName().c_str();
