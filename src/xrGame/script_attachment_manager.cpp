@@ -168,7 +168,8 @@ void script_attachment::renderable_Render()
 
 void script_attachment::Render(IKinematics* model, Fmatrix* mat)
 {
-	if (!model || (m_bone_callbacks[0] && m_bone_callbacks[0]->m_bone_id != BI_NONE))
+	auto root_cb = m_bone_callbacks.find(0);
+	if (!model || (root_cb != m_bone_callbacks.end() && root_cb->second->m_bone_id != BI_NONE))
 		renderable.xform = *mat;
 	else
 		renderable.xform.mul_43(*mat, BoneTransform(model));
@@ -972,14 +973,16 @@ void script_attachment::SetBoneCallback(u16 bone_id, u16 parent_bone, bool overw
 		return;
 	}
 
-	if (m_bone_callbacks[bone_id])
+	auto it = m_bone_callbacks.find(bone_id);
+	if (it != m_bone_callbacks.end())
 	{
 		m_kinematics->LL_GetBoneInstance(bone_id).reset_callback();
-		m_bone_callbacks.erase(bone_id);
+		m_bone_callbacks.erase(it);
 	}
 
-	m_bone_callbacks[bone_id] = xr_new<script_attachment_bone_cb>(parent_bone, this, bone_id, overwrite);
-	m_kinematics->LL_GetBoneInstance(bone_id).set_callback(bctCustom, ScriptAttachmentBoneCallback, m_bone_callbacks[bone_id], overwrite);
+	script_attachment_bone_cb* cb = xr_new<script_attachment_bone_cb>(parent_bone, this, bone_id, overwrite);
+	m_bone_callbacks[bone_id] = cb;
+	m_kinematics->LL_GetBoneInstance(bone_id).set_callback(bctCustom, ScriptAttachmentBoneCallback, cb, overwrite);
 }
 
 void script_attachment::SetBoneCallback(u16 bone_id, const ::luabind::functor<Fmatrix>& func, bool overwrite)
@@ -990,24 +993,27 @@ void script_attachment::SetBoneCallback(u16 bone_id, const ::luabind::functor<Fm
 		return;
 	}
 
-	if (m_bone_callbacks[bone_id])
+	auto it = m_bone_callbacks.find(bone_id);
+	if (it != m_bone_callbacks.end())
 	{
 		m_kinematics->LL_GetBoneInstance(bone_id).reset_callback();
-		m_bone_callbacks.erase(bone_id);
+		m_bone_callbacks.erase(it);
 	}
 
-	m_bone_callbacks[bone_id] = xr_new<script_attachment_bone_cb>(func, this, bone_id, overwrite);
+	script_attachment_bone_cb* cb = xr_new<script_attachment_bone_cb>(func, this, bone_id, overwrite);
+	m_bone_callbacks[bone_id] = cb;
 	CBoneInstance& bInst = m_kinematics->LL_GetBoneInstance(bone_id);
-	bInst.set_callback(bctCustom, ScriptAttachmentBoneCallback, m_bone_callbacks[bone_id], overwrite);
-	(m_bone_callbacks[bone_id]->m_mat).set(GetBoneVisible(bone_id) ? bInst.mTransformHidden : bInst.mTransform);
+	bInst.set_callback(bctCustom, ScriptAttachmentBoneCallback, cb, overwrite);
+	(cb->m_mat).set(GetBoneVisible(bone_id) ? bInst.mTransformHidden : bInst.mTransform);
 }
 
 void script_attachment::RemoveBoneCallback(u16 bone_id)
 {
-	if (m_bone_callbacks[bone_id])
+	auto it = m_bone_callbacks.find(bone_id);
+	if (it != m_bone_callbacks.end())
 	{
 		m_kinematics->LL_GetBoneInstance(bone_id).reset_callback();
-		m_bone_callbacks.erase(bone_id);
+		m_bone_callbacks.erase(it);
 	}
 }
 
