@@ -40,8 +40,9 @@ void CDSGraphManager::r_dsgraph_render_lods(bool _setup_zb, bool _clear)
 	//Msg						("dbg_lods: shader[%X]",u32((void*)firstV->shader._get()));
 	//Msg						("dbg_lods: shader_E[%X]",u32((void*)cur_S._get()));
 
-	for (u32 i = 0; i < RGraph.mapLOD.size(); i++)
+	for (u32 i = 0; i < RGraph.mapLOD.size();)
 	{
+		const u32 batch_start = i;
 		const u32 iBatchSize = _min((u32)RGraph.mapLOD.size() - i, uiImpostersFit);
 		int cur_count = 0;
 		u32 vOffset;
@@ -119,7 +120,7 @@ void CDSGraphManager::r_dsgraph_render_lods(bool _setup_zb, bool _clear)
 		RCache.set_xform_world(Fidentity);
 		for (u32 uiPass = 0; uiPass < SHADER_PASSES_MAX; ++uiPass)
 		{
-			int current = 0;
+			int current = int(batch_start);
 			u32 vCurOffset = vOffset;
 
 			for (int& p_count : lstLODgroups)
