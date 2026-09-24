@@ -227,7 +227,7 @@ void CRender::render_lights(light_Package& LP)
 							L->GMLight.r_dsgraph_render_static(1, false);
 							L->GMLight.r_dsgraph_render_dynamic(1, true);
 					
-							L->GMLight.r_dsgraph_render_sorted();			// strict-sorted geoms
+							L->GMLight.r_dsgraph_render_sorted(false);
 						}
 					}
 					else if (L->flags.bVolumetric && ps_r2_ls_flags.test(R2FLAG_VOLUMETRIC_LIGHTS))
