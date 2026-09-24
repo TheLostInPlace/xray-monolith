@@ -83,6 +83,10 @@ void CRenderTarget::u_setrt(const ref_rt& _1, const ref_rt& _2, const ref_rt& _3
 	if (_4) RCache.set_RT(_4->pRT, 3);
 	else RCache.set_RT(NULL, 3);
 	RCache.set_ZB(zb);
+	gp_note_rt(_1);
+	gp_note_rt(_2);
+	gp_note_rt(_3);
+	gp_note_rt(_4);
 	//	RImplementation.rmNormal				();
 }
 
@@ -124,6 +128,9 @@ void CRenderTarget::u_setrt(const ref_rt& _1, const ref_rt& _2, const ref_rt& _3
 	if (_3) RCache.set_RT(_3->pRT, 2);
 	else RCache.set_RT(NULL, 2);
 	RCache.set_ZB(zb);
+	gp_note_rt(_1);
+	gp_note_rt(_2);
+	gp_note_rt(_3);
 	//	RImplementation.rmNormal				();
 }
 
@@ -162,6 +169,8 @@ void CRenderTarget::u_setrt(const ref_rt& _1, const ref_rt& _2, ID3DDepthStencil
 	if (_2) RCache.set_RT(_2->pRT, 1);
 	else RCache.set_RT(NULL, 1);
 	RCache.set_ZB(zb);
+	gp_note_rt(_1);
+	gp_note_rt(_2);
 	//	RImplementation.rmNormal				();
 }
 
@@ -176,6 +185,9 @@ void CRenderTarget::u_setrt(u32 W, u32 H, ID3DRenderTargetView* _1, ID3DRenderTa
 	RCache.set_RT(_2, 1);
 	RCache.set_RT(_3, 2);
 	RCache.set_ZB(zb);
+	gp_note_rtv(_1);
+	gp_note_rtv(_2);
+	gp_note_rtv(_3);
 	//	RImplementation.rmNormal				();
 }
 
@@ -370,6 +382,12 @@ CRenderTarget::CRenderTarget()
 	param_duality_v = 0.f;
 	param_noise_fps = 25.f;
 	param_noise_scale = 1.f;
+
+	m_gp_readers_stamp = u32(-1);
+	m_gp_readers = 0;
+	m_gp_readers_scope3 = false;
+	m_ssfx_temp_written = true;
+	m_ssfx_temp2_written = true;
 
 	im_noise_time = 1.0f / 100.0f; //Alundaio should be float?
 	im_noise_shift_w = 0;
@@ -1477,6 +1495,82 @@ void CRenderTarget::increment_light_marker()
 
 	if (dwLightMarkerID > iMaxMarkerValue)
 		reset_light_marker(true);
+}
+
+static bool gp_element_of(const ref_shader& S, const ShaderElement* E)
+{
+	if (!S)
+		return false;
+	for (u32 i = 0; i < SHADER_ELEMENTS_MAX; ++i)
+		if (S->E[i]._get() == E)
+			return true;
+	return false;
+}
+
+static const CTexture* gp_texture(const ref_rt& rt)
+{
+	return rt ? rt->pTexture._get() : nullptr;
+}
+
+extern std::atomic<bool> g_scope3_static;
+
+u32 CRenderTarget::gp_readers()
+{
+	const u32 stamp = DEV->_ElementStamp();
+	const bool scope3_static = g_scope3_static.load(std::memory_order_relaxed);
+	if (stamp == m_gp_readers_stamp && scope3_static == m_gp_readers_scope3)
+		return m_gp_readers;
+
+	const CTexture* t_temp = gp_texture(rt_Generic_temp);
+	const CTexture* t_gen2 = gp_texture(rt_Generic_2);
+	const CTexture* t_pp_bloom = gp_texture(rt_pp_bloom);
+	const CTexture* t_blur_4 = gp_texture(rt_blur_4);
+	const CTexture* t_blur_h_4 = gp_texture(rt_blur_h_4);
+	const CTexture* t_blur_8 = gp_texture(rt_blur_8);
+	const CTexture* t_blur_h_8 = gp_texture(rt_blur_h_8);
+	const ShaderElement* blur_v_4 = s_blur ? s_blur->E[3]._get() : nullptr;
+	const ShaderElement* blur_v_8 = s_blur ? s_blur->E[5]._get() : nullptr;
+	const ShaderElement* fog_blur_4 = s_ssfx_fog_scattering ? s_ssfx_fog_scattering->E[3]._get() : nullptr;
+
+	u32 readers = 0;
+	const bool scanned = DEV->_TryForEachElement([&](const ShaderElement* E)
+	{
+		// Reticle list elements while no static uses one and readers that always follow a fresh write
+		const bool scope_safe = (E->flags.iScopeLense == 3 && !scope3_static) || gp_element_of(s_ssfx_ssr, E) ||
+			gp_element_of(s_ssfx_volumetric_blur, E) || gp_element_of(s_combine_volumetric, E);
+
+		for (u32 p = 0; p < E->passes.size(); ++p)
+		{
+			const STextureList* T = E->passes[p]->T._get();
+			if (!T)
+				continue;
+			for (const auto& it : *T)
+			{
+				const CTexture* tex = it.second._get();
+				if (!tex)
+					continue;
+				if (!scope_safe && (tex == t_temp || tex == t_gen2))
+					readers |= gpr_scope_copy;
+				if (tex == t_temp)
+					readers |= gpr_generic_temp;
+				if (tex == t_pp_bloom)
+					readers |= gpr_pp_bloom;
+				// Vertical blur passes and the fog blur read targets written just before them
+				if ((tex == t_blur_4 && E != fog_blur_4) || (tex == t_blur_h_4 && E != blur_v_4))
+					readers |= gpr_blur_4;
+				if (tex == t_blur_8 || (tex == t_blur_h_8 && E != blur_v_8))
+					readers |= gpr_blur_8;
+			}
+		}
+	});
+
+	if (!scanned)
+		return gpr_scope_copy | gpr_generic_temp | gpr_pp_bloom | gpr_blur_4 | gpr_blur_8;
+
+	m_gp_readers_stamp = stamp;
+	m_gp_readers = readers;
+	m_gp_readers_scope3 = scope3_static;
+	return readers;
 }
 
 bool CRenderTarget::need_to_render_sunshafts()

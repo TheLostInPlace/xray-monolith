@@ -390,7 +390,39 @@ private:
 	//	Igor: used for volumetric lights
 	bool m_bHasActiveVolumetric;
 	bool m_bHasActiveVolumetric_spot;
+
+	u32 m_gp_readers_stamp;
+	u32 m_gp_readers;
+	bool m_gp_readers_scope3;
+	// Set by every engine write into the ssfx scratch targets since their last clear
+	bool m_ssfx_temp_written;
+	bool m_ssfx_temp2_written;
 public:
+	enum gp_reader_bits : u32
+	{
+		gpr_scope_copy = 1, // generic_temp or generic2 read outside the reticle list
+		gpr_generic_temp = 2,
+		gpr_pp_bloom = 4,
+		gpr_blur_4 = 8,
+		gpr_blur_8 = 16,
+	};
+	void gp_note_rtv(const ID3DRenderTargetView* v)
+	{
+		if (!v)
+			return;
+		if (rt_ssfx_temp && v == rt_ssfx_temp->pRT)
+			m_ssfx_temp_written = true;
+		else if (rt_ssfx_temp2 && v == rt_ssfx_temp2->pRT)
+			m_ssfx_temp2_written = true;
+	}
+	void gp_note_rt(const ref_rt& rt)
+	{
+		if (rt)
+			gp_note_rtv(rt->pRT);
+	}
+	bool gp_post_read(u32 reader) { return (gp_readers() & reader) != 0; }
+	u32 gp_readers();
+
 	CRenderTarget();
 	~CRenderTarget();
 	void accum_point_geom_create();

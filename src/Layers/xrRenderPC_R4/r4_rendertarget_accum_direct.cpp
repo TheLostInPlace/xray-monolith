@@ -1192,6 +1192,39 @@ void CRenderTarget::accum_direct_lum()
 	}
 }
 
+static bool gp_volsun_additive(const ShaderElement* E)
+{
+	if (E->passes.size() != 1)
+		return false;
+	const SPass* P = E->passes[0]._get();
+	if (!P->state || !P->state->state || !P->constants || !P->constants->get("sun_shafts_intensity"))
+		return false;
+
+	ID3D11BlendState* bs = P->state->state->GetBlendState();
+	ID3D11DepthStencilState* ds = P->state->state->GetDepthStencilState();
+	if (!bs || !ds)
+		return false;
+
+	D3D11_BLEND_DESC b;
+	bs->GetDesc(&b);
+	if (b.AlphaToCoverageEnable)
+		return false;
+	for (u32 i = 0; i < (b.IndependentBlendEnable ? 8u : 1u); ++i)
+	{
+		const D3D11_RENDER_TARGET_BLEND_DESC& rt = b.RenderTarget[i];
+		const bool color = !(rt.RenderTargetWriteMask & 7) || (rt.BlendEnable && rt.SrcBlend == D3D11_BLEND_ONE &&
+			rt.DestBlend == D3D11_BLEND_ONE && rt.BlendOp == D3D11_BLEND_OP_ADD);
+		const bool alpha = !(rt.RenderTargetWriteMask & 8) || (rt.BlendEnable && rt.SrcBlendAlpha == D3D11_BLEND_ONE &&
+			rt.DestBlendAlpha == D3D11_BLEND_ONE && rt.BlendOpAlpha == D3D11_BLEND_OP_ADD);
+		if (!color || !alpha)
+			return false;
+	}
+
+	D3D11_DEPTH_STENCIL_DESC d;
+	ds->GetDesc(&d);
+	return d.DepthWriteMask == D3D11_DEPTH_WRITE_MASK_ZERO && (!d.StencilEnable || !d.StencilWriteMask);
+}
+
 void CRenderTarget::accum_direct_volumetric(u32 sub_phase, const u32 Offset, const Fmatrix& mShadow)
 {
 	PIX_EVENT(accum_direct_volumetric);
@@ -1266,6 +1299,10 @@ void CRenderTarget::accum_direct_volumetric(u32 sub_phase, const u32 Offset, con
 		//	Use g_combine_2UV that was set up by accum_direct
 		//	RCache.set_Geometry			(g_combine_2UV);
 
+		// Read before the element binds its constants
+		const bool zero_before = ps_r__skip_unused_passes &&
+			g_pGamePersistent->Environment().CurrentEnv->m_fSunShaftsIntensity == 0.f;
+
 		// setup
 		//RCache.set_Element			(s_accum_direct_volumetric->E[sub_phase]);
 		RCache.set_Element(Element);
@@ -1335,7 +1372,15 @@ void CRenderTarget::accum_direct_volumetric(u32 sub_phase, const u32 Offset, con
 		// setup stencil: we have to draw to both lit and unlit pixels
 		//RCache.set_Stencil			(TRUE,D3DCMP_LESSEQUAL,dwLightMarkerID,0xff,0x00);
 		//if( ! RImplementation.o.dx10_msaa )
-		RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 8, 0, 16);
+		bool march = true;
+		if (ps_r__skip_unused_passes)
+		{
+			const bool zero = zero_before && g_pGamePersistent->Environment().CurrentEnv->m_fSunShaftsIntensity == 0.f;
+			const bool additive = gp_volsun_additive(Element._get());
+			march = !zero || !additive;
+		}
+		if (march)
+			RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 8, 0, 16);
 		/*
 	 else 
 	 {

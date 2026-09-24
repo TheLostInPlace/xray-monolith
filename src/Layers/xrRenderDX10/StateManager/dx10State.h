@@ -23,6 +23,9 @@ public:
 	void UpdateStencilRef(UINT Ref) { m_uiStencilRef = Ref; }
 	void UpdateAlphaRef(UINT Ref) { m_uiAlphaRef = Ref; }
 
+	ID3DBlendState* GetBlendState() const { return m_pBlendState; }
+	ID3DDepthStencilState* GetDepthStencilState() const { return m_pDepthStencilState; }
+
 	//	User restricted interface
 private:
 	typedef dx10SamplerStateCache::HArray tSamplerHArray;

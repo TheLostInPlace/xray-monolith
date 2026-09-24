@@ -84,6 +84,12 @@ void CRenderTarget::phase_blur()
 	w = float(Device.dwWidth) * 0.25f;
 	h = float(Device.dwHeight) * 0.25f;
 
+#if defined(USE_DX11)
+	const bool gp_post = ps_r__skip_unused_passes != 0;
+	const bool draw_4 = !gp_post || gp_post_read(gpr_blur_4);
+	const bool draw_8 = !gp_post || gp_post_read(gpr_blur_8);
+#endif
+
 #if defined(USE_DX10) || defined(USE_DX11)
 	u_setrt(rt_blur_h_4, 0, 0, 0);
 #else
@@ -104,6 +110,9 @@ void CRenderTarget::phase_blur()
 	RCache.set_Element(s_blur->E[2]);
 	RCache.set_c("blur_params", 1.0, 0.0, w, h);
 	RCache.set_Geometry(g_combine);
+#if defined(USE_DX11)
+	if (draw_4)
+#endif
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 	///////////////////////////////////////////////////////////////////////////////////
 	////Final blur
@@ -128,6 +137,9 @@ void CRenderTarget::phase_blur()
 	RCache.set_Element(s_blur->E[3]);
 	RCache.set_c("blur_params", 0.0, 1.0, w, h);
 	RCache.set_Geometry(g_combine);
+#if defined(USE_DX11)
+	if (draw_4)
+#endif
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 	///////////////////////////////////////////////////////////////////////////////////
 	////Horizontal blur
@@ -155,6 +167,9 @@ void CRenderTarget::phase_blur()
 	RCache.set_Element(s_blur->E[4]);
 	RCache.set_c("blur_params", 1.0, 0.0, w, h);
 	RCache.set_Geometry(g_combine);
+#if defined(USE_DX11)
+	if (draw_8)
+#endif
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 	///////////////////////////////////////////////////////////////////////////////////
 	////Final blur
@@ -179,6 +194,9 @@ void CRenderTarget::phase_blur()
 	RCache.set_Element(s_blur->E[5]);
 	RCache.set_c("blur_params", 0.0, 1.0, w, h);
 	RCache.set_Geometry(g_combine);
+#if defined(USE_DX11)
+	if (draw_8)
+#endif
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 	///////////////////////////////////////////////////////////////////////////////////
 };
@@ -476,6 +494,9 @@ void CRenderTarget::phase_ssfx_water_blur()
 	else
 	{
 		HW.pContext->CopyResource(rt_ssfx_temp2->pTexture->surface_get(), rt_ssfx_temp->pTexture->surface_get());
+#if defined(USE_DX11)
+		gp_note_rt(rt_ssfx_temp2);
+#endif
 
 		u_setrt(rt_ssfx_temp, 0, 0, NULL);
 		RCache.set_CullMode(CULL_NONE);

@@ -45,5 +45,9 @@ void CRenderTarget::phase_pp_bloom()
 	RCache.set_c("pp_bloom_thresh", ps_pp_bloom_thresh.x, ps_pp_bloom_thresh.y, ps_pp_bloom_thresh.z, ps_pp_bloom_thresh.w ); //Change to commands
 	RCache.set_c("pp_bloom_weight", ps_pp_bloom_weight.x, ps_pp_bloom_weight.y, ps_pp_bloom_weight.z, ps_pp_bloom_weight.w); //Change to commands blyad
 	RCache.set_Geometry(g_combine);
+#if defined(USE_DX11)
+	if (ps_r__skip_unused_passes && !gp_post_read(gpr_pp_bloom))
+		return;
+#endif
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 };
