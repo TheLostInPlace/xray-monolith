@@ -191,6 +191,7 @@ void CDSGraphManager::r_dsgraph_render_hud()
 	if (scope_3D_fake_enabled)
 	{
 		RCache.set_RT(RImplementation.Target->rt_ssfx_temp->pRT, 3); // Render scope_3D to any buffer
+		RImplementation.Target->gp_note_rt(RImplementation.Target->rt_ssfx_temp);
 
 		r_dsgraph_render_graph_sorted(RGraph.mapScopeHUD);
 

@@ -11,6 +11,17 @@
 
 using namespace R_dsgraph;
 
+#if defined(USE_DX11)
+// Set once a reticle list element is queued outside the reticle list, never cleared
+std::atomic<bool> g_scope3_static{ false };
+
+static inline void note_scope3_outside(const ShaderElement* E)
+{
+	if (ps_r__skip_unused_passes && E->flags.iScopeLense == 3 && !g_scope3_static.load(std::memory_order_relaxed))
+		g_scope3_static.store(true, std::memory_order_relaxed);
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Scene graph actual insertion and sorting ////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -71,6 +82,9 @@ void CDSGraphManager::r_dsgraph_insert_dynamic(dxRender_Visual *pVisual, Fmatrix
 
 	if (sh_d && sh_d->flags.bDistort && i_mask[sh_d->flags.iPriority/2])
 	{
+#if defined(USE_DX11)
+		note_scope3_outside(sh_d);
+#endif
 		if (i_mask[CDSGraphManager::fl_hud])
 			RGraph.mapHUDSorted.Distort.emplace_back(distSQ, SSA, val_pObject, pVisual, xform, sh_d, i_mask[CDSGraphManager::fl_hud]);
 		else
@@ -120,6 +134,8 @@ void CDSGraphManager::r_dsgraph_insert_dynamic(dxRender_Visual *pVisual, Fmatrix
 			return;
 		}
 	}
+	if (sh->flags.bEmissive && sh_d)
+		note_scope3_outside(sh_d);
 #endif
 	// HUD rendering
 	if (i_mask[CDSGraphManager::fl_hud])
@@ -300,13 +316,23 @@ void CDSGraphManager::r_dsgraph_insert_static(dxRender_Visual *pVisual)
 	// b) Should be rendered to special distort buffer in another pass
 	VERIFY(pVisual->shader._get());
 	if (sh_d && sh_d->flags.bDistort && i_mask[sh_d->flags.iPriority/2])
+	{
+#if defined(USE_DX11)
+		note_scope3_outside(sh_d);
+#endif
 		RGraph.mapStaticSorted.Distort.emplace_back(distSQ, SSA, nullptr, pVisual, &Fidentity, sh_d, false);
+	}
 
 	// Select shader
 	ShaderElement* sh = RImplementation.rimp_select_sh_static(pVisual, distSQ);
 
 	if (0 == sh)
 		return;
+#if defined(USE_DX11)
+	note_scope3_outside(sh);
+	if (sh->flags.bEmissive && sh_d)
+		note_scope3_outside(sh_d);
+#endif
 	u32 shader_priority = sh->flags.iPriority / 2;
 	if (!i_mask[shader_priority])
 		return;

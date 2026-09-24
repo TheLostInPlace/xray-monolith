@@ -201,9 +201,20 @@ void CRenderTarget::phase_heatvision()
 #if defined(USE_DX11)	//  Redotix99: for 3D Shader Based Scopes 		(sorry for using the nightvision phase file)
 void CRenderTarget::phase_3DSSReticle()
 {
-	HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
+	bool copy = true;
+	if (ps_r__skip_unused_passes)
+	{
+		const bool empty = RImplementation.GMBase.RGraph.mapScopeHUDSorted.empty();
+		const bool read = (gp_readers() & gpr_scope_copy) != 0;
+		copy = !empty || read;
+	}
 
-	HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0->pTexture->surface_get());
+	if (copy)
+	{
+		HW.pContext->CopyResource(rt_Generic_2->pTexture->surface_get(), RImplementation.Target->rt_Position->pTexture->surface_get());
+
+		HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0->pTexture->surface_get());
+	}
 
 	u_setrt(RImplementation.Target->rt_Generic_0, RImplementation.Target->rt_Position, 0, HW.pBaseZB);
 

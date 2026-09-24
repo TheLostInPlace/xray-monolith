@@ -157,6 +157,7 @@ ShaderElement* CResourceManager::_CreateElement(ShaderElement& S)
 	//N->_copy(S);
 	N->dwFlags |= xr_resource_flagged::RF_REGISTERED;
 	v_elements.push_back(N);
+	m_element_stamp.fetch_add(1, std::memory_order_release);
 	return N;
 }
 
@@ -164,7 +165,11 @@ void CResourceManager::_DeleteElement(const ShaderElement* S)
 {
 	xrCriticalSectionGuard guard(creationGuard);
 	if (0 == (S->dwFlags & xr_resource_flagged::RF_REGISTERED)) return;
-	if (reclaim(v_elements, S)) return;
+	if (reclaim(v_elements, S))
+	{
+		m_element_stamp.fetch_add(1, std::memory_order_release);
+		return;
+	}
 	Msg("! ERROR: Failed to find compiled 'shader-element'");
 }
 

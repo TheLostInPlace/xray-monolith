@@ -110,8 +110,20 @@ void CRenderTarget::phase_combine()
 		{
 			// Clear RT
 			FLOAT ColorRGBA[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-			HW.pContext->ClearRenderTargetView(rt_ssfx_temp->pRT, ColorRGBA);
-			HW.pContext->ClearRenderTargetView(rt_ssfx_temp2->pRT, ColorRGBA);
+			if (ps_r__skip_unused_passes)
+			{
+				if (m_ssfx_temp_written)
+					HW.pContext->ClearRenderTargetView(rt_ssfx_temp->pRT, ColorRGBA);
+				if (m_ssfx_temp2_written)
+					HW.pContext->ClearRenderTargetView(rt_ssfx_temp2->pRT, ColorRGBA);
+				m_ssfx_temp_written = false;
+				m_ssfx_temp2_written = false;
+			}
+			else
+			{
+				HW.pContext->ClearRenderTargetView(rt_ssfx_temp->pRT, ColorRGBA);
+				HW.pContext->ClearRenderTargetView(rt_ssfx_temp2->pRT, ColorRGBA);
+			}
 
 			if (RImplementation.o.ssfx_ao && ps_ssfx_ao.y > 0)
 			{
@@ -329,10 +341,13 @@ void CRenderTarget::phase_combine()
 	}
 
 	//Copy previous rt
-	if (!RImplementation.o.dx10_msaa)
-		HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0->pTexture->surface_get());
-	else
-		HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0_r->pTexture->surface_get());
+	if (!ps_r__skip_unused_passes || gp_post_read(gpr_generic_temp))
+	{
+		if (!RImplementation.o.dx10_msaa)
+			HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0->pTexture->surface_get());
+		else
+			HW.pContext->CopyResource(rt_Generic_temp->pTexture->surface_get(), rt_Generic_0_r->pTexture->surface_get());
+	}
 
 	if (RImplementation.o.ssfx_ssr && !Device.m_SecondViewport.IsSVPFrame())
 	{

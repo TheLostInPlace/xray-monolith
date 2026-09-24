@@ -6,6 +6,7 @@
 #define ResourceManagerH
 #pragma once
 
+#include	<atomic>
 #include	"shader.h"
 #include	"tss_def.h"
 #include	"TextureDescrManager.h"
@@ -87,6 +88,7 @@ private:
 	xr_vector<Shader*> v_shaders;
 
 	xr_vector<ref_texture> m_necessary;
+	std::atomic<u32> m_element_stamp{ 0 };
 	// misc
 	xrCriticalSection creationGuard;
 
@@ -194,6 +196,19 @@ public:
 
 	ShaderElement* _CreateElement(ShaderElement& L);
 	void _DeleteElement(const ShaderElement* L);
+
+	u32 _ElementStamp() const { return m_element_stamp.load(std::memory_order_acquire); }
+
+	template <typename F>
+	bool _TryForEachElement(F fn)
+	{
+		xrCriticalSectionTryGuard guard(creationGuard);
+		if (!guard.owns_lock())
+			return false;
+		for (ShaderElement* E : v_elements)
+			fn(E);
+		return true;
+	}
 
 	Shader* _cpp_Create(LPCSTR s_shader, LPCSTR s_textures = 0, LPCSTR s_constants = 0, LPCSTR s_matrices = 0);
 	Shader* _cpp_Create(IBlender* B, LPCSTR s_shader = 0, LPCSTR s_textures = 0, LPCSTR s_constants = 0,
