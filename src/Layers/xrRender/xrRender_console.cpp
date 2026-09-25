@@ -133,6 +133,7 @@ float ps_r__Detail_rainbow_hemi = 0.75f;
 int ps_r__detail_rows = 1;
 int ps_r__detail_shadow_cull = 1;
 int ps_r__detail_inst = 1;
+int ps_r__detail_inst_res = 1;
 int ps_r__skip_unused_passes = 1;
 
 float ps_r__Tree_w_rot = 10.0f;
@@ -1294,6 +1295,7 @@ void xrRender_initconsole()
 	CMD4(CCC_Integer, "r__detail_rows", &ps_r__detail_rows, 0, 1);
 	CMD4(CCC_Integer, "r__detail_shadow_cull", &ps_r__detail_shadow_cull, 0, 1);
 	CMD4(CCC_Integer, "r__detail_inst", &ps_r__detail_inst, 0, 1);
+	CMD4(CCC_Integer, "r__detail_inst_res", &ps_r__detail_inst_res, 0, 1);
 	CMD4(CCC_Integer, "r__skip_unused_passes", &ps_r__skip_unused_passes, 0, 1);
 
 #ifdef DEBUG
