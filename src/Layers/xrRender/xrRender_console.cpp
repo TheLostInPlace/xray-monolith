@@ -135,6 +135,7 @@ int ps_r__detail_shadow_cull = 1;
 int ps_r__detail_inst = 1;
 int ps_r__detail_inst_res = 1;
 int ps_r__detail_merge = 1;
+int ps_r__detail_occ = 1;
 int ps_r__skip_unused_passes = 1;
 
 float ps_r__Tree_w_rot = 10.0f;
@@ -1298,6 +1299,7 @@ void xrRender_initconsole()
 	CMD4(CCC_Integer, "r__detail_inst", &ps_r__detail_inst, 0, 1);
 	CMD4(CCC_Integer, "r__detail_inst_res", &ps_r__detail_inst_res, 0, 1);
 	CMD4(CCC_Integer, "r__detail_merge", &ps_r__detail_merge, 0, 1);
+	CMD4(CCC_Integer, "r__detail_occ", &ps_r__detail_occ, 0, 1);
 	CMD4(CCC_Integer, "r__skip_unused_passes", &ps_r__skip_unused_passes, 0, 1);
 
 #ifdef DEBUG
