@@ -294,7 +294,16 @@ void CDSGraphManager::r_dsgraph_render_sorted_hud()
 {
 	PROF_EVENT("r_dsgraph_render_sorted_hud");
 #if	RENDER==R_R4
-	HW.pContext->CopyResource(RImplementation.Target->rt_Accumulator->pSurface, RImplementation.Target->rt_Generic_0->pSurface);
+	{
+		// Copies the accumulator seed only when both targets share format, samples and size
+		auto* dst = (ID3DTexture2D*)RImplementation.Target->rt_Accumulator->pSurface;
+		auto* src = (ID3DTexture2D*)RImplementation.Target->rt_Generic_0->pSurface;
+		D3D_TEXTURE2D_DESC dd, sd;
+		dst->GetDesc(&dd);
+		src->GetDesc(&sd);
+		if (dd.Format == sd.Format && dd.SampleDesc.Count == sd.SampleDesc.Count && dd.Width == sd.Width && dd.Height == sd.Height)
+			HW.pContext->CopyResource(dst, src);
+	}
 #endif
 	CHudInitializer initializer(true);
 
