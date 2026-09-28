@@ -731,7 +731,8 @@ void CRenderTarget::accum_volumetric(light* L)
 
 		RCache.set_Geometry(g_accum_volumetric);
 		//	Igor: no need to do it per sub-sample. Plain AA will go just fine.
-		RCache.Render(D3DPT_TRIANGLELIST, 0, 0, iNumSlices * 4, 0, iNumSlices * 2);
+		const int iDrawSlices = _min(iNumSlices, VOLUMETRIC_SLICES);
+		RCache.Render(D3DPT_TRIANGLELIST, 0, 0, iDrawSlices * 4, 0, iDrawSlices * 2);
 
 		/*
 		if( !RImplementation.o.dx10_msaa )
