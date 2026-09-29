@@ -576,6 +576,8 @@ void CRenderTarget::phase_combine()
 		phase_dof();
 	}
 
+	// A stock lut shader copies RGB unchanged and the post combine rewrites alpha
+	if (!ps_r__skip_unused_passes || !m_lut_identity || RImplementation.o.dx10_msaa)
 	{
 		PIX_EVENT(phase_lut);
 		phase_lut();

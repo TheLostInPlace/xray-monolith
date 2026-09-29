@@ -54,6 +54,15 @@ void CRenderTarget::phase_dof()
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 	////////////////////////////////////////////////////////////////////////////
+#if defined(USE_DX11)
+	// A stock post_processing shader is a plain copy so rt_dof goes straight to rt_Generic_0
+	if (ps_r__skip_unused_passes && m_dof_copy_identity && !RImplementation.o.dx10_msaa)
+	{
+		HW.pContext->CopyResource(rt_Generic_0->pTexture->surface_get(), rt_dof->pTexture->surface_get());
+		return;
+	}
+#endif
+
 #if defined(USE_DX10) || defined(USE_DX11)
 	ref_rt& dest_rt = RImplementation.o.dx10_msaa ? rt_Generic : rt_Color;
 	u_setrt(dest_rt, nullptr, nullptr, nullptr);

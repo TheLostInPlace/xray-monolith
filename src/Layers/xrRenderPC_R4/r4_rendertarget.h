@@ -400,6 +400,9 @@ private:
 	u32 m_gp_readers_stamp;
 	u32 m_gp_readers;
 	bool m_gp_readers_scope3;
+	// Resolved lut and dof copy shaders are the stock plain copies
+	bool m_lut_identity;
+	bool m_dof_copy_identity;
 	// Set by every engine write into the ssfx scratch targets since their last clear
 	bool m_ssfx_temp_written;
 	bool m_ssfx_temp2_written;

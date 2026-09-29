@@ -36,6 +36,54 @@
 
 D3D_VIEWPORT custom_viewport[1] = { 0, 0, 0, 0, 0.f, 1.f };
 
+// Stock copy shaders the post chain can skip or fold when the resolved file still matches
+static const char* pp_lut_stock =
+	"#include \"common.h\" float4 main(p_screen I) : SV_Target { float3 image = s_image.Sample(smp_nofilter, I.tc0).xyz;"
+	" return float4(image, 1.0); }";
+static const char* post_processing_stock =
+	"#include \"common.h\" uniform Texture2D samplero_pepero; float4 main(p_screen I):SV_TARGET"
+	" { return samplero_pepero.Sample(smp_nofilter, I.tc0); }";
+
+// Compares the pixel shader the compiler would read against a stock text with whitespace ignored
+static bool pp_source_is(LPCSTR name, const char* stock)
+{
+	string_path path;
+	strconcat(sizeof(path), path, ::Render->getShaderPath(), name, ".ps");
+	FS.update_path(path, "$game_shaders$", path);
+	IReader* file = FS.r_open(path);
+	if (!file)
+		return false;
+
+	const char* src = (const char*)file->pointer();
+	const char* end = src + file->length();
+	if (end - src >= 3 && !memcmp(src, "\xEF\xBB\xBF", 3))
+		src += 3;
+
+	bool same;
+	for (;;)
+	{
+		while (src != end && isspace((u8)*src))
+			++src;
+		while (*stock && isspace((u8)*stock))
+			++stock;
+		if (src == end || !*stock)
+		{
+			same = src == end && !*stock;
+			break;
+		}
+		if (*src++ != *stock++)
+		{
+			same = false;
+			break;
+		}
+	}
+	FS.r_close(file);
+
+	if (same)
+		Msg("* [post] %s matches stock", name);
+	return same;
+}
+
 void CRenderTarget::set_viewport_size(ID3DDeviceContext * dev, float w, float h)
 {
 	custom_viewport[0].Width = w;
@@ -683,6 +731,7 @@ CRenderTarget::CRenderTarget()
 	s_blur.create(b_blur, "r2\\blur");
 	s_pp_bloom.create(b_pp_bloom, "r2\\pp_bloom");
 	s_dof.create(b_dof, "r2\\dof");
+	m_dof_copy_identity = pp_source_is("post_processing", post_processing_stock);
 	s_gasmask_drops.create(b_gasmask_drops, "r2\\gasmask_drops");
 	s_gasmask_dudv.create(b_gasmask_dudv, "r2\\gasmask_dudv");
 	s_nightvision.create(b_nightvision, "r2\\nightvision");
@@ -691,6 +740,7 @@ CRenderTarget::CRenderTarget()
 
 	s_heatvision.create(b_heatvision, "r2\\heatvision"); //--DSR-- HeatVision
 	s_lut.create(b_lut, "r2\\lut");
+	m_lut_identity = pp_source_is("pp_lut", pp_lut_stock);
 	// OCCLUSION
 	s_occq.create(b_occq, "r2\\occq");
 
