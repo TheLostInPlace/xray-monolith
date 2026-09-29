@@ -862,6 +862,7 @@ CRenderTarget::CRenderTarget()
 		s_accum_volume.create("accum_volumetric", "lights\\lights_spot01");
 		accum_volumetric_geom_create();
 		g_accum_volumetric.create(D3DFVF_XYZ, g_accum_volumetric_vb, g_accum_volumetric_ib);
+		g_accum_volumetric_full.create(D3DFVF_XYZ, g_accum_volumetric_full_vb, g_accum_volumetric_full_ib);
 	}
 
 

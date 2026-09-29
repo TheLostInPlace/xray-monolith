@@ -729,9 +729,10 @@ void CRenderTarget::accum_volumetric(light* L)
 
 		RCache.set_ColorWriteEnable(D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
 
-		RCache.set_Geometry(g_accum_volumetric);
+		const bool bFullSlices = ps_r__volumetric_full_slices && ps_ssfx_volumetric.x > 0;
+		RCache.set_Geometry(bFullSlices ? g_accum_volumetric_full : g_accum_volumetric);
 		//	Igor: no need to do it per sub-sample. Plain AA will go just fine.
-		const int iDrawSlices = _min(iNumSlices, VOLUMETRIC_SLICES);
+		const int iDrawSlices = _min(iNumSlices, bFullSlices ? VOLUMETRIC_SLICES_FULL : VOLUMETRIC_SLICES);
 		RCache.Render(D3DPT_TRIANGLELIST, 0, 0, iDrawSlices * 4, 0, iDrawSlices * 2);
 
 		/*
