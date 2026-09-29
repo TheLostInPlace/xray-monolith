@@ -200,6 +200,41 @@ void CRenderTarget::accum_volumetric_geom_create()
 
 		//		R_CHK				(HW.pDevice->CreateIndexBuffer(iCount*2,dwUsage,D3DFMT_INDEX16,D3DPOOL_MANAGED,&g_accum_volumetric_ib,0));
 	}
+
+	// VOLUMETRIC_SLICES_FULL quads for the SSS path
+	{
+		Slice pSlice[VOLUMETRIC_SLICES_FULL];
+
+		float t = 0;
+		float dt = 1.0f / (VOLUMETRIC_SLICES_FULL - 1);
+		for (int i = 0; i < VOLUMETRIC_SLICES_FULL; ++i)
+		{
+			pSlice[i].m_Vert[0] = Fvector().set(0, 0, t);
+			pSlice[i].m_Vert[1] = Fvector().set(0, 1, t);
+			pSlice[i].m_Vert[2] = Fvector().set(1, 0, t);
+			pSlice[i].m_Vert[3] = Fvector().set(1, 1, t);
+			t += dt;
+		}
+
+		R_CHK(dx10BufferUtils::CreateVertexBuffer(&g_accum_volumetric_full_vb, &pSlice, VOLUMETRIC_SLICES_FULL * 4 * 3 * 4));
+
+		const u32 iCount = VOLUMETRIC_SLICES_FULL * 6;
+		BYTE Datap[iCount * 2];
+
+		u16* pInd = (u16*)Datap;
+		for (u16 i = 0; i < VOLUMETRIC_SLICES_FULL; ++i, pInd += 6)
+		{
+			u16 basevert = i * 4;
+			pInd[0] = basevert;
+			pInd[1] = basevert + 1;
+			pInd[2] = basevert + 2;
+			pInd[3] = basevert + 2;
+			pInd[4] = basevert + 1;
+			pInd[5] = basevert + 3;
+		}
+
+		R_CHK(dx10BufferUtils::CreateIndexBuffer(&g_accum_volumetric_full_ib, &Datap, iCount * 2));
+	}
 }
 
 void CRenderTarget::accum_volumetric_geom_destroy()
@@ -212,4 +247,6 @@ void CRenderTarget::accum_volumetric_geom_destroy()
 	_SHOW_REF	("g_accum_volumetric_vb",g_accum_volumetric_vb);
 #endif // DEBUG
 	_RELEASE(g_accum_volumetric_vb);
+	_RELEASE(g_accum_volumetric_full_ib);
+	_RELEASE(g_accum_volumetric_full_vb);
 }

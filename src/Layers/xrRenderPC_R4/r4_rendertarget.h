@@ -10,6 +10,8 @@ class light;
 //#define DU_CONE_NUMFACES	32
 //	no less than 2
 #define	VOLUMETRIC_SLICES	100
+//	SSS volumetric slices, quality 5 draws all 120
+#define	VOLUMETRIC_SLICES_FULL	120
 
 class CRenderTarget : public IRender_Target
 {
@@ -310,6 +312,7 @@ private:
 	ref_geom g_accum_spot;
 	ref_geom g_accum_omnipart;
 	ref_geom g_accum_volumetric;
+	ref_geom g_accum_volumetric_full;
 
 	ID3DVertexBuffer* g_accum_point_vb;
 	ID3DIndexBuffer* g_accum_point_ib;
@@ -322,6 +325,9 @@ private:
 
 	ID3DVertexBuffer* g_accum_volumetric_vb;
 	ID3DIndexBuffer* g_accum_volumetric_ib;
+
+	ID3DVertexBuffer* g_accum_volumetric_full_vb;
+	ID3DIndexBuffer* g_accum_volumetric_full_ib;
 
 	// Bloom
 	ref_geom g_bloom_build;

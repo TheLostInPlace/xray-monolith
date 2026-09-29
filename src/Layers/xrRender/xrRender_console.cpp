@@ -142,6 +142,7 @@ float ps_r__detail_thin_start = 50.f;
 float ps_r__detail_thin_keep = 0.25f;
 float ps_r__detail_thin_band = 4.f;
 int ps_r__skip_unused_passes = 1;
+int ps_r__volumetric_full_slices = 1;
 
 float ps_r__Tree_w_rot = 10.0f;
 float ps_r__Tree_w_speed = 1.00f;
@@ -1311,6 +1312,7 @@ void xrRender_initconsole()
 	CMD4(CCC_Float, "r__detail_thin_keep", &ps_r__detail_thin_keep, 0.f, 1.f);
 	CMD4(CCC_Float, "r__detail_thin_band", &ps_r__detail_thin_band, 1.f, 250.f);
 	CMD4(CCC_Integer, "r__skip_unused_passes", &ps_r__skip_unused_passes, 0, 1);
+	CMD4(CCC_Integer, "r__volumetric_full_slices", &ps_r__volumetric_full_slices, 0, 1);
 
 #ifdef DEBUG
 	CMD4(CCC_Float,		"r__detail_l_ambient",	&ps_r__Detail_l_ambient,	.5f,	.95f	);
