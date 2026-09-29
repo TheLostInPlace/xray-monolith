@@ -8,7 +8,7 @@ using dx10StateUtils::operator==;
 dx10SamplerStateCache SSManager;
 
 dx10SamplerStateCache::dx10SamplerStateCache():
-	m_uiMaxAnisotropy(1), m_uiMipLODBias(0.0f)
+	m_uiMaxAnisotropy(1), m_uiCachedAnisotropy(1), m_uiMipLODBias(0.0f)
 {
 	static const int iMaxRSStates = 10;
 	m_StateArray.reserve(iMaxRSStates);
@@ -39,6 +39,8 @@ dx10SamplerStateCache::SHandle dx10SamplerStateCache::GetState(D3D_SAMPLER_DESC&
 		StateRecord rec;
 		rec.m_crc = crc;
 		CreateState(desc, &rec.m_pState);
+		rec.m_pAnisoStates[0] = rec.m_pAnisoStates[1] = 0;
+		rec.m_pAnisoStates[m_uiMaxAnisotropy != 1] = rec.m_pState;
 		hResult = m_StateArray.size();
 		m_StateArray.push_back(rec);
 	}
@@ -83,7 +85,8 @@ void dx10SamplerStateCache::ClearStateArray()
 {
 	for (u32 i = 0; i < m_StateArray.size(); ++i)
 	{
-		_RELEASE(m_StateArray[i].m_pState);
+		_RELEASE(m_StateArray[i].m_pAnisoStates[0]);
+		_RELEASE(m_StateArray[i].m_pAnisoStates[1]);
 	}
 
 	m_StateArray.clear_not_free();
@@ -179,6 +182,13 @@ void dx10SamplerStateCache::SetMaxAnisotropy(u32 uiMaxAniso)
 
 	m_uiMaxAnisotropy = uiMaxAniso;
 
+	//	States for 1 and for the last other level are kept, a new level rebuilds its set
+	const u32 slot = m_uiMaxAnisotropy != 1;
+	const bool rebuild = slot && m_uiMaxAnisotropy != m_uiCachedAnisotropy;
+	if (slot)
+		m_uiCachedAnisotropy = m_uiMaxAnisotropy;
+
+	u32 created = 0;
 	for (u32 i = 0; i < m_StateArray.size(); ++i)
 	{
 		StateRecord& rec = m_StateArray[i];
@@ -187,7 +197,15 @@ void dx10SamplerStateCache::SetMaxAnisotropy(u32 uiMaxAniso)
 		if (!rec.m_pState)
 			continue;
 
+		IDeviceState*& state = rec.m_pAnisoStates[slot];
+		if (state && !rebuild)
+		{
+			rec.m_pState = state;
+			continue;
+		}
+
 		rec.m_pState->GetDesc(&desc);
+		const UINT liveAniso = desc.MaxAnisotropy;
 
 		//	MaxAnisitropy is reset by ValidateState if not aplicable
 		//	to the filter mode used.
@@ -196,10 +214,23 @@ void dx10SamplerStateCache::SetMaxAnisotropy(u32 uiMaxAniso)
 		desc.MaxAnisotropy = m_uiMaxAnisotropy;
 		dx10StateUtils::ValidateState(desc);
 
-		//	This can cause fragmentation if called too often
-		rec.m_pState->Release();
-		CreateState(desc, &rec.m_pState);
+		//	Filters without anisotropy share one state
+		IDeviceState* pNew = rec.m_pState;
+		if (desc.MaxAnisotropy == liveAniso)
+			pNew->AddRef();
+		else
+		{
+			CreateState(desc, &pNew);
+			++created;
+		}
+
+		_RELEASE(state);
+		state = pNew;
+		rec.m_pState = pNew;
 	}
+
+	if (created)
+		Msg("* [samplers] %u states, %u created for aniso %u", (u32)m_StateArray.size(), created, m_uiMaxAnisotropy);
 }
 
 void dx10SamplerStateCache::SetMipLODBias(float uiMipLODBias)
@@ -220,8 +251,13 @@ void dx10SamplerStateCache::SetMipLODBias(float uiMipLODBias)
         dx10StateUtils::ValidateState(desc);
 
         // This can cause fragmentation if called too often
-        rec.m_pState->Release();
-        CreateState(desc, &rec.m_pState);
+        // The state kept for the other anisotropy still has the old bias
+        IDeviceState* pNew;
+        CreateState(desc, &pNew);
+        _RELEASE(rec.m_pAnisoStates[0]);
+        _RELEASE(rec.m_pAnisoStates[1]);
+        rec.m_pAnisoStates[m_uiMaxAnisotropy != 1] = pNew;
+        rec.m_pState = pNew;
     }
 }
 

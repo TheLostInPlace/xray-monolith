@@ -46,6 +46,8 @@ private:
 	{
 		u32 m_crc;
 		IDeviceState* m_pState;
+		//	States at anisotropy 1 and at m_uiCachedAnisotropy, m_pState is one of them
+		IDeviceState* m_pAnisoStates[2];
 	};
 
 private:
@@ -75,6 +77,7 @@ private:
 #endif
 
 	u32 m_uiMaxAnisotropy;
+	u32 m_uiCachedAnisotropy;
 	float m_uiMipLODBias;	
 };
 
