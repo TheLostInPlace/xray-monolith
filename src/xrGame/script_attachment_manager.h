@@ -42,7 +42,7 @@ struct script_attachment_bone_cb
 		m_overwrite = overwrite;
 	}
 
-	~script_attachment_bone_cb() {}
+	~script_attachment_bone_cb() { xr_delete(m_func); }
 };
 
 class script_attachment :
