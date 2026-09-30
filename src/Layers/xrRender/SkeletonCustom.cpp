@@ -166,6 +166,20 @@ void CKinematics::Load(const char* N, IReader* data, u32 dwFlags)
 	//Msg				("skeleton: %s",N);
 	inherited::Load(N, data, dwFlags);
 
+	// Bone code reads every child as skinned, so drop the static ones
+	for (u32 i = 0; i < children.size();)
+	{
+		if (LL_GetChild(i))
+		{
+			i++;
+			continue;
+		}
+		Msg("! Skeleton [%s] child %u is not skinned, skipped", N, ((dxRender_Visual*)children[i])->getID());
+		if (!bDontDelete)
+			::Render->model_Delete((IRenderVisual*&)children[i]);
+		children.erase(children.begin() + i);
+	}
+
 	pUserData = NULL;
 	m_lod = NULL;
 	// loading lods
