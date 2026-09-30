@@ -977,6 +977,7 @@ void script_attachment::SetBoneCallback(u16 bone_id, u16 parent_bone, bool overw
 	if (it != m_bone_callbacks.end())
 	{
 		m_kinematics->LL_GetBoneInstance(bone_id).reset_callback();
+		xr_delete(it->second);
 		m_bone_callbacks.erase(it);
 	}
 
@@ -997,6 +998,7 @@ void script_attachment::SetBoneCallback(u16 bone_id, const ::luabind::functor<Fm
 	if (it != m_bone_callbacks.end())
 	{
 		m_kinematics->LL_GetBoneInstance(bone_id).reset_callback();
+		xr_delete(it->second);
 		m_bone_callbacks.erase(it);
 	}
 
@@ -1013,6 +1015,7 @@ void script_attachment::RemoveBoneCallback(u16 bone_id)
 	if (it != m_bone_callbacks.end())
 	{
 		m_kinematics->LL_GetBoneInstance(bone_id).reset_callback();
+		xr_delete(it->second);
 		m_bone_callbacks.erase(it);
 	}
 }
