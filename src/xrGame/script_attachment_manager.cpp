@@ -1006,7 +1006,7 @@ void script_attachment::SetBoneCallback(u16 bone_id, const ::luabind::functor<Fm
 	m_bone_callbacks[bone_id] = cb;
 	CBoneInstance& bInst = m_kinematics->LL_GetBoneInstance(bone_id);
 	bInst.set_callback(bctCustom, ScriptAttachmentBoneCallback, cb, overwrite);
-	(cb->m_mat).set(GetBoneVisible(bone_id) ? bInst.mTransformHidden : bInst.mTransform);
+	cb->m_mat.set(bInst.mTransformHidden);
 }
 
 void script_attachment::RemoveBoneCallback(u16 bone_id)
