@@ -36,6 +36,8 @@ void CScriptBinder::init()
 
 void CScriptBinder::clear()
 {
+	CGameObject* game_object = smart_cast<CGameObject*>(this);
+	Msg("! Script binder of [%s] cleared after an exception", game_object ? *game_object->cName() : "");
 	try
 	{
 		xr_delete(m_object);
