@@ -565,6 +565,97 @@ Fmatrix& script_attachment::BoneTransform(IKinematics* model)
 	return kin->LL_GetTransform(kin->LL_GetBoneRoot());
 }
 
+// Bone transform in the hud aim frame, before the aim offset and the camera
+bool script_attachment::AimFrameTransform(u16 bone_id, Fmatrix& result)
+{
+	if (!g_player_hud || GetCurrentThreadId() != g_player_hud->m_update_thread_id)
+		return false;
+
+	if (bone_id >= m_kinematics->LL_BoneCount())
+		return false;
+
+	script_attachment* chain[16];
+	u32 depth = 0;
+	for (script_attachment* att = this; att; att = att->m_parent_attachment)
+	{
+		if (depth == 16)
+			return false;
+		chain[depth++] = att;
+	}
+
+	script_attachment* top = chain[depth - 1];
+	if (top->GetType() != eSA_HUD || !top->m_parent_object)
+		return false;
+
+	CHudItem* itm = smart_cast<CHudItem*>(top->m_parent_object);
+	if (!itm || !itm->IsAttachedToHUD())
+		return false;
+
+	attachable_hud_item* hi = itm->HudItemData();
+	if (!hi || hi->m_attach_place_idx == SCOPE_ATTACH_IDX)
+		return false;
+
+	// Hands attach row, hands anchor bone and item attach row as player_hud composes them
+	Fvector ypr = hi->hands_attach_rot();
+	ypr.mul(PI / 180.f);
+	result.setHPB(ypr.x, ypr.y, ypr.z);
+	result.translate_over(hi->hands_attach_pos());
+
+	u16 slot = hi->m_attach_place_idx;
+	IKinematics* hands = (slot == 0 ? g_player_hud->m_model : g_player_hud->m_model_2)->dcast_PKinematics();
+	result.mulB_43(hands->LL_GetTransform(g_player_hud->anchor_bone(slot, hi->m_measures.m_bLeadGunLeftHand)));
+	result.mulB_43(hi->m_attach_offset);
+
+	// Parent bones and offsets top down as Render walks them
+	for (u32 i = depth; i-- > 0;)
+	{
+		script_attachment* att = chain[i];
+		auto root_cb = att->m_bone_callbacks.find(0);
+		if (root_cb == att->m_bone_callbacks.end() || root_cb->second->m_bone_id == BI_NONE)
+		{
+			if (i == depth - 1)
+				result.mulB_43(att->BoneTransform(hi->m_model));
+			else
+				result.mulB_43(chain[i + 1]->ResolvedBoneTransform(att->m_parent_bone));
+		}
+		result.mulB_43(att->m_offset);
+	}
+
+	result.mulB_43(ResolvedBoneTransform(bone_id));
+	return true;
+}
+
+::luabind::object script_attachment::AimFrameTransformScript(LPCSTR bone_name)
+{
+	Fmatrix result;
+	if (!AimFrameTransform(bone_id(bone_name), result))
+		return ::luabind::object();
+
+	return ::luabind::object(ai().script_engine().lua(), result);
+}
+
+// Rigid bones are rebuilt from bind poses as if visible, callback bones take their matrix
+Fmatrix script_attachment::ResolvedBoneTransform(u16 bone_id)
+{
+	if (bone_id >= m_kinematics->LL_BoneCount())
+		bone_id = m_kinematics->LL_GetBoneRoot();
+
+	if (renderable.visual->dcast_PKinematicsAnimated())
+		return m_kinematics->LL_GetTransform(bone_id);
+
+	auto cb = m_bone_callbacks.find(bone_id);
+	if (cb != m_bone_callbacks.end())
+		return cb->second->m_mat;
+
+	CBoneData& data = m_kinematics->LL_GetData(bone_id);
+	if (data.GetParentID() == BI_NONE)
+		return data.bind_transform;
+
+	Fmatrix result;
+	result.mul_43(ResolvedBoneTransform(data.GetParentID()), data.bind_transform);
+	return result;
+}
+
 u32 script_attachment::PlayMotion(LPCSTR name, bool mixin, float speed)
 {
 	IKinematicsAnimated* k = renderable.visual->dcast_PKinematicsAnimated();

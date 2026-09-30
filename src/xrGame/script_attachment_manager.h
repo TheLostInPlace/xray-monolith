@@ -202,6 +202,9 @@ public:
 
 	Fmatrix bone_transform(u16 bone_id);
 	Fmatrix bone_transform(LPCSTR bone_name) { return bone_transform(bone_id(bone_name)); }
+	bool AimFrameTransform(u16 bone_id, Fmatrix& result);
+	::luabind::object AimFrameTransformScript(LPCSTR bone_name);
+	Fmatrix ResolvedBoneTransform(u16 bone_id);
 
 	Fvector bone_position(u16 bone_id);
 	Fvector bone_position(LPCSTR bone_name) { return bone_position(bone_id(bone_name)); }

@@ -1144,6 +1144,7 @@ void player_hud::update(const Fmatrix& cam_trans)
 
 	Fmatrix trans_2 = trans;
 
+	m_update_thread_id = GetCurrentThreadId();
 	if (m_attached_items[0])
 		m_attached_items[0]->m_parent_hud_item->UpdateHudAdditional(trans);
 
