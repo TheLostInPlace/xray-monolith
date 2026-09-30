@@ -189,7 +189,7 @@ void script_attachment::Render(IKinematics* model, Fmatrix* mat, IDSGraphManager
 	}
 
 	IKinematicsAnimated* ka = renderable.visual->dcast_PKinematicsAnimated();
-	if (ka || GetType() == eSA_CamAttached)
+	if (ka || GetType() == eSA_CamAttached || !m_bone_callbacks.empty())
 	{
 		if (ka) ka->UpdateTracks();
 		m_kinematics->CalculateBones_Invalidate();
