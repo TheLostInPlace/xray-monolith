@@ -450,6 +450,9 @@ public:
 
 	virtual u8 GetCurrentHudOffsetIdx();
 
+	bool SetHudAimOffset(u8 idx, Fvector pos, Fvector rot);
+	void ClearHudAimOffset(u8 idx);
+
 	// Tronex script exports
 	void AmmoTypeForEach(const ::luabind::functor<bool>& funct);
 	float GetMagazineWeightScript() const { return GetMagazineWeight(m_magazine); }
@@ -520,6 +523,12 @@ protected:
 	Fvector m_hud_aim_rot;
 	u8 m_hud_offset_settled_idx = u8(-1);
 	u32 m_hud_offset_settled_frame = 0;
+	// Script sight aim and alt rows, pos and rot, valid while the stamps match
+	Fvector m_script_aim_offset[2][2];
+	u8 m_script_aim_mask = 0;
+	bool m_script_aim_16x9 = false;
+	u8 m_script_aim_addons = 0;
+	u8 m_script_aim_scope = 0;
 	// 0-èñïîëüçóåòñÿ áåç ó÷àñòèÿ ðóê, 1-îäíà ðóêà, 2-äâå ðóêè
 	EHandDependence eHandDependence;
 	bool m_bIsSingleHanded;

@@ -2482,6 +2482,20 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 				curr_offs = hi->m_measures.m_hands_offset[0][idx]; //pos,aim
 				curr_rot = hi->m_measures.m_hands_offset[1][idx]; //rot,aim
 			}
+
+			// Script sight rows replace the aim rows until the aspect or the addons change
+			if (m_script_aim_mask)
+			{
+				if (!!hi->m_measures.m_prop_flags.test(hud_item_measures::e_16x9_mode_now) != m_script_aim_16x9 ||
+					m_flagsAddOnState != m_script_aim_addons || m_cur_scope != m_script_aim_scope)
+					m_script_aim_mask = 0;
+				else if (m_script_aim_mask & (1 << idx))
+				{
+					u8 row = idx == 3 ? 1 : 0;
+					curr_offs = m_script_aim_offset[0][row];
+					curr_rot = m_script_aim_offset[1][row];
+				}
+			}
 		}
 		
 		float factor;
@@ -2932,6 +2946,61 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 	hud_rotation.identity();
 	hud_rotation.translate_over(curr_offs);
 	trans.mulB_43(hud_rotation);
+}
+
+// Aim row for script sights, used while no script has hud_adjust on
+bool CWeapon::SetHudAimOffset(u8 idx, Fvector pos, Fvector rot)
+{
+	if (!g_player_hud || GetCurrentThreadId() != g_player_hud->m_update_thread_id)
+		return false;
+
+	if (idx != 1 && idx != 3)
+	{
+		Msg("! [%s] SetHudAimOffset refused row %d", cNameSect_str(), idx);
+		return false;
+	}
+
+	if (m_modular_attachments)
+	{
+		Msg("! [%s] SetHudAimOffset refused on a modular attachments weapon", cNameSect_str());
+		return false;
+	}
+
+	if (!IsAttachedToHUD())
+	{
+		Msg("! [%s] SetHudAimOffset refused on a weapon not in the hands", cNameSect_str());
+		return false;
+	}
+
+	if (!_valid(pos) || !_valid(rot))
+	{
+		Msg("! [%s] SetHudAimOffset refused a non finite offset", cNameSect_str());
+		return false;
+	}
+
+	// Drop rows stored under other addons or another aspect
+	attachable_hud_item* hi = HudItemData();
+	bool wide = !!hi->m_measures.m_prop_flags.test(hud_item_measures::e_16x9_mode_now);
+	if (wide != m_script_aim_16x9 || m_flagsAddOnState != m_script_aim_addons || m_cur_scope != m_script_aim_scope)
+		m_script_aim_mask = 0;
+
+	u8 row = idx == 3 ? 1 : 0;
+	m_script_aim_offset[0][row] = pos;
+	m_script_aim_offset[1][row] = rot;
+	m_script_aim_16x9 = wide;
+	m_script_aim_addons = m_flagsAddOnState;
+	m_script_aim_scope = m_cur_scope;
+	m_script_aim_mask |= u8(1 << idx);
+	return true;
+}
+
+void CWeapon::ClearHudAimOffset(u8 idx)
+{
+	if (!g_player_hud || GetCurrentThreadId() != g_player_hud->m_update_thread_id)
+		return;
+
+	if (idx == 1 || idx == 3)
+		m_script_aim_mask &= u8(~(1 << idx));
 }
 
 // Добавить эффект сдвига оружия от выстрела
