@@ -443,6 +443,11 @@ public:
 		return (m_zoom_params.m_fZoomRotationFactor < 1.f);
 	}
 
+	bool IsHudOffsetSettled(u8 idx) const
+	{
+		return m_hud_offset_settled_idx == idx && Device.dwFrame - m_hud_offset_settled_frame <= 1;
+	}
+
 	virtual u8 GetCurrentHudOffsetIdx();
 
 	// Tronex script exports
@@ -513,6 +518,8 @@ protected:
 	Fmatrix m_Offset;
 	Fvector m_hud_offset[2];
 	Fvector m_hud_aim_rot;
+	u8 m_hud_offset_settled_idx = u8(-1);
+	u32 m_hud_offset_settled_frame = 0;
 	// 0-èñïîëüçóåòñÿ áåç ó÷àñòèÿ ðóê, 1-îäíà ðóêà, 2-äâå ðóêè
 	EHandDependence eHandDependence;
 	bool m_bIsSingleHanded;

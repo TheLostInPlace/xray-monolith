@@ -2497,6 +2497,10 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 		InterpolateOffset(m_hud_offset[1], curr_rot, factor);
 		InterpolateOffset(m_hud_aim_rot, curr_aim_rot, factor);
 
+		bool settled = m_hud_offset[0].similar(curr_offs, EPS) && m_hud_offset[1].similar(curr_rot, EPS) && m_hud_aim_rot.similar(curr_aim_rot, EPS);
+		m_hud_offset_settled_idx = settled ? idx : u8(-1);
+		m_hud_offset_settled_frame = Device.dwFrame;
+
 		// Remove pending state before weapon has fully moved to the new position to remove some delay
 		if (curr_offs.similar(m_hud_offset[0], .02f) && curr_rot.similar(m_hud_offset[1], .02f))
 		{

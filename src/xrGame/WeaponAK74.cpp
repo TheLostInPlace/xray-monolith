@@ -95,6 +95,8 @@ void CWeaponAK74::script_register	(lua_State *L)
 			.def("GetFireMode", &CWeapon::GetCurrentFireMode)
 
 			.def("GetInertionAimFactor", &CWeapon::GetInertionAimFactor)
+			.def("IsHudOffsetSettled", &CWeapon::IsHudOffsetSettled)
+			.def("GetCurrentHudOffsetIdx", &CWeapon::GetCurrentHudOffsetIdx)
 
 			.def("get_CurrentFirePoint", &CWeapon::get_CurrentFirePoint)
 			.def("get_CurrentFirePoint2", &CWeapon::get_CurrentFirePoint2)
