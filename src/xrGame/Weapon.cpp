@@ -333,7 +333,7 @@ void CWeapon::UpdateZoomParams() {
 		if (g_player_hud->m_adjust_mode)
 		{
 			m_zoom_params.m_fScopeZoomFactor = g_player_hud->m_adjust_zoom_factor[0] / zoom_multiple;
-		} else if (ALife::eAddonPermanent != m_eScopeStatus && 0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && m_scopes.size())
+		} else if (ALife::eAddonPermanent != m_eScopeStatus && 0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && HasValidScopeIndex())
 		{
 			m_zoom_params.m_fScopeZoomFactor = pSettings->r_float(GetScopeName(), "scope_zoom_factor") / zoom_multiple;
 			if (m_modular_attachments) {
@@ -373,7 +373,7 @@ void CWeapon::UpdateUIScope()
 	shared_str scope_tex_name;
 	if (m_zoomtype == 0)
 	{
-		if (0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && m_scopes.size())
+		if (0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) && HasValidScopeIndex())
 		{
 			if (!m_primary_scope_tex_name || m_modular_attachments) {
 				m_primary_scope_tex_name = pSettings->r_string(GetScopeName(), "scope_texture");
@@ -432,7 +432,7 @@ void CWeapon::SwitchZoomType()
 {
 	if (!useSeparateUBGLKeybind)
     {
-		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
+		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && HasValidScopeIndex() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
 		{
             SetZoomTypeAndParams(1);
 		}
@@ -450,7 +450,7 @@ void CWeapon::SwitchZoomType()
 	}
     else
     {
-		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
+		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && HasValidScopeIndex() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
 		{
 			SetZoomTypeAndParams(1);
 		}
@@ -2212,7 +2212,7 @@ void CWeapon::reload(LPCSTR section)
 	else
 		m_can_be_strapped = false;
 
-	if (m_eScopeStatus == ALife::eAddonAttachable && m_scopes.size())
+	if (m_eScopeStatus == ALife::eAddonAttachable && HasValidScopeIndex())
 	{
 		m_addon_holder_range_modifier = READ_IF_EXISTS(pSettings, r_float, GetScopeName(), "holder_range_modifier",
 		                                               m_holder_range_modifier);
@@ -2485,6 +2485,20 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 				curr_offs = hi->m_measures.m_hands_offset[0][idx]; //pos,aim
 				curr_rot = hi->m_measures.m_hands_offset[1][idx]; //rot,aim
 			}
+
+			// Script sight rows replace the aim rows until the aspect or the addons change
+			if (m_script_aim_mask)
+			{
+				if (!!hi->m_measures.m_prop_flags.test(hud_item_measures::e_16x9_mode_now) != m_script_aim_16x9 ||
+					m_flagsAddOnState != m_script_aim_addons || m_cur_scope != m_script_aim_scope)
+					m_script_aim_mask = 0;
+				else if (m_script_aim_mask & (1 << idx))
+				{
+					u8 row = idx == 3 ? 1 : 0;
+					curr_offs = m_script_aim_offset[0][row];
+					curr_rot = m_script_aim_offset[1][row];
+				}
+			}
 		}
 		
 		float factor;
@@ -2499,6 +2513,10 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 		InterpolateOffset(m_hud_offset[0], curr_offs, factor);
 		InterpolateOffset(m_hud_offset[1], curr_rot, factor);
 		InterpolateOffset(m_hud_aim_rot, curr_aim_rot, factor);
+
+		bool settled = m_hud_offset[0].similar(curr_offs, EPS) && m_hud_offset[1].similar(curr_rot, EPS) && m_hud_aim_rot.similar(curr_aim_rot, EPS);
+		m_hud_offset_settled_idx = settled ? idx : u8(-1);
+		m_hud_offset_settled_frame = Device.dwFrame;
 
 		// Remove pending state before weapon has fully moved to the new position to remove some delay
 		if (curr_offs.similar(m_hud_offset[0], .02f) && curr_rot.similar(m_hud_offset[1], .02f))
@@ -2933,6 +2951,61 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 	trans.mulB_43(hud_rotation);
 }
 
+// Aim row for script sights, used while no script has hud_adjust on
+bool CWeapon::SetHudAimOffset(u8 idx, Fvector pos, Fvector rot)
+{
+	if (!g_player_hud || GetCurrentThreadId() != g_player_hud->m_update_thread_id)
+		return false;
+
+	if (idx != 1 && idx != 3)
+	{
+		Msg("! [%s] SetHudAimOffset refused row %d", cNameSect_str(), idx);
+		return false;
+	}
+
+	if (m_modular_attachments)
+	{
+		Msg("! [%s] SetHudAimOffset refused on a modular attachments weapon", cNameSect_str());
+		return false;
+	}
+
+	if (!IsAttachedToHUD())
+	{
+		Msg("! [%s] SetHudAimOffset refused on a weapon not in the hands", cNameSect_str());
+		return false;
+	}
+
+	if (!_valid(pos) || !_valid(rot))
+	{
+		Msg("! [%s] SetHudAimOffset refused a non finite offset", cNameSect_str());
+		return false;
+	}
+
+	// Drop rows stored under other addons or another aspect
+	attachable_hud_item* hi = HudItemData();
+	bool wide = !!hi->m_measures.m_prop_flags.test(hud_item_measures::e_16x9_mode_now);
+	if (wide != m_script_aim_16x9 || m_flagsAddOnState != m_script_aim_addons || m_cur_scope != m_script_aim_scope)
+		m_script_aim_mask = 0;
+
+	u8 row = idx == 3 ? 1 : 0;
+	m_script_aim_offset[0][row] = pos;
+	m_script_aim_offset[1][row] = rot;
+	m_script_aim_16x9 = wide;
+	m_script_aim_addons = m_flagsAddOnState;
+	m_script_aim_scope = m_cur_scope;
+	m_script_aim_mask |= u8(1 << idx);
+	return true;
+}
+
+void CWeapon::ClearHudAimOffset(u8 idx)
+{
+	if (!g_player_hud || GetCurrentThreadId() != g_player_hud->m_update_thread_id)
+		return;
+
+	if (idx == 1 || idx == 3)
+		m_script_aim_mask &= u8(~(1 << idx));
+}
+
 // Добавить эффект сдвига оружия от выстрела
 void CWeapon::AddHUDShootingEffect()
 {
@@ -3086,7 +3159,7 @@ float CWeapon::Weight() const
 	{
 		res += pSettings->r_float(GetGrenadeLauncherName(), "inv_weight");
 	}
-	if (IsScopeAttached() && m_scopes.size())
+	if (IsScopeAttached() && HasValidScopeIndex())
 	{
 		res += pSettings->r_float(GetScopeName(), "inv_weight");
 	}
@@ -3303,7 +3376,7 @@ u32 CWeapon::Cost() const
 	{
 		res += pSettings->r_u32(GetGrenadeLauncherName(), "cost");
 	}
-	if (IsScopeAttached() && m_scopes.size())
+	if (IsScopeAttached() && HasValidScopeIndex())
 	{
 		res += pSettings->r_u32(GetScopeName(), "cost");
 	}

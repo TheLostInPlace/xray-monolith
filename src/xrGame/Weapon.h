@@ -288,11 +288,15 @@ public:
 	//äëÿ îòîáðîàæåíèÿ èêîíîê àïãðåéäîâ â èíòåðôåéñå
 	int GetScopeX()
 	{
+		if (!HasValidScopeIndex())
+			return 0;
 		return pSettings->r_s32(m_scopes[m_cur_scope], "scope_x");
 	}
 
 	int GetScopeY()
 	{
+		if (!HasValidScopeIndex())
+			return 0;
 		return pSettings->r_s32(m_scopes[m_cur_scope], "scope_y");
 	}
 
@@ -323,7 +327,7 @@ public:
 
 	const shared_str GetScopeName() const
 	{
-		if (m_scopes.size() < 1)
+		if (!HasValidScopeIndex())
 		{
 			return {};
 		}
@@ -444,7 +448,15 @@ public:
 		return (m_zoom_params.m_fZoomRotationFactor < 1.f);
 	}
 
+	bool IsHudOffsetSettled(u8 idx) const
+	{
+		return m_hud_offset_settled_idx == idx && Device.dwFrame - m_hud_offset_settled_frame <= 1;
+	}
+
 	virtual u8 GetCurrentHudOffsetIdx();
+
+	bool SetHudAimOffset(u8 idx, Fvector pos, Fvector rot);
+	void ClearHudAimOffset(u8 idx);
 
 	// Tronex script exports
 	void AmmoTypeForEach(const ::luabind::functor<bool>& funct);
@@ -514,6 +526,14 @@ protected:
 	Fmatrix m_Offset;
 	Fvector m_hud_offset[2];
 	Fvector m_hud_aim_rot;
+	u8 m_hud_offset_settled_idx = u8(-1);
+	u32 m_hud_offset_settled_frame = 0;
+	// Script sight aim and alt rows, pos and rot, valid while the stamps match
+	Fvector m_script_aim_offset[2][2];
+	u8 m_script_aim_mask = 0;
+	bool m_script_aim_16x9 = false;
+	u8 m_script_aim_addons = 0;
+	u8 m_script_aim_scope = 0;
 	// 0-èñïîëüçóåòñÿ áåç ó÷àñòèÿ ðóê, 1-îäíà ðóêà, 2-äâå ðóêè
 	EHandDependence eHandDependence;
 	bool m_bIsSingleHanded;
@@ -1039,6 +1059,7 @@ public:
 	DEFINE_VECTOR(shared_str, SCOPES_VECTOR, SCOPES_VECTOR_IT);
 	SCOPES_VECTOR m_scopes;
 	u8 m_cur_scope;
+	bool HasValidScopeIndex() const { return m_cur_scope < m_scopes.size(); }
 
 	bool m_altAimPos;
 	u8 m_zoomtype;

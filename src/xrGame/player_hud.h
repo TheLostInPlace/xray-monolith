@@ -429,6 +429,7 @@ public:
 	Fmatrix m_attach_offset_2;
 
 	void calc_transform(u16 attach_slot_idx, const Fmatrix& offset, Fmatrix& result, bool leadGun = false);
+	u16 anchor_bone(u16 attach_slot_idx, bool lead_gun) const { return m_ancors[lead_gun ? 0 : attach_slot_idx]; }
 	void tune(Ivector values);
 	u32 motion_length(const MotionID& M, const CMotionDef*& md, float speed);
 	u32 motion_length_script(LPCSTR section, LPCSTR anm_name, float speed);
@@ -458,6 +459,7 @@ public:
 	float m_adjust_scale;
 	bool m_adjust_mode;
 	u16 m_edit_bone;
+	u32 m_update_thread_id = 0;
 
 	void reset_thumb(bool bForce)
 	{

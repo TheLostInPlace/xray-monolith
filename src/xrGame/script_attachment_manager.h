@@ -42,7 +42,7 @@ struct script_attachment_bone_cb
 		m_overwrite = overwrite;
 	}
 
-	~script_attachment_bone_cb() {}
+	~script_attachment_bone_cb() { xr_delete(m_func); }
 };
 
 class script_attachment :
@@ -201,6 +201,9 @@ public:
 
 	Fmatrix bone_transform(u16 bone_id);
 	Fmatrix bone_transform(LPCSTR bone_name) { return bone_transform(bone_id(bone_name)); }
+	bool AimFrameTransform(u16 bone_id, Fmatrix& result);
+	::luabind::object AimFrameTransformScript(LPCSTR bone_name);
+	Fmatrix ResolvedBoneTransform(u16 bone_id);
 
 	Fvector bone_position(u16 bone_id);
 	Fvector bone_position(LPCSTR bone_name) { return bone_position(bone_id(bone_name)); }

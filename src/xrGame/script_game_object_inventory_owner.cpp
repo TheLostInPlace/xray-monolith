@@ -2332,6 +2332,12 @@ void CScriptGameObject::Weapon_SetCurrentScope(u8 type)
 		return;
 	}
 
+	if (type >= weapon->m_scopes.size())
+	{
+		Msg("! [%s] scope index %d is outside its scope list of %d", weapon->cNameSect_str(), type, (int)weapon->m_scopes.size());
+		return;
+	}
+
 	weapon->m_cur_scope = type;
 }
 
