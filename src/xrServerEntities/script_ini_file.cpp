@@ -118,6 +118,16 @@ Fvector4 CScriptIniFile::r_fvector4(LPCSTR S, LPCSTR L)
 	return (inherited::r_fvector4(S, L));
 }
 
+bool CScriptIniFile::line_is_inherited(LPCSTR S, LPCSTR L)
+{
+	if (!S || !L || !inherited::section_exist(S))
+		return false;
+
+	Sect& I = r_section(S);
+	auto A = std::lower_bound(I.Data.begin(), I.Data.end(), L, item_comparator());
+	return A != I.Data.end() && xr_strcmp(*A->first, L) == 0 && A->inherited;
+}
+
 //AVO: additional methods to allow writing to ini files
 #ifdef INI_FILE_EXTENDED_EXPORTS
 void CScriptIniFile::w_bool(LPCSTR S, LPCSTR L, bool V, LPCSTR comment)

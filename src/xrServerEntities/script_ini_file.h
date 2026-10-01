@@ -39,6 +39,7 @@ public:
 	float r_float(LPCSTR S, LPCSTR L);
 	Fvector r_fvector3(LPCSTR S, LPCSTR L);
 	Fvector4 r_fvector4(LPCSTR S, LPCSTR L);
+	bool line_is_inherited(LPCSTR S, LPCSTR L);
 	//AVO: additional methods to allow writing to ini files
 #ifdef INI_FILE_EXTENDED_EXPORTS
 	void w_bool(LPCSTR S, LPCSTR L, bool V, LPCSTR comment /* = 0 */);
