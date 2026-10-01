@@ -1086,6 +1086,10 @@ CInifile::Items CInifile::EvaluateSection(
 			Items ParentData = EvaluateSection(parent, Evaluations, currentFileName);
 			ResolvedParents = MergeSections(ResolvedParents, ParentData, DeletedItems, false);
 		}
+
+		// Only the copies merged into this section are marked, the parent's cache entry keeps its own marks
+		for (Item& ParentItem : ResolvedParents)
+			ParentItem.inherited = true;
 	}
 
 	Items ResolvedBaseAndMods = BaseData[SectionName].Data;
@@ -1265,6 +1269,7 @@ CInifile::Items CInifile::EvaluateSection(
 
 							working_item.second = join_list(sect_it_items_vec).c_str();
 							working_item.filename = mod_it->filename;
+							working_item.inherited = false;
 						}
 						mod_it++;
 					}
@@ -1875,6 +1880,7 @@ void CInifile::w_string(LPCSTR S, LPCSTR L, LPCSTR V, LPCSTR comment)
 			R_ASSERT2(b, make_string("name[%s] already exist in section[%s]", line, sect).c_str());
 			it->second = I.second;
 			it->filename = I.filename;
+			it->inherited = false;
 		}
 		else
 		{

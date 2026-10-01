@@ -206,7 +206,8 @@ void CScriptIniFile::script_register(lua_State* L)
 		.def("dltx_print", &CScriptIniFile::DLTX_print)
 		.def("dltx_get_filename_of_line", &CScriptIniFile::DLTX_getFilenameOfLine)
 		.def("dltx_get_section", &CScriptIniFile::DLTX_scriptGetSection)
-		.def("dltx_is_override", &CScriptIniFile::DLTX_isOverride),
+		.def("dltx_is_override", &CScriptIniFile::DLTX_isOverride)
+		.def("line_is_inherited", &CScriptIniFile::line_is_inherited),
 
 		def("system_ini", &get_system_ini),
 		//Alundaio: extend
