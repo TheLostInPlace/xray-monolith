@@ -1,0 +1,103 @@
+name: Test build
+
+on:
+  push:
+    branches: [ "athi-combined-mt" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SOLUTION_FILE_PATH: src/engine-vs2022.sln
+  PACK_GAMEDATA_NAME: 00_modded_exes_gamedata.db0
+
+jobs:
+  pack_gamedata:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Pack gamedata
+      run: |
+        new-item -path "./compressor/gamedata" -itemtype directory -force
+        copy-item -path "./gamedata/*" -destination "./compressor/gamedata" -recurse -force
+        cd ./compressor
+        start-process -filepath "./! compress_gamedata.cmd" -Wait
+        rename-item -path gamedata.db0 -newname ${{ env.PACK_GAMEDATA_NAME }}
+
+    - name: Upload gamedata
+      uses: actions/upload-artifact@v4.6.0
+      with:
+        name: gamedata
+        path: ./compressor/${{ env.PACK_GAMEDATA_NAME }}
+        if-no-files-found: error
+        retention-days: 1
+
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        buildconf: [ "DX11", "DX11-AVX" ]
+    steps:
+    - name: Configure pagefile
+      uses: al-cheb/configure-pagefile-action@v1.3
+      with:
+        minimum-size: 8GB
+        maximum-size: 8GB
+        disk-root: "C:"
+
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.3.1
+      with:
+        msbuild-architecture: x64
+
+    - name: Build ${{ matrix.buildconf }}
+      run: msbuild /p:Configuration=${{ matrix.buildconf }} ${{ env.SOLUTION_FILE_PATH }}
+
+    - name: Upload exe and pdb
+      uses: actions/upload-artifact@v4.6.0
+      with:
+        name: bin-${{ matrix.buildconf }}
+        path: |
+          ./_build/_game/bin_dbg/*.exe
+          ./_build/_game/bin_dbg/*.pdb
+        if-no-files-found: error
+        retention-days: 1
+
+  release:
+    needs: [ pack_gamedata, build ]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4.1.8
+
+    - name: Package
+      id: package
+      run: |
+        tag="${GITHUB_REF_NAME}-$(date +'%Y.%-m.%-d')-${GITHUB_SHA::9}"
+        mkdir -p release/bin release/db/mods
+        mv gamedata/*.db0 release/db/mods
+        mv bin-DX11/* bin-DX11-AVX/* release/bin
+        (cd release && zip -r "../STALKER-Anomaly-modded-exes-MT_${tag}.zip" .)
+        echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+    - name: Publish
+      uses: softprops/action-gh-release@v2.3.2
+      with:
+        files: STALKER-Anomaly-modded-exes-MT_*.zip
+        tag_name: ${{ steps.package.outputs.tag }}
+        target_commitish: ${{ github.sha }}
+        name: ${{ steps.package.outputs.tag }}
+        body: |
+          Test build of `${{ github.ref_name }}` at ${{ github.sha }}.
+          The zip holds the DX11 and DX11-AVX exes with their pdbs in `bin` and the gamedata in `db/mods`. Extract it over the Anomaly folder.
+        prerelease: true
+        make_latest: false
+        token: ${{ secrets.GITHUB_TOKEN }}
