@@ -22,14 +22,17 @@ public:
 		int depth;
 		
 		// Insertion index will determine what kv pair in overrides will win even if the depth is the same
-		u32 insertionIndex;
+		u32 insertionIndex : 31;
+
+		// Value came from a parent section, the section's own lines did not set it
+		u32 inherited : 1;
 
 		bool operator<(const Item& other) const noexcept
 		{
 			return xr_strcmp(*first, *other.first) < 0;
 		}
 
-		Item() : first(0), second(0), filename(0), depth(0), insertionIndex(0) {};
+		Item() : first(0), second(0), filename(0), depth(0), insertionIndex(0), inherited(0) {};
 	};
 
 	struct item_comparator
@@ -159,7 +162,7 @@ public:
                     strings.insert(d.first);
                     strings.insert(d.second);
                     strings.insert(d.filename);
-                    total_bytes += sizeof(d.depth) + sizeof(d.insertionIndex) + sizeof(d.first) + sizeof(d.second) + sizeof(d.filename);
+                    total_bytes += sizeof(d.depth) + sizeof(u32) + sizeof(d.first) + sizeof(d.second) + sizeof(d.filename);
                 }
 			}
 		}
