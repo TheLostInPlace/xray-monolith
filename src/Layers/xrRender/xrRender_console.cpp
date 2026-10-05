@@ -307,6 +307,8 @@ float ps_r2_tnmp_exposure = 7.0f; // r2-only
 float ps_r2_tnmp_gamma = .25f; // r2-only
 float ps_r2_tnmp_onoff = .0f; // r2-only
 
+float ps_r4_full_detail_distance_scale = 0.5f; // r4-only
+
 // HDR10 parameters
 float ps_r4_hdr10_whitepoint_nits = 400.0f; // r4-only, default = 400 nits
 float ps_r4_hdr10_ui_nits         = 400.0f; // r4-only, default = 400 nits
@@ -454,7 +456,7 @@ Fvector4 ps_ssfx_wetsurfaces_2 = { 1.0f, 1.0f, 1.0f, 1.0f }; // Wet surfaces 2
 int ps_ssfx_is_underground = 0;
 int ps_ssfx_gloss_method = 0;
 float ps_ssfx_gloss_factor = 0.5f;
-Fvector4 ps_ssfx_gloss_minmax = { 0.0f,0.92f,0.0f,0.0f }; // Gloss
+Fvector3 ps_ssfx_gloss_minmax = { 0.0f,0.92f,0.0f }; // Gloss
 
 Fvector4 ps_ssfx_lightsetup_1 = { 0.35f, 0.5f, 0.0f, 0.0f }; // Spec intensity
 
@@ -1429,6 +1431,8 @@ void xrRender_initconsole()
 	CMD4(CCC_Float, "r2_tnmp_gamma", &ps_r2_tnmp_gamma, 0.0f, 20.0f);
 	CMD4(CCC_Float, "r2_tnmp_onoff", &ps_r2_tnmp_onoff, 0.0f, 1.0f);
 
+	CMD4(CCC_Float, "r4_full_detail_distance_scale", &ps_r4_full_detail_distance_scale, 0.1f, 1.0f);
+
     CMD4(CCC_Float,   "r4_hdr10_whitepoint_nits", &ps_r4_hdr10_whitepoint_nits,  10.0f, 10000.0f);
     CMD4(CCC_Float,   "r4_hdr10_ui_nits", 		  &ps_r4_hdr10_ui_nits, 	     10.0f, 10000.0f);
     CMD4(CCC_Float,   "r4_hdr10_pda_intensity",   &ps_r4_hdr10_pda_intensity,      0.1, 2);
@@ -1597,7 +1601,7 @@ void xrRender_initconsole()
 
 	CMD4(CCC_Integer, "ssfx_is_underground", &ps_ssfx_is_underground, 0, 1);
 	CMD4(CCC_Integer, "ssfx_gloss_method", &ps_ssfx_gloss_method, 0, 1);
-	CMD4(CCC_Vector4, "ssfx_gloss_minmax", &ps_ssfx_gloss_minmax, Fvector4().set(0, 0, 0, 0), Fvector4().set(1.0, 1.0, 1.0, 1.0));
+	CMD4(CCC_Vector3, "ssfx_gloss_minmax", &ps_ssfx_gloss_minmax, Fvector3().set(0, 0, 0), Fvector3().set(1.0, 1.0, 1.0));
 	CMD4(CCC_Float, "ssfx_gloss_factor", &ps_ssfx_gloss_factor, 0.0f, 1.0f);
 
 	CMD4(CCC_Vector4, "ssfx_lightsetup_1", &ps_ssfx_lightsetup_1, Fvector4().set(0, 0, 0, 0), Fvector4().set(1.0, 1.0, 1.0, 1.0));

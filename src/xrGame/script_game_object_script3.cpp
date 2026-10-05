@@ -34,6 +34,7 @@
 #include "artefact.h"
 #include "sight_manager_space.h"
 #include "script_attachment_manager.h"
+#include "WeaponBinoculars.h"
 
 using namespace luabind;
 
@@ -565,6 +566,7 @@ class_<CScriptGameObject> script_register_game_object2(class_<CScriptGameObject>
 		.def("cast_Ammo", &CScriptGameObject::cast_Ammo)
 		.def("cast_Weapon", &CScriptGameObject::cast_Weapon)
 		.def("cast_Knife", &CScriptGameObject::cast_Knife)
+		.def("cast_Binoculars", &CScriptGameObject::cast_Binoculars)
 		.def("cast_WeaponMagazined", &CScriptGameObject::cast_WeaponMagazined)
 		.def("cast_WeaponMagazinedWGrenade", &CScriptGameObject::cast_WeaponMagazinedWGrenade)
 		.def("cast_EatableItem", SAFE_WRAP(&CScriptGameObject::cast_EatableItem))
@@ -674,6 +676,9 @@ class_<CScriptGameObject> script_register_game_object2(class_<CScriptGameObject>
 		// demonized: Adjust Lookout factor
 		.def("get_actor_lookout_coef", SAFE_WRAP(&CScriptGameObject::GetActorLookoutCoef))
 		.def("set_actor_lookout_coef", SAFE_WRAP(&CScriptGameObject::SetActorLookoutCoef))
+
+        // Boeker: adjust zoom inertia factor
+        .def("set_zoom_inertion_factor", SAFE_WRAP(&CScriptGameObject::SetZoomInertionFactor))
 
         // verdatim: Adjust damager stagger time factor
         .def("get_actor_damage_stagger_time_factor", SAFE_WRAP(&CScriptGameObject::GetActorDamageStaggerTimeFactor))
