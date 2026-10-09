@@ -374,6 +374,7 @@ void CRender::add_Occluder(Fbox2& bb_screenspace)
 
 void CRender::apply_object(IRenderable* O)
 {
+	RCache.bus_object.apply(O);
 	if (0 == O) return;
 	if (O->renderable_ROS())
 	{
