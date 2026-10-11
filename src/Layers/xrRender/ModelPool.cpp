@@ -27,6 +27,9 @@
 	#include "IGame_Persistent.h"
 #endif
 
+// Loads of a new base model share their children instead of duplicating them
+static thread_local BOOL allow_children_duplicate = TRUE;
+
 dxRender_Visual* CModelPool::Instance_Create(u32 type)
 {
 	dxRender_Visual* V = NULL;
@@ -81,15 +84,17 @@ dxRender_Visual* CModelPool::Instance_Create(u32 type)
 	return V;
 }
 
-dxRender_Visual* CModelPool::Instance_Duplicate(dxRender_Visual* V)
+dxRender_Visual* CModelPool::Instance_Duplicate(dxRender_Visual* V, bool add_ref)
 {
 	R_ASSERT(V);
 	dxRender_Visual* N = Instance_Create(V->Type);
 	N->Copy(V);
 	N->Spawn();
+	if (!add_ref)
+		return N;
 	{
 		// inc ref counter
-		xrSRWLockGuard g(ModelsLock, true);
+		xrSRWLockGuard g(ModelsLock);
 		auto it = std::lower_bound(Models.begin(), Models.end(), V, std::less<>{});
 		if (it != Models.end() && it->model == V)
 		{
@@ -170,38 +175,47 @@ dxRender_Visual* CModelPool::Instance_Register(LPCSTR N, dxRender_Visual* V)
 {
 	// Registration
 	shared_str S(N);
-	xrSRWLockGuard g(ModelsLock);
-
-	// Double-check for duplicate model
-	for (auto& M : Models)
+	dxRender_Visual* existing = nullptr;
 	{
-		if (M.name == S)
+		xrSRWLockGuard g(ModelsLock);
+
+		// Double-check for duplicate model
+		for (auto& M : Models)
 		{
-			// Increment the reference count
-			M.refs++;
+			if (M.name == S)
+			{
+				// The existing base takes the caller's reference
+				M.refs++;
+				existing = M.model;
+				break;
+			}
+		}
 
-			// Destroy the redundant one we just loaded
-			V->Release();
-			xr_delete(V);
+		if (!existing)
+		{
+			// The new base holds the caller's reference
+			ModelDef M;
+			M.name = S;
+			M.model = V;
+			M.refs = 1;
 
-			// Return the existing model
-			return M.model;
+			auto it = std::lower_bound(Models.begin(), Models.end(), V, std::less<>{});
+			Models.insert(it, std::move(M));
+			return V;
 		}
 	}
 
-	ModelDef M;
-	M.name = S;
-	M.model = V;
-
-	auto it = std::lower_bound(Models.begin(), Models.end(), V, std::less<>{});
-	Models.insert(it, std::move(M));
-
-	return V;
+	// Destroy the redundant one outside ModelsLock since its children take PoolLock
+	V->Release();
+	xr_delete(V);
+	return existing;
 }
 
 
 void CModelPool::Destroy()
 {
+	xrCriticalSectionGuard lock(&PoolLock);
+
 	// Pool
 	Pool.clear();
 
@@ -240,7 +254,6 @@ CModelPool::CModelPool()
 {
 	bLogging = TRUE;
 	bForceDiscard = FALSE;
-	bAllowChildrenDuplicate = TRUE;
 	g_pMotionsContainer = xr_new<motions_container>();
 }
 
@@ -250,17 +263,19 @@ CModelPool::~CModelPool()
 	xr_delete(g_pMotionsContainer);
 }
 
-dxRender_Visual* CModelPool::Instance_Find(LPCSTR N)
+dxRender_Visual* CModelPool::Instance_Find(LPCSTR N, bool add_ref)
 {
 	shared_str S(N);
 	dxRender_Visual* Model = 0;
-	xrSRWLockGuard g(ModelsLock, true);
+	xrSRWLockGuard g(ModelsLock, !add_ref);
 
 	for (auto& M : Models)
 	{
 		if (S == M.name)
 		{
 			Model = M.model;
+			if (add_ref)
+				M.refs++;
 			break;
 		}
 	}
@@ -277,40 +292,49 @@ dxRender_Visual* CModelPool::Create(const char* name, IReader* data, bool assert
 	xr_strcpy(low_name, name);
 	strlwr(low_name);
 	if (strext(low_name)) *strext(low_name) = 0;
-	
+
 	// 0. Search POOL
-	POOL_IT it = Pool.find(low_name);
-	if (it != Pool.end())
+	dxRender_Visual* Model = nullptr;
+	{
+		xrCriticalSectionGuard lock(&PoolLock);
+		POOL_IT it = Pool.find(low_name);
+		if (it != Pool.end())
+		{
+			Model = it->second;
+			Pool.erase(it);
+		}
+	}
+	if (Model)
 	{
 		// 1. Instance found
-		dxRender_Visual* Model = it->second;
 		Model->Spawn();
-		Pool.erase(it);
 		return Model;
 	}
 	else
 	{
 		// 1. Search for already loaded model (reference, base model)
-		dxRender_Visual* Base = Instance_Find(low_name);
+		// The find and the load both take the base reference so no discard frees it before the copy
+		dxRender_Visual* Base = Instance_Find(low_name, true);
 
 		if (0 == Base)
 		{
 			// 2. If not found
-			bAllowChildrenDuplicate = FALSE;
+			allow_children_duplicate = FALSE;
 			if (data) Base = Instance_Load(low_name, data, TRUE);
 			else Base = Instance_Load(low_name, TRUE, assert);
+			allow_children_duplicate = TRUE;
 			if (!Base)
 			{
 				// If not found and assert is false, return nullptr
 				return nullptr;
 			}
-			bAllowChildrenDuplicate = TRUE;
 #ifdef _EDITOR
 			if (!Base)		return 0;
 #endif
 		}
 		// 3. If found - return (cloned) reference
-		dxRender_Visual* Model = Instance_Duplicate(Base);
+		Model = Instance_Duplicate(Base, false);
+		xrCriticalSectionGuard lock(&PoolLock);
 		Registry.insert(mk_pair(Model, low_name));
 		return Model;
 	}
@@ -325,7 +349,8 @@ dxRender_Visual* CModelPool::CreateChild(LPCSTR name, IReader* data)
 	if (strext(low_name)) *strext(low_name) = 0;
 
 	// 1. Search for already loaded model
-	dxRender_Visual* Base = Instance_Find(low_name);
+	// A duplicating find takes the base reference before the copy
+	dxRender_Visual* Base = Instance_Find(low_name, allow_children_duplicate != FALSE);
 	//.	if (0==Base) Base	 	= Instance_Load(name,data,FALSE);
 	if (0 == Base)
 	{
@@ -333,7 +358,7 @@ dxRender_Visual* CModelPool::CreateChild(LPCSTR name, IReader* data)
 		else Base = Instance_Load(low_name,FALSE);
 	}
 
-	dxRender_Visual* Model = bAllowChildrenDuplicate ? Instance_Duplicate(Base) : Base;
+	dxRender_Visual* Model = allow_children_duplicate ? Instance_Duplicate(Base, false) : Base;
 	return Model;
 }
 
@@ -341,6 +366,7 @@ extern  xr_atomic_bool ENGINE_API g_bRendering;
 
 void CModelPool::DeleteInternal(dxRender_Visual* & V, BOOL bDiscard)
 {
+	xrCriticalSectionGuard lock(&PoolLock);
 	VERIFY(!g_bRendering);
 	if (!V) return;
 	V->Depart();
@@ -387,6 +413,7 @@ void CModelPool::DeleteDeffered(dxRender_Visual* &V)
 
 void CModelPool::Delete(dxRender_Visual* &V, BOOL bDiscard)
 {
+	xrCriticalSectionGuard lock(&PoolLock);
 	if (nullptr==V)
 		return;
 	if (g_bRendering)
@@ -403,6 +430,7 @@ void CModelPool::Delete(dxRender_Visual* &V, BOOL bDiscard)
 
 void CModelPool::DeleteQueue()
 {
+	xrCriticalSectionGuard lock(&PoolLock);
 	for (u32 it = 0; it < ModelsToDelete.size(); it++)
 		DeleteInternal(ModelsToDelete[it]);
 	ModelsToDelete.clear();
@@ -410,6 +438,7 @@ void CModelPool::DeleteQueue()
 
 void CModelPool::DeleteQueuedDeffer()
 {
+	xrCriticalSectionGuard lock(&PoolLock);
 	xrCriticalSectionGuard guard(&deffered_del_lock);
 
     for (dxRender_Visual* Vis : ModelsToDeleteDeffer)
@@ -423,6 +452,7 @@ void CModelPool::DeleteQueuedDeffer()
 
 void CModelPool::Discard(dxRender_Visual* & V, BOOL b_complete)
 {
+	xrCriticalSectionGuard lock(&PoolLock);
 	//
 	REGISTRY_IT it = Registry.find(V);
 	if (it != Registry.end())
@@ -502,9 +532,11 @@ bool CModelPool::Exists(LPCSTR N)
 	if (strext(low_name)) *strext(low_name) = 0;
 
 	// Search pool and return early if exists
-	POOL_IT it = Pool.find(low_name);
-	if (it != Pool.end())
-		return true;
+	{
+		xrCriticalSectionGuard lock(&PoolLock);
+		if (Pool.find(low_name) != Pool.end())
+			return true;
+	}
 
 	// Search for already loaded model (reference, base model) and return early if exists
 	dxRender_Visual* Base = Instance_Find(low_name);
@@ -538,6 +570,7 @@ dxRender_Visual* CModelPool::CreatePG(PS::CPGDef* source)
 
 void CModelPool::ClearPool(BOOL b_complete)
 {
+	xrCriticalSectionGuard lock(&PoolLock);
 	POOL_IT _I = Pool.begin();
 	POOL_IT _E = Pool.end();
 	for (; _I != _E; _I++)
@@ -552,6 +585,7 @@ void CModelPool::dump()
 	Log("--- model pool --- begin:");
 	u32 sz = 0;
 	u32 k = 0;
+	xrCriticalSectionGuard lock(&PoolLock);
 	xrSRWLockGuard g(ModelsLock, true);
 	for (xr_vector<ModelDef>::iterator I = Models.begin(); I != Models.end(); I++)
 	{

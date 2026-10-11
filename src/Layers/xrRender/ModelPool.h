@@ -54,20 +54,21 @@ private:
 	POOL Pool; // Unused / Inactive
 	BOOL bLogging;
 	BOOL bForceDiscard;
-	BOOL bAllowChildrenDuplicate;
 	xrCriticalSection deffered_del_lock;
 	xrSRWLock ModelsLock;
+	// Guards Pool, Registry, ModelsToDelete and bForceDiscard, taken before ModelsLock and deffered_del_lock
+	xrCriticalSection PoolLock;
 
 	void Destroy();
 public:
 	CModelPool();
 	virtual ~CModelPool();
 	dxRender_Visual* Instance_Create(u32 Type);
-	dxRender_Visual* Instance_Duplicate(dxRender_Visual* V);
+	dxRender_Visual* Instance_Duplicate(dxRender_Visual* V, bool add_ref = true);
 	dxRender_Visual* Instance_Load(LPCSTR N, BOOL allow_register, bool assert = true);
 	dxRender_Visual* Instance_Load(LPCSTR N, IReader* data, BOOL allow_register);
 	dxRender_Visual* Instance_Register(LPCSTR N, dxRender_Visual* V);
-	dxRender_Visual* Instance_Find(LPCSTR N);
+	dxRender_Visual* Instance_Find(LPCSTR N, bool add_ref = false);
 
 	dxRender_Visual* CreatePE(PS::CPEDef* source);
 	dxRender_Visual* CreatePG(PS::CPGDef* source);
