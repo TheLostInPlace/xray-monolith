@@ -37,10 +37,13 @@ u32 rtc_compress(void* dst, u32 dst_len, const void* src, u32 src_len)
 u32 rtc_decompress(void* dst, u32 dst_len, const void* src, u32 src_len)
 {
 	lzo_uint out_size = dst_len;
-	int r = lzo1x_decompress(
+	int r = lzo1x_decompress_safe(
 		(const lzo_byte*)src, (lzo_uint)src_len,
 		(lzo_byte*)dst, (lzo_uintp)&out_size,
 		rtc_wrkmem);
 	VERIFY(r == LZO_E_OK);
+	// A stream that runs past either buffer stops at its end and is logged
+	if (r != LZO_E_OK && r != LZO_E_INPUT_NOT_CONSUMED)
+		Msg("! rtc_decompress: corrupt stream, lzo error %d, %u of %u bytes", r, u32(out_size), dst_len);
 	return out_size;
 }

@@ -223,7 +223,7 @@ CLocatorAPI::~CLocatorAPI()
 void CLocatorAPI::Register(LPCSTR name, u32 vfs, u32 crc, u32 ptr, u32 size_real, u32 size_compressed, u32 modif)
 {
 	//Msg("Register[%d] [%s]",vfs,name);
-	string256 temp_file_name;
+	string_path temp_file_name;
 	xr_strcpy(temp_file_name, sizeof(temp_file_name), name);
 	xr_strlwr(temp_file_name);
 
