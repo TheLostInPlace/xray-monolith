@@ -1703,7 +1703,10 @@ void CApplication::Level_Set(u32 L)
 	//SECUROM_MARKER_PERFORMANCE_ON(9)
 
 	if (L >= Levels.size()) return;
-	FS.get_path("$level$")->_set(Levels[L].folder);
+	FS_Path* level_path = FS.get_path("$level$");
+	// The load task and the main thread both set it during a level load, so only a new folder swaps the strings
+	if (!level_path->m_Add || 0 != stricmp(level_path->m_Add, Levels[L].folder))
+		level_path->_set(Levels[L].folder);
 
 	static string_path path;
 
