@@ -81,8 +81,6 @@ void CRenderTarget::phase_combine()
 			phase_downsamp();
 			//phase_ssao();
 		}
-		else if (RImplementation.o.ssao_blur_on)
-			phase_ssao();
 	}
 
 	// Save previus and current matrices
