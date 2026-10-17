@@ -51,7 +51,7 @@ private:
 
 	void InternalOpenLogFile();
 
-	void InternalPrintRecord();
+	bool InternalPrintRecord();
 	void InternalPrintAllRecords();
 
 	void InternalFlushLog();
@@ -69,7 +69,8 @@ private:
 
 	xrCriticalSection logDataGuard;
 	xrCriticalSection logCallbackGuard;
-	xrCriticalSection logFlushGuard;
+	// Held by whoever drains, writes, flushes or closes the log file
+	xrCriticalSection logPrintGuard;
 	bool bFastDebugLog;
 
 	std::atomic_bool bFlushRequested;

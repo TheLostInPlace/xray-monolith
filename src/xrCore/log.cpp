@@ -196,13 +196,15 @@ void xrLogger::SimpleMessage(LPCSTR Message, u32 MessageSize /*= 0*/)
 		msgToLog = c + "[" + timeInHMSMMM() + "] " + t;
 	}
 
-	xrCriticalSectionGuard guard(&logDataGuard);
-	if (bIsAlive)
 	{
+		xrCriticalSectionGuard guard(&logDataGuard);
+		if (!bIsAlive)
+			return;
 		logData->emplace(LogRecord(msgToLog.c_str(), (u32)msgToLog.size()));
-		UnpauseLogging();
 	}
-	
+
+	// Outside the queue lock, since an immediate drain takes logPrintGuard first
+	UnpauseLogging();
 }
 
 void xrLogger::OpenLogFile()
@@ -243,7 +245,7 @@ void xrLogger::InitLog()
 
 void xrLogger::InternalFlushLog()
 {
-	xrCriticalSectionGuard g(logFlushGuard);
+	xrCriticalSectionGuard g(logPrintGuard);
 	PROF_EVENT("Log Flush")
 	if (logFile != nullptr)
 	{
@@ -291,14 +293,18 @@ void xrLogger::InternalCloseLog()
 	SimpleMessage("[xrLogger] InternalCloseLog called, terminating thread");
 	bIsAlive = false;
 
-	InternalPrintAllRecords();
-	InternalFlushLog();
+	{
+		// The log thread may be mid print, wait for it before closing the writer
+		xrCriticalSectionGuard g(logPrintGuard);
+		InternalPrintAllRecords();
+		InternalFlushLog();
 
-	IWriter* tempCopy = (IWriter*)logFile;
-	logFile = nullptr;
+		IWriter* tempCopy = (IWriter*)logFile;
+		logFile = nullptr;
 
-	if (tempCopy != nullptr)
-		FS.w_close(tempCopy);
+		if (tempCopy != nullptr)
+			FS.w_close(tempCopy);
+	}
 
 	UnpauseLogging();
 }
@@ -343,12 +349,14 @@ void xrLogger::InternalOpenLogFile()
 	CHECK_OR_EXIT(logFile, "Can't create log file");
 }
 
-void xrLogger::InternalPrintRecord()
+bool xrLogger::InternalPrintRecord()
 {
 	LogRecord theRecord;
 
 	{
 		xrCriticalSectionGuard g(&logDataGuard);
+		if (logData->empty())
+			return false;
 		theRecord = logData->front();
 		logData->pop();
 	}
@@ -404,19 +412,16 @@ void xrLogger::InternalPrintRecord()
 			FnCallback(finalLine);
 		}
 	}
+
+	return true;
 }
 
 void xrLogger::InternalPrintAllRecords()
 {
-	while (true)
-	{
-		{
-			xrCriticalSectionGuard g(&logDataGuard);
-			if (logData->empty())
-				break;
-		}
-		InternalPrintRecord();
-	}
+	// One drainer at a time, the guard is recursive so a callback that logs can drain again
+	xrCriticalSectionGuard g(logPrintGuard);
+	while (InternalPrintRecord())
+		;
 }
 
 void xrLogger::LogThreadEntry()
