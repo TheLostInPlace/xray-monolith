@@ -44,29 +44,24 @@ size_t xrMemory::mem_usage(bool assert)
 {
     xrCriticalSectionGuard g(mem_lock);
 	PROF_EVENT("mem_usage");
-	_HEAPINFO hinfo = {};
-	int status;
+	HANDLE heap = GetProcessHeap();
 	size_t bytesUsed = 0;
-	while ((status = _heapwalk(&hinfo)) == _HEAPOK)
+	DWORD error;
+	// the heap lock keeps the walk off a block another thread is freeing, nothing may allocate or log until the unlock
+	if (HeapLock(heap))
 	{
-		if (hinfo._useflag == _USEDENTRY)
-			bytesUsed += hinfo._size;
+		PROCESS_HEAP_ENTRY entry = {};
+		while (HeapWalk(heap, &entry))
+		{
+			if (entry.wFlags & PROCESS_HEAP_ENTRY_BUSY)
+				bytesUsed += entry.cbData;
+		}
+		error = GetLastError();
+		HeapUnlock(heap);
 	}
-	switch (status)
-	{
-	case _HEAPEMPTY:
-		break;
-	case _HEAPEND:
-		break;
-	case _HEAPBADPTR:
-		if (assert) FATAL("bad pointer to heap");
-		break;
-	case _HEAPBADBEGIN:
-        if (assert) FATAL("bad start of heap");
-		break;
-	case _HEAPBADNODE:
-        if (assert) FATAL("bad node in heap");
-		break;
-	}
+	else
+		error = GetLastError();
+	if (error != ERROR_NO_MORE_ITEMS && assert)
+		FATAL("bad node in heap");
 	return bytesUsed;
 }
