@@ -554,9 +554,9 @@ void CCustomZone::UpdateWorkload(u32 dt)
 	default: NODEFAULT;
 	}
 
-	if (Level().CurrentEntity())
+	if (CObject* E = Level().CurrentControlEntity())
 	{
-		Fvector P = Level().CurrentControlEntity()->Position();
+		Fvector P = E->Position();
 		P.y -= 0.9f;
 		float radius = 1.0f;
 		CalcDistanceTo(P, m_fDistanceToCurEntity, radius);
@@ -643,9 +643,10 @@ void CCustomZone::shedule_Update(u32 dt)
 
 		inherited::shedule_Update(dt);
 
-		// check "fast-mode" border
-		float act_distance = Level().CurrentControlEntity()->Position().distance_to(P) - s.R;
-		if (act_distance > FASTMODE_DISTANCE && !m_zone_flags.test(eAlwaysFastmode))
+		// check "fast-mode" border, slow until the actor exists
+		CObject* E = Level().CurrentControlEntity();
+		float act_distance = E ? E->Position().distance_to(P) - s.R : flt_max;
+		if (!E || (act_distance > FASTMODE_DISTANCE && !m_zone_flags.test(eAlwaysFastmode)))
 			o_switch_2_slow();
 		else
 			o_switch_2_fast();
