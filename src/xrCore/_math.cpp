@@ -215,13 +215,13 @@ void Detect()
 	clk_overhead /= 256;
 
 	// 5. Detect QPC Overhead (Keep for compatibility)
-	qpc_overhead = 0;
+	// Fastest of 256 calls so a preempted call cannot raise it
+	qpc_overhead = u64(-1);
 	for (int i = 0; i < 256; i++)
 	{
 		u64 start = QPC();
-		qpc_overhead += (QPC() - start);
+		qpc_overhead = _min(qpc_overhead, QPC() - start);
 	}
-	qpc_overhead /= 256;
 
 	// 6. Calculate derived timings
 	clk_per_second -= clk_overhead;

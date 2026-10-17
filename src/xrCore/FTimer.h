@@ -39,7 +39,11 @@ public:
 	ICF u64 GetElapsed_ticks() const
 	{
 		if (bPause) return qwPausedTime;
-		else return CPU::QPC() - qwStartTime - CPU::qpc_overhead - qwPauseAccum;
+
+		// Stops at 0 when the overhead and pauses exceed the interval
+		u64 elapsed = CPU::QPC() - qwStartTime;
+		u64 offset = CPU::qpc_overhead + qwPauseAccum;
+		return elapsed > offset ? elapsed - offset : 0;
 	}
 
 	IC u32 GetElapsed_ms() const { return u32(GetElapsed_ticks() * u64(1000) / CPU::qpc_freq); }
