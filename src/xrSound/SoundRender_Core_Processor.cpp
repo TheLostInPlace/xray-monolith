@@ -26,6 +26,8 @@ void CSoundRender_Core::update(const Fvector& P, const Fvector& D, const Fvector
 
 	if (0 == bReady) return;
 
+	xrCriticalSectionGuard guard(update_lock);
+
 	if (bPendingDeviceListRefresh)
 	{
 		bPendingDeviceListRefresh = FALSE;

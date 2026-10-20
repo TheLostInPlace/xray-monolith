@@ -401,6 +401,8 @@ void CSoundRender_Core::play_at_pos(ref_sound& S, CObject* O, const Fvector &pos
 
 void CSoundRender_Core::destroy(ref_sound& S)
 {
+	// A Lua finalizer destroys sounds on the parallel GC task while the update runs
+	xrCriticalSectionGuard guard(update_lock);
 	if (S._feedback())
 	{
 		CSoundRender_Emitter* E = (CSoundRender_Emitter*)S._feedback();

@@ -9,6 +9,8 @@ class CNotificationClient;
 class CSoundRender_Core : public CSound_manager_interface
 {
 	volatile BOOL bLocked;
+	// Held across the update, so a destroy from another thread waits until the emitters are updated
+	xrCriticalSection update_lock;
 protected:
 	virtual void _create_data(ref_sound_data& S, LPCSTR fName, esound_type sound_type, int game_type);
 	virtual void _destroy_data(ref_sound_data& S);
