@@ -188,8 +188,11 @@ void CScriptEngine::unload()
 
 int CScriptEngine::lua_panic(lua_State* L)
 {
+	// LuaJIT exits after a panic, so the log is written here rather than by the log thread
+	xrLogger::SetImmediateMode(true);
 	ai().script_engine().print_stack();
 	print_output(L, "PANIC", LUA_ERRRUN);
+	xrLogger::FlushLog();
 	return (0);
 }
 
