@@ -111,6 +111,8 @@ jobs:
         mkdir -p bundle/bin bundle/db/mods
         cp exe_*/*.exe bundle/bin
         cp sdk/binaries/vaudionative.dll bundle/bin
+        cp -r sdk/binaries/vaudio-dev bundle/vaudio-dev
+        cp sdk/binaries/vaudio-LICENCE.txt bundle
         cp gamedata/*.db0 bundle/db/mods
         echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
