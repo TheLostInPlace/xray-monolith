@@ -19,7 +19,7 @@ jobs:
 
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Pack gamedata
       run: |
@@ -30,7 +30,7 @@ jobs:
         rename-item -path gamedata.db0 -newname ${{env.PACK_GAMEDATA_NAME}}
 
     - name: Upload gamedata
-      uses: actions/upload-artifact@v4.6.0
+      uses: actions/upload-artifact@v7
       with:
         name: gamedata
         path: ./compressor/${{env.PACK_GAMEDATA_NAME}}
@@ -46,21 +46,13 @@ jobs:
         buildconf: ["DX11", "DX11-AVX"]
 
     steps:
-    - name: Configure Pagefile
-      uses: al-cheb/configure-pagefile-action@v1.3
-      with:
-        minimum-size: 8GB
-        maximum-size: 8GB
-        disk-root: "C:"
-
     - name: Checkout repo
-      uses: actions/checkout@v4
-
-    - name: Init submodules
-      uses: snickerbockers/submodules-init@v4
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
 
     - name: setup-msbuild
-      uses: microsoft/setup-msbuild@v1.3.1
+      uses: microsoft/setup-msbuild@v3
       with:
         msbuild-architecture: "x64"
 
@@ -68,7 +60,7 @@ jobs:
       run: msbuild /p:Configuration=${{matrix.buildconf}} ${{env.SOLUTION_FILE_PATH}}
 
     - name: Upload Exe
-      uses: actions/upload-artifact@v4.6.0
+      uses: actions/upload-artifact@v7
       with:
         name: exe_${{matrix.buildconf}}
         path: ./_build/_game/bin_dbg/*.exe
@@ -76,7 +68,7 @@ jobs:
         retention-days: 1
 
     - name: Upload PDB
-      uses: actions/upload-artifact@v4.6.0
+      uses: actions/upload-artifact@v7
       with:
         name: pdb_${{matrix.buildconf}}
         path: ./_build/_game/bin_dbg/*.pdb
@@ -87,20 +79,27 @@ jobs:
     needs: [pack_gamedata, build]
     name: bundle
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         sparse-checkout: sdk/binaries
 
     - name: Download exes
-      uses: actions/download-artifact@v4.1.8
+      uses: actions/download-artifact@v8
       with:
         pattern: exe_*
 
+    - name: Download pdbs
+      uses: actions/download-artifact@v8
+      with:
+        pattern: pdb_*
+
     - name: Download gamedata
-      uses: actions/download-artifact@v4.1.8
+      uses: actions/download-artifact@v8
       with:
         name: gamedata
         path: gamedata
@@ -108,18 +107,42 @@ jobs:
     - name: Assemble
       id: assemble
       run: |
-        mkdir -p bundle/bin bundle/db/mods
+        sha=$(git rev-parse --short HEAD)
+        name="vaudio-crashfixes-mt-$sha"
+        mkdir -p bundle/bin bundle/db/mods pdb
         cp exe_*/*.exe bundle/bin
         cp sdk/binaries/vaudionative.dll bundle/bin
         cp -r sdk/binaries/vaudio-dev bundle/vaudio-dev
         cp sdk/binaries/vaudio-LICENCE.txt bundle
         cp gamedata/*.db0 bundle/db/mods
-        echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        cp pdb_*/*.pdb pdb
+        (cd bundle && zip -qr "../$name.zip" .)
+        (cd pdb && zip -qr "../$name-pdb.zip" .)
+        echo "name=$name" >> "$GITHUB_OUTPUT"
 
     - name: Upload bundle
-      uses: actions/upload-artifact@v4.6.0
+      uses: actions/upload-artifact@v7
       with:
-        name: vaudio-crashfixes-mt-${{steps.assemble.outputs.sha}}
+        name: ${{steps.assemble.outputs.name}}
         path: bundle
         if-no-files-found: "error"
         retention-days: 30
+
+    - name: Release
+      uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{steps.assemble.outputs.name}}
+        name: ${{steps.assemble.outputs.name}}
+        target_commitish: ${{github.sha}}
+        prerelease: true
+        make_latest: false
+        fail_on_unmatched_files: true
+        files: |
+          ${{steps.assemble.outputs.name}}.zip
+          ${{steps.assemble.outputs.name}}-pdb.zip
+        body: |
+          Test build of MT with Vercidium raytraced audio and the MT and pr crash fixes, from ${{github.sha}}.
+
+          Extract the bundle zip over the game folder. It puts the DX11 and DX11-AVX exes and vaudionative.dll in bin and the engine gamedata in db/mods.
+          vaudio-dev holds the SDK dev build and its debug window, with a README on swapping it in.
+          The pdb zip has the matching symbols for crash dumps.
