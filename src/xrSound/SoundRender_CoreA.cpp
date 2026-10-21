@@ -179,8 +179,9 @@ void CSoundRender_CoreA::set_listener(const CSoundRender_Environment& env)
         A_CHK(alEffectf(effect, AL_EAXREVERB_GAINHF, psReverbGainHF));
         A_CHK(alEffectf(effect, AL_EAXREVERB_GAINLF, psReverbGainLF));
         A_CHK(alEffectf(effect, AL_EAXREVERB_DECAY_TIME, psReverbDecayTime));
-        A_CHK(alEffectf(effect, AL_EAXREVERB_DECAY_HFRATIO, psReverbDecayHFRatio));
-        A_CHK(alEffectf(effect, AL_EAXREVERB_DECAY_LFRATIO, psReverbDecayLFRatio));
+        // The console allows ratios up to 20 but EFX takes 0.1 to 2
+        A_CHK(alEffectf(effect, AL_EAXREVERB_DECAY_HFRATIO, std::clamp(psReverbDecayHFRatio, AL_EAXREVERB_MIN_DECAY_HFRATIO, AL_EAXREVERB_MAX_DECAY_HFRATIO)));
+        A_CHK(alEffectf(effect, AL_EAXREVERB_DECAY_LFRATIO, std::clamp(psReverbDecayLFRatio, AL_EAXREVERB_MIN_DECAY_LFRATIO, AL_EAXREVERB_MAX_DECAY_LFRATIO)));
         A_CHK(alEffectf(effect, AL_EAXREVERB_REFLECTIONS_GAIN, psReverbReflectionsGain));
         A_CHK(alEffectf(effect, AL_EAXREVERB_REFLECTIONS_DELAY, psReverbReflectionsDelay));
         A_CHK(alEffectf(effect, AL_EAXREVERB_LATE_REVERB_GAIN, psReverbLateReverbGain));
@@ -235,7 +236,7 @@ void CSoundRender_CoreA::get_listener(CSoundRender_Environment& env)
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_DIFFUSION, &env.EnvironmentDiffusion));
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_GAIN, &env.Room));
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_GAINHF, &env.RoomHF));
-	A_CHK(alGetEffectf(effect, AL_EAXREVERB_GAINHF, &env.RoomLF));
+	A_CHK(alGetEffectf(effect, AL_EAXREVERB_GAINLF, &env.RoomLF));
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_DECAY_TIME, &env.DecayTime));
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_DECAY_HFRATIO, &env.DecayHFRatio));
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_DECAY_LFRATIO, &env.DecayLFRatio));
@@ -253,7 +254,9 @@ void CSoundRender_CoreA::get_listener(CSoundRender_Environment& env)
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_HFREFERENCE, &env.HFReference));
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_LFREFERENCE, &env.LFReference));
 	A_CHK(alGetEffectf(effect, AL_EAXREVERB_ROOM_ROLLOFF_FACTOR, &env.RoomRolloffFactor));
-	A_CHK(alEffecti(effect, AL_EAXREVERB_DECAY_HFLIMIT, (ALint)env.DecayHFLimit));
+	ALint decay_hf_limit;
+	A_CHK(alGetEffecti(effect, AL_EAXREVERB_DECAY_HFLIMIT, &decay_hf_limit));
+	env.DecayHFLimit = decay_hf_limit;
 }
 
 void  CSoundRender_CoreA::_restart()

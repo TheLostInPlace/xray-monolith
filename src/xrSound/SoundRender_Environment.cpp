@@ -73,6 +73,11 @@ void CSoundRender_Environment::lerp(CSoundRender_Environment& A, CSoundRender_En
 	LFReference = fi * A.LFReference + f * B.LFReference;
 	EchoTime = fi * A.EchoTime + f * B.EchoTime;
 	EchoDepth = fi * A.EchoDepth + f * B.EchoDepth;
+	RoomLF = fi * A.RoomLF + f * B.RoomLF;
+	// A flag has no midpoint, so take the target's
+	DecayHFLimit = B.DecayHFLimit;
+	// Once an extended environment is reached keep sending its fields so they blend back to defaults
+	version = std::max(A.version, B.version);
 
 	clamp();
 }
