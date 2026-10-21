@@ -51,6 +51,9 @@
     <ClInclude Include="SoundRender_Decay.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="SoundRender_MassLaw.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="OpenALDeviceList.h">
       <Filter>Core\OpenAL</Filter>
     </ClInclude>

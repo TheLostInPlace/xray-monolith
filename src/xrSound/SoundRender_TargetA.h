@@ -30,6 +30,8 @@ public:
 	float cache_band;
 	// The listener's slot hears the source through the direct filter
 	bool send_direct;
+	// The air's treble gain folded into the direct filter, 1 without air
+	float cache_air;
 
 	ALuint buf_block;
 private:
@@ -37,6 +39,7 @@ private:
 	bool skips_reverb() const;
 	int grouped() const;
 	void leave_group();
+	void send_through_direct();
 public:
 	CSoundRender_TargetA();
 	virtual ~CSoundRender_TargetA();

@@ -121,6 +121,7 @@ enum
 	//!< 2D mode
 	sm_Intro = (1ul << 2ul), //!< Only for music and video
 	sm_Bed = (1ul << 3ul), //!< Weather ambient bed
+	sm_Layer = (1ul << 4ul), //!< One layer of a multi-layer weapon sound
 	sm_forcedword = u32(-1),
 };
 
@@ -528,6 +529,8 @@ public:
 	virtual void set_geometry_som(IReader* I) = 0;
 	virtual void set_geometry_occ(CDB::MODEL* M) = 0;
 	virtual void set_geometry_acoustics(CDB::MODEL* M, const CSound_material_desc* materials, u32 count) = 0;
+	// The acoustics upload runs beside the level load, which waits for it here before anything needs it
+	virtual void wait_geometry_acoustics() = 0;
 	// The shapes join the raytraced world with the owner's first move, object_relcase removes them
 	virtual bool occluder_add(const void* owner, const CSound_occluder_shape* shapes, u32 count) = 0;
 	virtual void occluder_move(const void* owner, const Fmatrix* poses, u32 count) = 0;

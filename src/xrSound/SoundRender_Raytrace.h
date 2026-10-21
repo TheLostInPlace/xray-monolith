@@ -217,6 +217,9 @@ class CSoundRender_Raytrace
 	xr_vector<HANDLE> teardowns;
 	xr_vector<LPCSTR> reported;
 	xrCriticalSection lock;
+	// Releases that found the lock taken, with the emitter each came from, the next tick lets them go
+	xr_vector<std::pair<CSoundRender_RaytraceSource*, const CSoundRender_Emitter*>> late_releases;
+	xrCriticalSection late_lock;
 	std::atomic<bool> ready;
 	Fbox bounds;
 
@@ -322,6 +325,17 @@ class CSoundRender_Raytrace
 	CSoundRender_RaytraceSnapshot<snapshot_owner_words> owner_snapshot;
 	u64 commit_base;
 	CTimer upload_timer;
+	// The level's world builds on the task pool from a copy of the materials, wait_create takes it in with its first update
+	xr_task_group load_task;
+	xr_vector<CSound_material_desc> load_materials;
+	// sound_raytrace.ltx, the level's name and its weather cycle, read before the launch since the task touches no file
+	xr_map<xr_string, xr_map<xr_string, shared_str>> load_ltx;
+	string_path load_level;
+	bool load_indoor;
+	bool built;
+	float upload_ms;
+	string512 summary_head;
+	string512 summary_tail;
 	bool first_result;
 	// Listener travel since its last full recast, and where it last stood still
 	Fvector listener_last;
@@ -330,6 +344,7 @@ class CSoundRender_Raytrace
 	float still_time;
 
 	bool check(int result, LPCSTR call);
+	void build(CDB::MODEL* M, const CSound_material_desc* materials, u32 count);
 	void release();
 	void set_muffling();
 	void set_formula(bool value);
@@ -349,6 +364,8 @@ class CSoundRender_Raytrace
 	void drain();
 	bool acquire(CSoundRender_Emitter* E);
 	void remove(CSoundRender_RaytraceSource* S);
+	void let_go(CSoundRender_RaytraceSource* S, const CSoundRender_Emitter* E);
+	void take_late_releases();
 	void drop_tail(VAEmitter* e);
 	void detach(CSoundRender_RaytraceSource* S, bool hold);
 	void apply_occluders();
@@ -360,7 +377,9 @@ public:
 	CSoundRender_Raytrace();
 	~CSoundRender_Raytrace();
 
+	// Starts the level's world on the task pool, the level load calls wait_create before anything needs it
 	void create(CDB::MODEL* M, const CSound_material_desc* materials, u32 count);
+	void wait_create();
 	void destroy();
 	// True from a finished level create until destroy
 	bool running() const;

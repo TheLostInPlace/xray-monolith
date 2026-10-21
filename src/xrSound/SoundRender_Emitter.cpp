@@ -51,6 +51,7 @@ CSoundRender_Emitter::CSoundRender_Emitter(void)
 	bRewind = FALSE;
 	bIntro = false;
 	bBed = false;
+	bLayer = false;
 	iPaused = 0;
 	fTimeStarted = 0.0f;
 	fTimeToStop = 0.0f;

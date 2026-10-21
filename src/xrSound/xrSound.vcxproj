@@ -377,6 +377,7 @@
     <ClInclude Include="SoundRender_Decay.h" />
     <ClInclude Include="SoundRender_Emitter.h" />
     <ClInclude Include="SoundRender_Environment.h" />
+    <ClInclude Include="SoundRender_MassLaw.h" />
     <ClInclude Include="SoundRender_Raytrace.h" />
     <ClInclude Include="SoundRender_Source.h" />
     <ClInclude Include="SoundRender_Target.h" />

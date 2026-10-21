@@ -156,6 +156,8 @@ bool IGame_Level::Load(u32 dwNum)
 	R_ASSERT(Load_GameSpecific_Before());
 	Objects.Load();
 	//. ANDY R_ASSERT (Load_GameSpecific_After ());
+	if (psSoundFlags.test(ss_Raytrace))
+		Sound->wait_geometry_acoustics();
 
 	// Done
 	FS.r_close(LL_Stream);

@@ -103,6 +103,8 @@ void HUD_SOUND_ITEM::PlaySound(HUD_SOUND_ITEM& hud_snd,
 	u32 flags = b_hud_mode ? sm_2D : 0;
 	if (looped)
 		flags |= sm_Looped;
+	if (hud_snd.m_b_layer)
+		flags |= sm_Layer;
 
 	//Alundaio: Sanity, don't allow PlaySound of index greater then the size, just play last index
 	if (index == u8(-1))
@@ -438,6 +440,7 @@ void HUD_SOUND_COLLECTION_LAYERED::LoadSound(CInifile const* ini, LPCSTR section
 		string256 sound_line;
 		xr_strcpy(sound_line, "snd_1_layer");
 		int k = 1;
+		const size_t first = m_sound_items.size();
 		while (ini->line_exist(buf_str, sound_line))
 		{
 			m_sound_items.resize(m_sound_items.size() + 1);
@@ -446,6 +449,11 @@ void HUD_SOUND_COLLECTION_LAYERED::LoadSound(CInifile const* ini, LPCSTR section
 			snd_item.m_alias = alias;
 			xr_sprintf(sound_line, "snd_%d_layer", ++k);
 		}
+		// A section of two or more layers plays each as a layer
+		if (m_sound_items.size() - first > 1)
+			for (size_t i = first; i < m_sound_items.size(); ++i)
+				for (HUD_SOUND_ITEM& layer : m_sound_items[i].m_sound_items)
+					layer.m_b_layer = true;
 	}
 	else //For compatibility with normal HUD_SOUND_COLLECTION sounds
 	{

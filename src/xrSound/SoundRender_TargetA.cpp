@@ -8,6 +8,10 @@
 xr_vector<u8> g_target_temp_data;
 xr_vector<u8> g_target_temp_data_16;
 
+// The 5 kHz shelf gain for air at listener distance d is (1 + d / air_shelf_range) raised to air_shelf_power
+constexpr float air_shelf_power = -1.30027f;
+constexpr float air_shelf_range = 75.f;
+
 CSoundRender_TargetA::CSoundRender_TargetA(): CSoundRender_Target()
 {
 	cache_gain = 0.f;
@@ -23,6 +27,7 @@ CSoundRender_TargetA::CSoundRender_TargetA(): CSoundRender_Target()
 	cache_send = 1.f;
 	cache_band = 1.f;
 	send_direct = false;
+	cache_air = 1.f;
 }
 
 CSoundRender_TargetA::~CSoundRender_TargetA()
@@ -106,7 +111,10 @@ void CSoundRender_TargetA::render()
 	{
 		// The direct filter fill_parameters left goes to the slot too
 		send_direct = direct_attached;
-		A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, send_direct ? direct_filter : AL_FILTER_NULL));
+		if (send_direct)
+			send_through_direct();
+		else
+			A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, AL_FILTER_NULL));
 	}
 	// demonized: explicitly disable effects by sending sounds to null slot, ie. not sending
 	else
@@ -154,6 +162,16 @@ int CSoundRender_TargetA::grouped() const
 void CSoundRender_TargetA::leave_group()
 {
 	send_group = -1;
+}
+
+// The listener's slot copies the direct filter without the air, which only the dry path carries
+void CSoundRender_TargetA::send_through_direct()
+{
+	if (cache_air != 1.f)
+		A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAINHF, std::min(cache_hf, 1.f)));
+	A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, direct_filter));
+	if (cache_air != 1.f)
+		A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAINHF, std::min(cache_hf, 1.f) * cache_air));
 }
 
 void CSoundRender_TargetA::rewind()
@@ -232,6 +250,14 @@ void CSoundRender_TargetA::fill_parameters()
 
 	A_CHK(alSourcef (pSource, AL_ROLLOFF_FACTOR, psSoundRolloff));
 
+	// While raytracing the dry path loses treble over the listener distance as air does, the far layers of a weapon sound already carry that loss
+	float air = 1.f;
+	if (SoundRender->raytracing() && !m_pEmitter->b2D && !m_pEmitter->bLayer)
+	{
+		const float distance = SoundRender->listener_position().distance_to(m_pEmitter->p_source.position);
+		air = std::pow(1.f + distance / air_shelf_range, air_shelf_power);
+	}
+
 	VERIFY2(m_pEmitter, SE->source()->file_name());
 	// Treble that passes better than bass lifts the gain by the ratio and the filter takes the bass down instead
 	const float _hf = m_pEmitter->occluder_hf;
@@ -249,9 +275,9 @@ void CSoundRender_TargetA::fill_parameters()
 		A_CHK(alSourcef (pSource, AL_GAIN, _gain));
 	}
 
-	// Raytraced treble loss, the source copies the filter when it is attached
+	// Raytraced and air treble loss, the source copies the filter when it is attached
 	bool direct_set = false;
-	if (m_pEmitter->rt_traced || _hf != 1.f)
+	if (m_pEmitter->rt_traced || _hf != 1.f || air != 1.f)
 	{
 		if (!direct_filter)
 		{
@@ -265,17 +291,18 @@ void CSoundRender_TargetA::fill_parameters()
 		// A grouped source's dry path keeps its share of the gain sent
 		const float _band = group >= 0 && cache_gain > 0.f ? std::min(dry / cache_gain, 1.f) : 1.f;
 		const bool band_moved = _band == 1.f ? cache_band != 1.f : _abs(_band - cache_band) > 0.01f * cache_band;
-		if (!direct_attached || !fsimilar(_hf, cache_hf, 0.01f) || _abs(_lf - cache_lf) > 0.01f * cache_lf || band_moved)
+		if (!direct_attached || !fsimilar(_hf, cache_hf, 0.01f) || _abs(_lf - cache_lf) > 0.01f * cache_lf || band_moved || _abs(air - cache_air) > 0.01f * cache_air)
 		{
 			cache_hf = _hf;
 			cache_lf = _lf;
+			cache_air = air;
 			direct_attached = true;
 			if (_band != cache_band)
 			{
 				cache_band = _band;
 				A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAIN, _band));
 			}
-			A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAINHF, std::min(_hf, 1.f)));
+			A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAINHF, std::min(_hf, 1.f) * air));
 			A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAINLF, _lf));
 			A_CHK(alSourcei(pSource, AL_DIRECT_FILTER, direct_filter));
 			direct_set = true;
@@ -318,7 +345,7 @@ void CSoundRender_TargetA::fill_parameters()
 		const bool direct = direct_attached;
 		if (direct && (!send_direct || direct_set))
 		{
-			A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, direct_filter));
+			send_through_direct();
 			send_direct = true;
 		}
 		else if (!direct && send_direct)

@@ -5,6 +5,7 @@
 #include "SoundRender_Decay.h"
 #include "SoundRender_Environment.h"
 #include "SoundRender_Emitter.h"
+#include "SoundRender_MassLaw.h"
 #include "SoundRender_Source.h"
 #include "SoundRender_TargetA.h"
 
@@ -19,7 +20,7 @@
 
 CSoundRender_Raytrace::CSoundRender_Raytrace() :
 	world(nullptr), listener(nullptr), ready(false), reverb(reverbs[0]), has_reverb(false), asked(false), held(false), held_latch(false), held_updates(0), room(false), room_serial(0),
-	commit_base(0), first_result(false), walked(0.f), still_time(0.f),
+	commit_base(0), load_indoor(false), built(false), upload_ms(0.f), first_result(false), walked(0.f), still_time(0.f),
 	muffle(nullptr), muffle_rays(false), retrace(false), reset_updates(0),
 	occluders_open(false), occluder_moves(0),
 	ambient(false), ambient_ready(false), ambient_lf(1.f), ambient_hf(1.f), ambient_wait(-1.f), group_sources(0), group_count(0),
@@ -563,6 +564,125 @@ namespace
 		return false;
 	}
 
+	// One material's triangles in one 2 m cell
+	struct CellRun
+	{
+		u32 material;
+		u32 first;
+		u32 end;
+	};
+
+	// Wall thickness behind area-spread points of a cell, a point with no back face within reach reads -1
+	constexpr u32 thickness_points = 4;
+	// Hits nearer than this along the ray are the start surface or its neighbours
+	constexpr float thickness_skin = 1e-3f;
+	struct ThicknessSample
+	{
+		Fvector at;
+		float thickness;
+	};
+
+	float tri_area(const CDB::TRI& T, const Fvector* verts)
+	{
+		Fvector e1, e2, n;
+		e1.sub(verts[T.verts[1]], verts[T.verts[0]]);
+		e2.sub(verts[T.verts[2]], verts[T.verts[0]]);
+		n.crossproduct(e1, e2);
+		return 0.5f * n.magnitude();
+	}
+
+	// The nearest uploaded solid triangle along the ray whose face looks along it, -1 with no hit past the skin
+	int back_face(CDB::COLLIDER& collider, const CDB::MODEL* M, const Fvector& from, const Fvector& dir, float range, u32 self, float skin,
+		const xr_vector<u8>& solid, float& distance)
+	{
+		const CDB::TRI* tris = M->get_tris();
+		const Fvector* verts = M->get_verts();
+		collider.ray_query(M, from, dir, range);
+		int found = -1;
+		distance = -1.f;
+		for (int h = 0; h < collider.r_count(); ++h)
+		{
+			const CDB::RESULT& R = collider.r_begin()[h];
+			if (u32(R.id) == self || R.range < skin || (found >= 0 && R.range >= distance))
+				continue;
+			const CDB::TRI& H = tris[R.id];
+			if (H.material >= solid.size() || !solid[H.material])
+				continue;
+			Fvector h1, h2, hn;
+			h1.sub(verts[H.verts[1]], verts[H.verts[0]]);
+			h2.sub(verts[H.verts[2]], verts[H.verts[0]]);
+			hn.crossproduct(h1, h2);
+			if (hn.dotproduct(dir) > 0.f)
+			{
+				found = R.id;
+				distance = R.range;
+			}
+		}
+		return found;
+	}
+
+	// Each point casts along minus the CFORM normal to the nearest uploaded triangle facing along the ray
+	void probe_cell(CDB::COLLIDER& collider, const CDB::MODEL* M, const u32* order, const CellRun& c, const xr_vector<u8>& solid, ThicknessSample* out)
+	{
+		const CDB::TRI* tris = M->get_tris();
+		const Fvector* verts = M->get_verts();
+		float area = 0.f;
+		for (u32 k = c.first; k < c.end; ++k)
+			area += tri_area(tris[order[k]], verts);
+		u32 k = c.first;
+		float before = 0.f, size = tri_area(tris[order[k]], verts);
+		for (u32 i = 0; i < thickness_points; ++i)
+		{
+			out[i] = { { 0.f, 0.f, 0.f }, -1.f };
+			if (area <= 0.f)
+				continue;
+			const float at = (i + 0.5f) / thickness_points * area;
+			while (before + size < at && k + 1 < c.end)
+			{
+				before += size;
+				size = tri_area(tris[order[++k]], verts);
+			}
+			const CDB::TRI& T = tris[order[k]];
+			const Fvector& a = verts[T.verts[0]];
+			const Fvector& b = verts[T.verts[1]];
+			const Fvector& d = verts[T.verts[2]];
+			// Uniform over the triangle from the area share and a golden ratio step
+			const float s = std::sqrt(size > 0.f ? std::clamp((at - before) / size, 0.f, 1.f) : 0.5f);
+			float t = i * 0.618034f + 0.5f;
+			t -= std::floor(t);
+			Fvector p, e1, e2, dir;
+			p.mul(a, 1.f - s).mad(b, s * (1.f - t)).mad(d, s * t);
+			out[i].at = p;
+			e1.sub(b, a);
+			e2.sub(d, a);
+			dir.crossproduct(e1, e2);
+			const float len = dir.magnitude();
+			if (len <= 0.f)
+				continue;
+			dir.div(-len);
+			back_face(collider, M, p, dir, mass_law_reach, order[k], thickness_skin, solid, out[i].thickness);
+		}
+	}
+
+	// CInifile::r_bool on a value already read
+	bool ini_bool(LPCSTR value)
+	{
+		char b[8];
+		strncpy_s(b, sizeof(b), value, 7);
+		b[7] = 0;
+		_strlwr_s(b);
+		return CInifile::IsBOOL(b);
+	}
+
+	// Walls thinner than the first bin's floor count in the first bin
+	u32 thickness_bin(float thickness)
+	{
+		u32 bin = 0;
+		while (bin + 1 < mass_law_bins && thickness >= mass_law_bin_floor[bin + 1])
+			++bin;
+		return bin;
+	}
+
 	// An old world still runs its round after the level is gone, so it finishes and frees on its own thread
 	struct Teardown
 	{
@@ -654,6 +774,46 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 	if (!sdk_probe())
 		return;
 
+	// The file system takes no lock against the renderer's cache writes, so the files are read here and the upload gets copies
+	load_ltx.clear();
+	string_path ltx_name;
+	if (FS.exist(ltx_name, "$game_data$", "materials\\sound_raytrace", ".ltx"))
+	{
+		CInifile ltx(ltx_name, TRUE);
+		for (const CInifile::Sect& S : ltx.sections())
+		{
+			auto& keys = load_ltx[S.Name.c_str()];
+			for (const CInifile::Item& I : S.Data)
+			{
+				if (I.first.c_str())
+					keys[I.first.c_str()] = I.second;
+			}
+		}
+	}
+	else
+		Msg("! SOUND: Raytrace: materials\\sound_raytrace.ltx not found, every material uses its default");
+
+	xr_strcpy(load_level, FS.get_path("$level$")->m_Add);
+	if (const size_t len = xr_strlen(load_level); len && load_level[len - 1] == '\\')
+		load_level[len - 1] = 0;
+	// Weather beds take the ambient filter unless the level's weather cycle is indoors, read from game.ltx as the weather manager reads it
+	{
+		string_path file;
+		FS.update_path(file, "$game_config$", "game.ltx");
+		CInifile game(file, TRUE, TRUE, FALSE);
+		LPCSTR cycle = game.line_exist(load_level, "weathers") ? game.r_string(load_level, "weathers") : nullptr;
+		if (!cycle)
+			cycle = "[default]";
+		load_indoor = !xr_strcmp(cycle, "indoor") || !strncmp(cycle, "w_indoor_", 9);
+	}
+
+	// The upload waits for the collision tree on the task pool while the level load goes on
+	load_materials.assign(materials, materials + count);
+	load_task.run([this, M] { build(M, load_materials.data(), u32(load_materials.size())); });
+}
+
+void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* materials, u32 count)
+{
 	xrCriticalSectionGuard guard(lock);
 	upload_timer.Start();
 	commit_base = process_commit();
@@ -700,10 +860,16 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 	for (u32 i = 0; i < tri_count; ++i)
 		++per_material[std::min<u32>(tris[i].material, count)];
 
-	string_path ltx_name;
-	CInifile* ltx = FS.exist(ltx_name, "$game_data$", "materials\\sound_raytrace", ".ltx") ? xr_new<CInifile>(ltx_name, TRUE) : nullptr;
-	if (!ltx)
-		Msg("! SOUND: Raytrace: materials\\sound_raytrace.ltx not found, every material uses its default");
+	// The copy of sound_raytrace.ltx, an empty value reads as NULL as CInifile gives it
+	auto ltx_value = [this](LPCSTR section, LPCSTR key) -> const shared_str*
+	{
+		const auto s = load_ltx.find(section);
+		if (s == load_ltx.end())
+			return nullptr;
+		const auto k = s->second.find(key);
+		return k == s->second.end() ? nullptr : &k->second;
+	};
+	auto section_exist = [this](LPCSTR section) { return load_ltx.find(section) != load_ltx.end(); };
 
 	// A dynamic material takes the SDK material of its like section, made here when the level has no static triangles of it
 	xr_vector<u32> like_of(count, u32(-1));
@@ -714,9 +880,9 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 			continue;
 		LPCSTR name = materials[m].name.c_str();
 		u32 target = m;
-		if (ltx && ltx->line_exist(name, "like"))
+		if (const shared_str* like_value = ltx_value(name, "like"))
 		{
-			LPCSTR like = ltx->r_string(name, "like");
+			LPCSTR like = like_value->c_str();
 			const auto it = std::find_if(materials, materials + count, [like](const CSound_material_desc& d) { return like && !xr_strcmp(d.name.c_str(), like); });
 			if (it != materials + count)
 				target = u32(it - materials);
@@ -729,6 +895,8 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 
 	// Materials first, a mesh with a missing material is refused
 	xr_vector<int> material_id(count, 0);
+	// Level cells of a mass-law class take its flat values by wall thickness, unless the section sets its own
+	xr_vector<int> mass_class(count, -1);
 	u32 used = 0, skipped = per_material[count], unmapped = 0;
 	for (u32 m = 0; m < count; ++m)
 	{
@@ -737,18 +905,19 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 
 		LPCSTR name = materials[m].name.c_str();
 		LPCSTR section = name;
-		if (!ltx || !ltx->section_exist(section))
+		if (!section_exist(section))
 		{
 			section = materials[m].passable ? "default_passable" : "default";
 			++unmapped;
 		}
-		const bool has_section = ltx && ltx->section_exist(section);
+		const bool has_section = section_exist(section);
 		// An empty value reads as NULL and counts as missing
 		auto text = [&](LPCSTR key) -> LPCSTR
 		{
-			if (!has_section || !ltx->line_exist(section, key))
+			const shared_str* value = has_section ? ltx_value(section, key) : nullptr;
+			if (!value)
 				return nullptr;
-			LPCSTR v = ltx->r_string(section, key);
+			LPCSTR v = value->c_str();
 			if (!v || !*v)
 			{
 				Msg("! SOUND: Raytrace: [%s] %s is empty, the preset stays", section, key);
@@ -756,7 +925,7 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 			}
 			return v;
 		};
-		if (text("skip") && ltx->r_bool(section, "skip"))
+		if (LPCSTR skip = text("skip"); skip && ini_bool(skip))
 		{
 			skipped += per_material[m];
 			continue;
@@ -779,9 +948,9 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 		// Preset numbers stay the SDK's unless the section overrides them, an override the SDK refuses or a loss above 1 falls back
 		auto set = [&](decltype(&vaWorldSetMaterialAbsorptionLF) setter, LPCSTR call, LPCSTR key, float preset_value, float top)
 		{
-			if (text(key))
+			if (LPCSTR value = text(key))
 			{
-				const float v = ltx->r_float(section, key);
+				const float v = float(atof(value));
 				if (v <= top && check(setter(world, id, v), call))
 					return;
 				Msg("! SOUND: Raytrace: [%s] %s %.3f rejected, the preset stays", section, key, v);
@@ -800,8 +969,13 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 		set(vaWorldSetMaterialFlatTransmissionHF, "vaWorldSetMaterialFlatTransmissionHF", "flat_transmission_hf", 1.f - keep_hf, 1.f);
 		material_id[m] = id;
 		++used;
+		if (!has_section || (!ltx_value(section, "flat_transmission_lf") && !ltx_value(section, "flat_transmission_hf")))
+		{
+			const auto row = std::find_if(std::begin(mass_law_classes), std::end(mass_law_classes), [section](const mass_law_class& c) { return !xr_strcmp(c.section, section); });
+			if (row != std::end(mass_law_classes))
+				mass_class[m] = int(row - std::begin(mass_law_classes));
+		}
 	}
-	xr_delete(ltx);
 	if (unmapped)
 		Msg("SOUND: Raytrace: %u materials unmapped, each uses its default", unmapped);
 
@@ -845,10 +1019,117 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 	{
 		int x, y, z;
 		u32 tri;
+		u8 bin;
 		bool operator<(const Cell& c) const { return std::tie(x, y, z, tri) < std::tie(c.x, c.y, c.z, c.tri); }
 	};
-	xr_vector<Cell> cells;
-	xr_vector<u32> runs;
+	xr_vector<CellRun> runs;
+	{
+		xr_vector<Cell> cells;
+		for (u32 m = 0; m < count; ++m)
+		{
+			if (first[m + 1] == first[m])
+				continue;
+
+			// Triangles sorted by the cell of their centroid, each run of one cell becomes a mesh
+			cells.clear();
+			for (u32 k = first[m]; k < first[m + 1]; ++k)
+			{
+				const CDB::TRI& T = tris[order[k]];
+				Fvector c;
+				c.add(verts[T.verts[0]], verts[T.verts[1]]).add(verts[T.verts[2]]).div(3.f * mesh_split);
+				cells.push_back({ iFloor(c.x), iFloor(c.y), iFloor(c.z), order[k] });
+			}
+			std::sort(cells.begin(), cells.end());
+			u32 start = first[m];
+			for (u32 i = 0; i < u32(cells.size()); ++i)
+			{
+				order[first[m] + i] = cells[i].tri;
+				if (i && std::tie(cells[i].x, cells[i].y, cells[i].z) != std::tie(cells[i - 1].x, cells[i - 1].y, cells[i - 1].z))
+				{
+					runs.push_back({ m, start, first[m] + i });
+					start = first[m] + i;
+				}
+			}
+			runs.push_back({ m, start, first[m + 1] });
+		}
+	}
+
+	// Cells of a thick mass-law class take their wall thickness from the collision tree, cast across the task pool
+	// Sheet classes keep a fixed skin, since the probe finds the air inside a hollow shell
+	CTimer probe_timer;
+	probe_timer.Start();
+	M->syncronize();
+	const float tree_ms = probe_timer.GetElapsed_sec() * 1000.f;
+	const u32 run_count = u32(runs.size());
+	xr_vector<ThicknessSample> samples(run_count * thickness_points, { { 0.f, 0.f, 0.f }, -1.f });
+	constexpr u32 probe_block = 256;
+	xr_parallel_for(0u, (run_count + probe_block - 1) / probe_block, [&](u32 b)
+	{
+		CDB::COLLIDER collider;
+		collider.ray_options(0);
+		for (u32 i = b * probe_block; i < std::min(run_count, (b + 1) * probe_block); ++i)
+		{
+			const int row = mass_class[runs[i].material];
+			if (row >= 0 && !mass_law_classes[row].sheet)
+				probe_cell(collider, M, order.data(), runs[i], direct_static, &samples[i * thickness_points]);
+		}
+	});
+	const float probe_ms = probe_timer.GetElapsed_sec() * 1000.f - tree_ms;
+	u32 probed = 0, backed = 0;
+	for (u32 i = 0; i < run_count; ++i)
+	{
+		const int row = mass_class[runs[i].material];
+		if (row < 0 || mass_law_classes[row].sheet)
+			continue;
+		++probed;
+		for (u32 p = 0; p < thickness_points; ++p)
+			backed += samples[i * thickness_points + p].thickness >= 0.f;
+	}
+	Msg("SOUND: Raytrace: thickness probe %u of %u cells, %u of %u points with a back face, %.0f ms, %.0f ms waiting for the collision tree",
+		probed, run_count, backed, probed * thickness_points, probe_ms, tree_ms);
+
+	// Each thick class triangle casts from just off its centroid along minus its normal, the first face looking back is its partner
+	// The partner's distance is the triangle's own wall thickness
+	CTimer pair_timer;
+	pair_timer.Start();
+	constexpr u32 no_partner = u32(-1);
+	xr_vector<u32> partner(tri_count, no_partner);
+	xr_vector<float> own_thickness(tri_count, -1.f);
+	const u32 faces = u32(order.size());
+	constexpr u32 pair_block = 1024;
+	xr_parallel_for(0u, (faces + pair_block - 1) / pair_block, [&](u32 block)
+	{
+		CDB::COLLIDER collider;
+		collider.ray_options(0);
+		for (u32 k = block * pair_block; k < std::min(faces, (block + 1) * pair_block); ++k)
+		{
+			const u32 t = order[k];
+			const CDB::TRI& T = tris[t];
+			const int row = mass_class[T.material];
+			if (row < 0 || mass_law_classes[row].sheet)
+				continue;
+			const Fvector& a = verts[T.verts[0]];
+			const Fvector& b = verts[T.verts[1]];
+			const Fvector& d = verts[T.verts[2]];
+			Fvector c, e1, e2, dir;
+			c.add(a, b).add(d).div(3.f);
+			e1.sub(b, a);
+			e2.sub(d, a);
+			dir.crossproduct(e1, e2);
+			const float len = dir.magnitude();
+			if (len <= 0.f)
+				continue;
+			dir.div(-len);
+			c.mad(dir, thickness_skin);
+			float distance;
+			const int found = back_face(collider, M, c, dir, mass_law_reach - thickness_skin, t, 0.f, direct_static, distance);
+			if (found < 0)
+				continue;
+			partner[t] = u32(found);
+			own_thickness[t] = distance + thickness_skin;
+		}
+	});
+	const float pair_ms = pair_timer.GetElapsed_sec() * 1000.f;
 
 	VAMatrix identity{};
 	identity.m11 = identity.m22 = identity.m33 = identity.m44 = 1.f;
@@ -861,80 +1142,246 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 	u32 degenerate = 0;
 	// The SDK reflects off the face CFORM treats as the back, so corners go in reverse order
 	constexpr u32 corner_order[3] = { 0, 2, 1 };
-	for (u32 m = 0; m < count; ++m)
+
+	// One SDK material per class material, bin and half, made on first use as a copy of the material with the bin's flat values
+	// A half face keeps the root of the full transmitted amplitude, so the wall's two faces pay its loss once
+	constexpr u8 half_bin = 0x80;
+	xr_vector<int> bin_id(count * 2 * mass_law_bins, 0);
+	u32 bin_materials = 0;
+	auto bin_material = [&](u32 m, u8 want) -> int
 	{
-		if (first[m + 1] == first[m])
-			continue;
+		const u32 bin = want & ~half_bin;
+		const u32 slot = (want & half_bin ? mass_law_bins : 0) + bin;
+		int& id = bin_id[m * 2 * mass_law_bins + slot];
+		if (id)
+			return id;
+		const int base = material_id[m];
+		const int made = material_base + int(count * (1 + slot) + m);
+		if (!check(vaWorldCreateMaterial(world, made), "vaWorldCreateMaterial"))
+			return id = base;
+		float flat[2] = { mass_law_classes[mass_class[m]].flat[bin][0], mass_law_classes[mass_class[m]].flat[bin][1] };
+		if (want & half_bin)
+			for (float& f : flat)
+				f = 1.f - std::sqrt(1.f - f);
+		check(vaWorldSetMaterialAbsorptionLF(world, made, vaWorldGetMaterialAbsorptionLF(world, base)), "vaWorldSetMaterialAbsorptionLF");
+		check(vaWorldSetMaterialAbsorptionHF(world, made, vaWorldGetMaterialAbsorptionHF(world, base)), "vaWorldSetMaterialAbsorptionHF");
+		check(vaWorldSetMaterialScattering(world, made, vaWorldGetMaterialScattering(world, base)), "vaWorldSetMaterialScattering");
+		check(vaWorldSetMaterialTransmissionLF(world, made, vaWorldGetMaterialTransmissionLF(world, base)), "vaWorldSetMaterialTransmissionLF");
+		check(vaWorldSetMaterialTransmissionHF(world, made, vaWorldGetMaterialTransmissionHF(world, base)), "vaWorldSetMaterialTransmissionHF");
+		check(vaWorldSetMaterialFlatTransmissionLF(world, made, flat[0]), "vaWorldSetMaterialFlatTransmissionLF");
+		check(vaWorldSetMaterialFlatTransmissionHF(world, made, flat[1]), "vaWorldSetMaterialFlatTransmissionHF");
+		++bin_materials;
+		return id = made;
+	};
 
-		// Triangles sorted by the cell of their centroid, each run of one cell becomes a mesh
-		runs.assign(1, first[m]);
-		cells.clear();
-		for (u32 k = first[m]; k < first[m + 1]; ++k)
+	// The triangles of one cell whose bin matches, as one mesh
+	auto upload = [&](const CellRun& c, int id, const u8* tri_bin, u8 want) -> bool
+	{
+		buffer.resize((c.end - c.first) * 3);
+		Fbox box;
+		box.invalidate();
+		VAVector* out = buffer.data();
+		u32 kept = 0;
+		for (u32 k = c.first; k < c.end; ++k)
 		{
+			if (tri_bin[k - c.first] != want)
+				continue;
 			const CDB::TRI& T = tris[order[k]];
-			Fvector c;
-			c.add(verts[T.verts[0]], verts[T.verts[1]]).add(verts[T.verts[2]]).div(3.f * mesh_split);
-			cells.push_back({ iFloor(c.x), iFloor(c.y), iFloor(c.z), order[k] });
+			Fvector e1, e2, normal;
+			e1.sub(verts[T.verts[corner_order[1]]], verts[T.verts[corner_order[0]]]);
+			e2.sub(verts[T.verts[corner_order[2]]], verts[T.verts[corner_order[0]]]);
+			normal.crossproduct(e1, e2);
+			if (normal.x == 0.f && normal.y == 0.f && normal.z == 0.f)
+			{
+				++degenerate;
+				continue;
+			}
+			for (u32 v = 0; v < 3; ++v)
+			{
+				const Fvector& p = verts[T.verts[corner_order[v]]];
+				*out++ = va_vector(p);
+				box.modify(p);
+			}
+			++kept;
 		}
-		std::sort(cells.begin(), cells.end());
-		for (u32 i = 0; i < u32(cells.size()); ++i)
-		{
-			order[first[m] + i] = cells[i].tri;
-			if (i && std::tie(cells[i].x, cells[i].y, cells[i].z) != std::tie(cells[i - 1].x, cells[i - 1].y, cells[i - 1].z))
-				runs.push_back(first[m] + i);
-		}
-		runs.push_back(first[m + 1]);
+		if (!kept)
+			return false;
 
-		for (u32 r = 0; r + 1 < u32(runs.size()); ++r)
+		VAMeshPrimitive* mesh = nullptr;
+		if (!check(vaMeshPrimitiveCreate(VAMaterialType(id), buffer.data(), int(kept * 3), va_vector(box.min), va_vector(box.max), &identity, &mesh), "vaMeshPrimitiveCreate"))
+			return false;
+		// The level is an open soup, so a crossing costs a flat share
+		check(vaMeshPrimitiveSetUseFlatTransmission(mesh, true), "vaMeshPrimitiveSetUseFlatTransmission");
+		if (!check(vaWorldAddPrimitive_(world, mesh), "vaWorldAddPrimitive"))
 		{
-			const u32 n = runs[r + 1] - runs[r];
-			buffer.resize(n * 3);
-			Fbox box;
-			box.invalidate();
-			VAVector* out = buffer.data();
-			u32 kept = 0;
-			for (u32 k = runs[r]; k < runs[r + 1]; ++k)
+			check(vaMeshPrimitiveDestroy(mesh), "vaMeshPrimitiveDestroy");
+			return false;
+		}
+		meshes.push_back(mesh);
+		uploaded += kept;
+		lowest = std::min({ lowest, vaWorldGetMaterialAbsorptionLF(world, id), vaWorldGetMaterialAbsorptionHF(world, id) });
+		world_box.merge(box);
+		return true;
+	};
+
+	// A sheet class takes its skin, a thick class splits each cell into one mesh per bin, the rest keep one mesh per cell
+	constexpr u8 no_bin = 0xff;
+	xr_vector<u8> tri_bin(order.size(), no_bin);
+	xr_vector<float> tri_thickness(order.size(), -1.f);
+	for (u32 r = 0; r < run_count; ++r)
+	{
+		const CellRun& c = runs[r];
+		const int row = mass_class[c.material];
+		if (row < 0)
+			continue;
+		if (mass_law_classes[row].sheet)
+		{
+			std::fill(tri_bin.begin() + c.first, tri_bin.begin() + c.end, u8(0));
+			continue;
+		}
+		// A paired triangle takes its own thickness, the rest the nearest point with a back face, and with none the material's own values
+		const ThicknessSample* s = &samples[r * thickness_points];
+		for (u32 k = c.first; k < c.end; ++k)
+		{
+			if (own_thickness[order[k]] >= 0.f)
+			{
+				tri_bin[k] = u8(thickness_bin(own_thickness[order[k]]));
+				tri_thickness[k] = own_thickness[order[k]];
+				continue;
+			}
+			const CDB::TRI& T = tris[order[k]];
+			Fvector centre;
+			centre.add(verts[T.verts[0]], verts[T.verts[1]]).add(verts[T.verts[2]]).div(3.f);
+			float best = flt_max;
+			for (u32 i = 0; i < thickness_points; ++i)
+			{
+				const float d = centre.distance_to_sqr(s[i].at);
+				if (s[i].thickness >= 0.f && d < best)
+				{
+					best = d;
+					tri_bin[k] = u8(thickness_bin(s[i].thickness));
+					tri_thickness[k] = s[i].thickness;
+				}
+			}
+		}
+	}
+
+	// A wall's two faces would fall in different cells where a cell edge runs through it and the crossing would pay twice
+	// Each faced triangle takes the cell of the wall's middle instead, so both faces share a mesh
+	{
+		xr_vector<CellRun> walls;
+		walls.reserve(run_count);
+		xr_vector<Cell> cells;
+		for (u32 r = 0, next; r < run_count; r = next)
+		{
+			const u32 m = runs[r].material;
+			for (next = r + 1; next < run_count && runs[next].material == m; ++next)
+				;
+			const int row = mass_class[m];
+			if (row < 0 || mass_law_classes[row].sheet)
+			{
+				walls.insert(walls.end(), runs.begin() + r, runs.begin() + next);
+				continue;
+			}
+			const u32 from = runs[r].first, to = runs[next - 1].end;
+			cells.clear();
+			for (u32 k = from; k < to; ++k)
 			{
 				const CDB::TRI& T = tris[order[k]];
-				Fvector e1, e2, normal;
-				e1.sub(verts[T.verts[corner_order[1]]], verts[T.verts[corner_order[0]]]);
-				e2.sub(verts[T.verts[corner_order[2]]], verts[T.verts[corner_order[0]]]);
-				normal.crossproduct(e1, e2);
-				if (normal.x == 0.f && normal.y == 0.f && normal.z == 0.f)
-				{
-					++degenerate;
-					continue;
-				}
-				for (u32 v = 0; v < 3; ++v)
-				{
-					const Fvector& p = verts[T.verts[corner_order[v]]];
-					*out++ = va_vector(p);
-					box.modify(p);
-				}
-				++kept;
+				const Fvector& a = verts[T.verts[0]];
+				const Fvector& b = verts[T.verts[1]];
+				const Fvector& d = verts[T.verts[2]];
+				Fvector c, e1, e2, n;
+				c.add(a, b).add(d).div(3.f);
+				e1.sub(b, a);
+				e2.sub(d, a);
+				n.crossproduct(e1, e2);
+				const float len = n.magnitude();
+				// The probe found the back face along minus this normal
+				if (tri_thickness[k] >= 0.f && len > 0.f)
+					c.mad(n, -0.5f * tri_thickness[k] / len);
+				c.div(mesh_split);
+				cells.push_back({ iFloor(c.x), iFloor(c.y), iFloor(c.z), order[k], tri_bin[k] });
 			}
-			if (!kept)
-				continue;
-
-			VAMeshPrimitive* mesh = nullptr;
-			if (!check(vaMeshPrimitiveCreate(VAMaterialType(material_id[m]), buffer.data(), int(kept * 3), va_vector(box.min), va_vector(box.max), &identity, &mesh), "vaMeshPrimitiveCreate"))
-				continue;
-			// The level is an open soup, so a crossing costs a flat share
-			check(vaMeshPrimitiveSetUseFlatTransmission(mesh, true), "vaMeshPrimitiveSetUseFlatTransmission");
-			if (!check(vaWorldAddPrimitive_(world, mesh), "vaWorldAddPrimitive"))
+			std::sort(cells.begin(), cells.end());
+			u32 start = from;
+			for (u32 i = 0; i < u32(cells.size()); ++i)
 			{
-				check(vaMeshPrimitiveDestroy(mesh), "vaMeshPrimitiveDestroy");
+				order[from + i] = cells[i].tri;
+				tri_bin[from + i] = cells[i].bin;
+				if (i && std::tie(cells[i].x, cells[i].y, cells[i].z) != std::tie(cells[i - 1].x, cells[i - 1].y, cells[i - 1].z))
+				{
+					walls.push_back({ m, start, from + i });
+					start = from + i;
+				}
+			}
+			walls.push_back({ m, start, to });
+		}
+		runs.swap(walls);
+	}
+	const u32 mesh_cells = u32(runs.size());
+
+	// A face whose partner lands in another mesh pays half the wall, so the crossing pays it once across both meshes
+	// A partner outside the thick classes pays only its own share, so the face keeps the whole wall
+	u32 paired = 0, unpaired = 0, asymmetric = 0, outside = 0, halves = 0;
+	{
+		xr_vector<u32> run_of(tri_count, no_partner);
+		xr_vector<u8> bin_of(tri_count, no_bin);
+		for (u32 r = 0; r < mesh_cells; ++r)
+			for (u32 k = runs[r].first; k < runs[r].end; ++k)
+			{
+				run_of[order[k]] = r;
+				bin_of[order[k]] = tri_bin[k];
+			}
+		for (u32 k = 0; k < faces; ++k)
+		{
+			const u32 t = order[k];
+			const int row = mass_class[tris[t].material];
+			if (row < 0 || mass_law_classes[row].sheet)
+				continue;
+			const u32 p = partner[t];
+			if (p == no_partner)
+			{
+				++unpaired;
 				continue;
 			}
-			meshes.push_back(mesh);
-			uploaded += kept;
-			lowest = std::min({ lowest, vaWorldGetMaterialAbsorptionLF(world, material_id[m]), vaWorldGetMaterialAbsorptionHF(world, material_id[m]) });
-			world_box.merge(box);
+			++paired;
+			const int partner_row = mass_class[tris[p].material];
+			const bool other_class = partner_row < 0 || mass_law_classes[partner_row].sheet;
+			outside += other_class;
+			asymmetric += partner[p] != no_partner && partner[p] != t;
+			if (!other_class && (run_of[p] != run_of[t] || bin_of[p] != bin_of[t]))
+			{
+				tri_bin[k] |= half_bin;
+				++halves;
+			}
 		}
+	}
+
+	u32 split_cells = 0, half_meshes = 0;
+	for (const CellRun& c : runs)
+	{
+		const u32 m = c.material;
+		const u8* bins = tri_bin.data() + c.first;
+		const u8* bins_end = tri_bin.data() + c.end;
+		u32 pieces = 0;
+		for (u32 slot = 0; slot <= 2 * mass_law_bins; ++slot)
+		{
+			const u8 want = slot < mass_law_bins ? u8(slot) : slot < 2 * mass_law_bins ? u8(half_bin | (slot - mass_law_bins)) : no_bin;
+			if (std::find(bins, bins_end, want) == bins_end)
+				continue;
+			const bool made = upload(c, want == no_bin ? material_id[m] : bin_material(m, want), bins, want);
+			pieces += made;
+			half_meshes += made && want != no_bin && (want & half_bin);
+		}
+		split_cells += pieces > 1;
 	}
 	xr_vector<VAVector>().swap(buffer);
 	xr_vector<u32>().swap(order);
-	xr_vector<Cell>().swap(cells);
+	xr_vector<CellRun>().swap(runs);
+	xr_vector<ThicknessSample>().swap(samples);
+	xr_vector<u32>().swap(partner);
+	xr_vector<float>().swap(own_thickness);
 
 	if (meshes.empty())
 	{
@@ -951,27 +1398,10 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 	bounds.set(world_box);
 	bounds.grow(EPS_L);
 
-	string_path level_name;
-	xr_strcpy(level_name, FS.get_path("$level$")->m_Add);
-	if (const size_t len = xr_strlen(level_name); len && level_name[len - 1] == '\\')
-		level_name[len - 1] = 0;
-
-	// Weather beds take the ambient filter unless the level's weather cycle is indoors, read from game.ltx as the weather manager reads it
-	ambient = true;
+	ambient = !load_indoor;
 	ambient_ready = false;
 	ambient_lf = ambient_hf = 1.f;
 	ambient_wait = -1.f;
-	if (ambient)
-	{
-		string_path file;
-		FS.update_path(file, "$game_config$", "game.ltx");
-		CInifile game(file, TRUE, TRUE, FALSE);
-		LPCSTR cycle = game.line_exist(level_name, "weathers") ? game.r_string(level_name, "weathers") : nullptr;
-		if (!cycle)
-			cycle = "[default]";
-		if (!xr_strcmp(cycle, "indoor") || !strncmp(cycle, "w_indoor_", 9))
-			ambient = false;
-	}
 
 	// Reverb only listener at the camera, the Godot listener counts
 	listener = vaEmitterCreate();
@@ -1049,7 +1479,7 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 	// Both counts are the SDK's own defaults, read back since the C header documents neither
 	string512 parts;
 	xr_sprintf(parts, ", %d threads, %d work items", vaWorldGetMaximumConcurrencyLevel(world), vaWorldGetWorkItemCount(world));
-	string64 part;
+	string128 part;
 	xr_sprintf(part, ", %d groups", vaWorldGetMaximumGroupedEAXCount(world));
 	xr_strcat(parts, part);
 	xr_sprintf(part, ", permeation floors listener %.4f ambient %.4f", vaEmitterGetMinimumPermeationEnergy(listener), vaEmitterGetMinimumAmbientPermeationEnergy(listener));
@@ -1060,7 +1490,7 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 		xr_strcat(parts, part);
 	}
 
-	check(vaWorldSetName(world, level_name), "vaWorldSetName");
+	check(vaWorldSetName(world, load_level), "vaWorldSetName");
 
 	// Occluder poses go to the SDK as memcpy'd Fmatrix, so the load checks a turned and moved pose reads the same both ways
 	{
@@ -1091,14 +1521,40 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 
 	xr_sprintf(part, ", %u zero-area triangles skipped", degenerate);
 	xr_strcat(parts, part);
+	xr_sprintf(part, ", %u cells, %u split by thickness, %u thickness materials", mesh_cells, split_cells, bin_materials);
+	xr_strcat(parts, part);
+	xr_sprintf(part, ", %u faces paired in %.0f ms, %u unpaired, %u one-way", paired, pair_ms, unpaired, asymmetric);
+	xr_strcat(parts, part);
+	xr_sprintf(part, ", %u facing another class, %u half faces in %u meshes", outside, halves, half_meshes);
+	xr_strcat(parts, part);
 
+	upload_ms = upload_timer.GetElapsed_sec() * 1000.f;
+	xr_sprintf(summary_head, "%s: %u triangles, %u skipped, %u meshes, %u materials, box %.0f x %.0f x %.0f, reverb bounces %d at absorption %.3f, energy cap %.4f",
+		load_level, uploaded, skipped, u32(meshes.size()), used, size.x, size.y, size.z, vaEmitterGetReverbBounceCount(listener), lowest,
+		vaEmitterGetReverbEnergyCap(listener));
+	xr_strcpy(summary_tail, parts);
+	built = true;
+}
+
+void CSoundRender_Raytrace::wait_create()
+{
+	CTimer wait_timer;
+	wait_timer.Start();
+	load_task.wait();
+	xr_vector<CSound_material_desc>().swap(load_materials);
+	load_ltx.clear();
+	const float wait_ms = wait_timer.GetElapsed_sec() * 1000.f;
+
+	xrCriticalSectionGuard guard(lock);
+	if (!built)
+		return;
+	built = false;
 	// The first update sizes the buffers and takes in every mesh, so it runs inside the loading event
-	const float upload_ms = upload_timer.GetElapsed_sec() * 1000.f;
+	CTimer update_timer;
+	update_timer.Start();
 	check(vaWorldUpdate(world), "vaWorldUpdate");
-	Msg("SOUND: Raytrace: %s: %u triangles, %u skipped, %u meshes, %u materials, box %.0f x %.0f x %.0f, reverb bounces %d at absorption %.3f, energy cap %.4f, %.0f ms, first update %.0f ms, commit %+.0f MB%s",
-		level_name, uploaded, skipped, u32(meshes.size()), used, size.x, size.y, size.z, vaEmitterGetReverbBounceCount(listener), lowest,
-		vaEmitterGetReverbEnergyCap(listener),
-		upload_ms, upload_timer.GetElapsed_sec() * 1000.f - upload_ms, commit_mb(commit_base), parts);
+	Msg("SOUND: Raytrace: %s, %.0f ms, first update %.0f ms, commit %+.0f MB%s, level load waited %.0f ms",
+		summary_head, upload_ms, update_timer.GetElapsed_sec() * 1000.f, commit_mb(commit_base), summary_tail, wait_ms);
 
 	has_reverb = false;
 	room = false;
@@ -1108,8 +1564,14 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 
 void CSoundRender_Raytrace::destroy()
 {
+	// A world still building on the task pool finishes before its teardown
+	load_task.wait();
+	xr_vector<CSound_material_desc>().swap(load_materials);
+	load_ltx.clear();
 	ready.store(false, std::memory_order_release);
 	xrCriticalSectionGuard guard(lock);
+	built = false;
+	take_late_releases();
 	release();
 	if (asked.load(std::memory_order_relaxed))
 		publish(false);
@@ -1236,6 +1698,7 @@ void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvec
 			publish(false);
 		held_latch.store(false, std::memory_order_release);
 	}
+	take_late_releases();
 	take_rays();
 	if (muffle && muffle_rays != formula)
 	{
@@ -2336,6 +2799,8 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 	if (!guard.owns_lock() || !world || !muffle)
 		return false;
 	drain();
+	// A deferred release still counts its user, so it lands before the jump test reads the count
+	take_late_releases();
 
 	const void* owner = E->owner_data->g_object;
 	CSoundRender_RaytraceSource* S = nullptr;
@@ -2432,16 +2897,41 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 
 void CSoundRender_Raytrace::release_source(CSoundRender_Emitter* E)
 {
-	// The level unload frees idle sources under the lock, so the count drops under it too
-	xrCriticalSectionGuard guard(lock);
 	CSoundRender_RaytraceSource* S = E->rt_source;
 	E->rt_source = nullptr;
+	// The level unload frees idle sources under the lock, so the count drops under it too
+	// A world building on the task pool holds the lock, so the release waits for the tick instead
+	xrCriticalSectionTryGuard guard(lock);
+	if (!guard.owns_lock())
+	{
+		xrCriticalSectionGuard late_guard(late_lock);
+		late_releases.emplace_back(S, E);
+		return;
+	}
+	let_go(S, E);
+}
+
+// The emitter may be gone by now, so it is only compared
+void CSoundRender_Raytrace::let_go(CSoundRender_RaytraceSource* S, const CSoundRender_Emitter* E)
+{
 	if (S->lead == E)
 		S->lead = nullptr;
 	// An owner's source waits idle for its next sound, the tick drops it
 	if (--S->users || S->owner)
 		return;
 	remove(S);
+}
+
+// Called under the lock
+void CSoundRender_Raytrace::take_late_releases()
+{
+	xr_vector<std::pair<CSoundRender_RaytraceSource*, const CSoundRender_Emitter*>> late;
+	{
+		xrCriticalSectionGuard late_guard(late_lock);
+		late.swap(late_releases);
+	}
+	for (const auto& r : late)
+		let_go(r.first, r.second);
 }
 
 // A finished tail leaves the list, and the budget if it still held a place there
@@ -2575,6 +3065,10 @@ void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* ma
 	if (!reported_once)
 		Msg("! SOUND: Raytrace: this build has no SDK, raytracing stays off");
 	reported_once = true;
+}
+
+void CSoundRender_Raytrace::wait_create()
+{
 }
 
 void CSoundRender_Raytrace::destroy()

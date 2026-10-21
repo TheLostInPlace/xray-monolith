@@ -105,6 +105,7 @@ public:
 	virtual void set_geometry_som(IReader* I);
 	virtual void set_geometry_occ(CDB::MODEL* M);
 	virtual void set_geometry_acoustics(CDB::MODEL* M, const CSound_material_desc* materials, u32 count);
+	virtual void wait_geometry_acoustics();
 	virtual bool occluder_add(const void* owner, const CSound_occluder_shape* shapes, u32 count);
 	virtual void occluder_move(const void* owner, const Fmatrix* poses, u32 count);
 	virtual bool raytracing() const;

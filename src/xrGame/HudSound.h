@@ -2,7 +2,7 @@
 
 struct HUD_SOUND_ITEM
 {
-	HUD_SOUND_ITEM() : m_activeSnd(NULL), m_b_exclusive(false)
+	HUD_SOUND_ITEM() : m_activeSnd(NULL), m_b_exclusive(false), m_b_layer(false)
 	{
 	}
 
@@ -57,6 +57,8 @@ struct HUD_SOUND_ITEM
 	shared_str m_alias;
 	SSnd* m_activeSnd;
 	bool m_b_exclusive;
+	// One layer of a multi-layer sound section, played with sm_Layer
+	bool m_b_layer;
 	int m_type;
 	xr_vector<SSnd> sounds;
 

@@ -204,6 +204,12 @@ void CSoundRender_Core::set_geometry_acoustics(CDB::MODEL* M, const CSound_mater
 	raytrace->create(M, materials, count);
 }
 
+void CSoundRender_Core::wait_geometry_acoustics()
+{
+	if (raytrace)
+		raytrace->wait_create();
+}
+
 bool CSoundRender_Core::occluder_add(const void* owner, const CSound_occluder_shape* shapes, u32 count)
 {
 	return raytrace && raytrace->occluder_add(owner, shapes, count);
@@ -454,6 +460,7 @@ void CSoundRender_Core::play(ref_sound& S, CObject* O, u32 flags, float delay)
 		S._feedback()->switch_to_Intro();
 	}
 	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed);
+	((CSoundRender_Emitter*)S._feedback())->bLayer = !!(flags & sm_Layer);
 }
 
 void CSoundRender_Core::play_no_feedback(ref_sound& S, CObject* O, u32 flags, float delay, Fvector* pos, float* vol, float* freq, Fvector2* range)
@@ -479,6 +486,7 @@ void CSoundRender_Core::play_no_feedback(ref_sound& S, CObject* O, u32 flags, fl
 		S._feedback()->switch_to_Intro();
 	}
 
+	((CSoundRender_Emitter*)S._feedback())->bLayer = !!(flags & sm_Layer);
 	if (pos) S._feedback()->set_position(*pos);
 	if (freq) S._feedback()->set_frequency(*freq);
 	if (range) S._feedback()->set_range((*range)[0], (*range)[1]);
@@ -502,6 +510,7 @@ void CSoundRender_Core::play_at_pos(ref_sound& S, CObject* O, const Fvector &pos
 		S._feedback()->switch_to_Intro();
 	}
 	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed);
+	((CSoundRender_Emitter*)S._feedback())->bLayer = !!(flags & sm_Layer);
 }
 
 void CSoundRender_Core::destroy(ref_sound& S)

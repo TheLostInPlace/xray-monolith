@@ -77,6 +77,8 @@ public:
 	BOOL b2D;
 	bool bIntro;
 	bool bBed;
+	// One layer of a multi-layer weapon sound, its far layers already carry the air loss
+	bool bLayer;
 	BOOL bStopping;
 	BOOL bRewind;
 	float fTimeStarted; // time of "Start"
