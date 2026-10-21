@@ -20,5 +20,7 @@ const u32 sdef_env_version = 4; // current version of env-def
 const u32 sndenv_ver_extended = 5; // Extended version for EFX/EAX compatibility (IX-Ray)
 const u32 sdef_level_version = 1; // current version of level-def
 const float s_f_def_event_pulse = 0.5f; // sec
+const int sdef_reverb_groups = 6; // raytraced reverb groups, one effect slot each
+const float sdef_range_release = 1.1f; // share of its range past which a traced source lets go of its target
 
 #endif

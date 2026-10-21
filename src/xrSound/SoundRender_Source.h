@@ -24,6 +24,8 @@ public:
 	float m_fMaxDist;
 	float m_fMaxAIDist;
 	u32 m_uGameType;
+	// Named in the interface list, set once at load
+	bool m_bInterface;
 private:
 	void i_decompress_fr(OggVorbis_File* ovf, char* dest, u32 size);
 	bool LoadWave(LPCSTR name);

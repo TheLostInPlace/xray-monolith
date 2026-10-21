@@ -1,0 +1,56 @@
+; Interface sounds that play without the listener's reverb while raytraced acoustics run
+; One file per line relative to sounds\, without .ogg, a trailing * takes every file under that prefix
+; Sounds heard at the actor or inside the head play dry, including psy auras and controller sounds the world also plays
+; A file the world plays for other listeners (item use, foley, a device in hand) stays off the list
+[interface]
+; inventory and upgrade widgets
+interface\inv_slot
+interface\inv_belt
+interface\inv_ruck
+interface\inv_properties_2
+interface\inv_none
+; minimap contact beep
+detectors\contact_1
+; pda and news notifications
+device\pda\pda_tip
+device\pda\pda_news
+device\pda\pda_objective
+device\pda\pda_alarm
+device\pda\pda_beep_1
+device\pda\pda_beep_2
+device\pda\pda_communication_lost
+device\pda\pda_note
+device\pda\pda_guide_2
+; tutorial sequences and credits
+characters_voice\scenario\video\dream_rats
+characters_voice\scenario\video\dream_doctor
+characters_voice\scenario\video\dream_doctor_2
+characters_voice\scenario\video\dream_sarcofag
+characters_voice\scenario\video\dream_warlab
+characters_voice\scenario\video\final_peace
+music\credits
+; dynamic combat music
+music\combat\*
+; heartbeat from the actor's bleeding and zone danger loops
+affects\heartbeat
+; controller psy attack
+monsters\controller\controller_tube_prepare
+monsters\controller\controller_first_hit
+monsters\controller\controller_whoosh
+monsters\controller\controller_final_hit_l
+monsters\controller\controller_final_hit_r
+; monster psy auras
+anomaly\psy_polter
+anomaly\psy_voices_1_l
+monsters\controller\01controller_presence_l
+monsters\karlik\karlik_psi
+monsters\zombie_blind\zombie_blind_aura_1
+; psy antenna and psy death scene
+anomaly\psy_antenna_voices_1_l
+anomaly\psy_antenna_voices_1_r
+arszi_psy\zombie_die_3
+; psy blackout scenes and pripyat whispers
+arszi_psy\pripyat_whispers_final
+affects\psy_blackout
+affects\psy_blackout_l
+affects\psy_blackout_r

@@ -34,6 +34,15 @@ CSoundRender_Emitter::CSoundRender_Emitter(void)
 	occluder[0].set(0, 0, 0);
 	occluder[1].set(0, 0, 0);
 	occluder[2].set(0, 0, 0);
+	rt_source = nullptr;
+	occluder_hf = 1.f;
+	occluder_gain_hf = 1.f;
+	rt_lf = 1.f;
+	rt_hf = 1.f;
+	rt_traced = false;
+	rt_group = -1;
+	rt_cold = false;
+	rt_ambient.store(false, std::memory_order_relaxed);
 	m_current_state = stStopped;
 	set_cursor(0);
 	bMoved = TRUE;
@@ -41,6 +50,7 @@ CSoundRender_Emitter::CSoundRender_Emitter(void)
 	bStopping = FALSE;
 	bRewind = FALSE;
 	bIntro = false;
+	bBed = false;
 	iPaused = 0;
 	fTimeStarted = 0.0f;
 	fTimeToStop = 0.0f;
@@ -56,6 +66,8 @@ CSoundRender_Emitter::~CSoundRender_Emitter(void)
 {
 	// try to release dependencies, events, for example
 	Event_ReleaseOwner();
+	if (rt_source)
+		SoundRender->release_muffling(this);
 }
 
 //////////////////////////////////////////////////////////////////////

@@ -28,6 +28,7 @@
 class CSE_ALifeObjectPhysic;
 class CPhysicsElement;
 class moving_bones_snd_player;
+class IKinematics;
 
 class CSE_ALifeObjectPhysic;
 struct SPHNetState;
@@ -93,6 +94,24 @@ private:
 	void create_collision_model();
 	void set_door_ignore_dynamics();
 	void unset_door_ignore_dynamics();
+	void create_occluders();
+	void update_occluders();
+	Fmatrix occluder_pose(IKinematics* K, u32 index) const;
+	void occluder_poses(IKinematics* K, xr_vector<Fmatrix>& poses) const;
+
+	// Bone shapes in the sound raytracer, empty unless the raytracer took them at spawn
+	struct occluder_bone
+	{
+		u16 bone;
+		Fmatrix local;
+	};
+
+	xr_vector<occluder_bone> m_occluders;
+	xr_vector<Fmatrix> m_occluder_poses;
+	xr_vector<Fmatrix> m_occluder_next;
+	Fmatrix m_occluder_xform;
+	u32 m_occluder_time;
+	bool m_occluder_awake;
 public:
 	bool get_door_vectors(Fvector& closed, Fvector& open) const;
 

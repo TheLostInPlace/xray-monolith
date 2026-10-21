@@ -45,6 +45,12 @@
     <ClInclude Include="SoundRender_Core.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="SoundRender_Raytrace.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundRender_Decay.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="OpenALDeviceList.h">
       <Filter>Core\OpenAL</Filter>
     </ClInclude>
@@ -87,6 +93,9 @@
       <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="SoundRender_Core_Processor.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundRender_Raytrace.cpp">
       <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="SoundRender_Core_SourceManager.cpp">

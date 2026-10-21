@@ -638,6 +638,11 @@ AL_API void AL_APIENTRY alGetBufferPtrvSOFT(ALuint buffer, ALenum param, ALvoid 
 #define ALC_SURROUND_7_1_SOFT                    0x1506
 #endif
 
+#ifndef AL_SOFT_eaxreverb_decay_time_limit
+#define AL_SOFT_eaxreverb_decay_time_limit
+#define AL_EAXREVERB_DECAY_TIME_LIMIT_SOFT       0x19C0
+#endif
+
 #ifndef AL_SOFT_source_start_delay
 #define AL_SOFT_source_start_delay
 typedef void (AL_APIENTRY*LPALSOURCEPLAYATTIMESOFT)(ALuint source, ALint64SOFT start_time);

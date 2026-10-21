@@ -30,6 +30,55 @@ void CSoundRender_Core::i_destroy_source(CSoundRender_Source* S)
 	// No actual destroy at all
 }
 
+// One file per line relative to sounds\, a trailing * takes every file under that prefix
+void CSoundRender_Core::i_load_interface_list()
+{
+	s_interface_files.clear();
+	s_interface_prefixes.clear();
+
+	string_path fn;
+	if (!FS.exist(fn, "$game_config$", "misc\\sound\\sound_interface", ".ltx"))
+		return;
+	CInifile ini(fn, TRUE);
+	if (!ini.section_exist("interface"))
+		return;
+	for (const auto& item : ini.r_section("interface").Data)
+	{
+		string_path N;
+		xr_strcpy(N, item.first.c_str());
+		xr_strlwr(N);
+		for (char* c = N; *c; ++c)
+			if (*c == '/')
+				*c = '\\';
+		const u32 len = xr_strlen(N);
+		if (len && N[len - 1] == '*')
+		{
+			N[len - 1] = 0;
+			s_interface_prefixes.emplace_back(N);
+		}
+		else
+			s_interface_files.emplace(N);
+	}
+	Msg("SOUND: Interface list: %u files, %u prefixes", u32(s_interface_files.size()), u32(s_interface_prefixes.size()));
+}
+
+bool CSoundRender_Core::i_interface_file(LPCSTR name) const
+{
+	if (s_interface_files.empty() && s_interface_prefixes.empty())
+		return false;
+	string_path N;
+	xr_strcpy(N, name);
+	for (char* c = N; *c; ++c)
+		if (*c == '/')
+			*c = '\\';
+	if (s_interface_files.find(N) != s_interface_files.end())
+		return true;
+	for (const xr_string& p : s_interface_prefixes)
+		if (!strncmp(N, p.c_str(), p.size()))
+			return true;
+	return false;
+}
+
 void CSoundRender_Core::i_create_all_sources()
 {
 	PROF_EVENT();

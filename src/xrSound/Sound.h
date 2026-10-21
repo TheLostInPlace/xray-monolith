@@ -82,7 +82,19 @@ enum
 	//!< Use hardware mixing only
 	ss_EFX = (1ul << 2ul),
 	//!< Use eax
+	ss_Raytrace = (1ul << 3ul),
+	//!< Raytraced acoustics, read at level load
 	ss_forcedword = u32(-1)
+};
+
+enum
+{
+	sos_Box,
+	//!< Prism of size, centred on its transform
+	sos_Cylinder,
+	//!< Radius size.x and length size.y
+	sos_Sphere,
+	//!< Radius size.x at the transform's origin
 };
 
 enum
@@ -108,6 +120,7 @@ enum
 	sm_2D = (1ul << 1ul),
 	//!< 2D mode
 	sm_Intro = (1ul << 2ul), //!< Only for music and video
+	sm_Bed = (1ul << 3ul), //!< Weather ambient bed
 	sm_forcedword = u32(-1),
 };
 
@@ -335,12 +348,102 @@ public:
 	virtual void stop(BOOL bDeffered) = 0;
 	virtual const CSound_params* get_params() = 0;
 	virtual u32 play_time() = 0;
+	// True while a weather bed plays on the listener's ambient filter
+	virtual bool ambient_filtered() = 0;
 };
 
 /// definition (Sound Stream Interface)
 class XRSOUND_API CSound_stream_interface
 {
 public:
+};
+
+/// static game material as the acoustic upload sees it
+struct CSound_material_desc
+{
+	shared_str name;
+	bool passable;
+	bool liquid;
+	float occlusion_factor;
+	bool dynamic;
+};
+
+/// the answer to a script's point query, the path fields for a line between two points, the room fields for the space around one
+struct CSound_query
+{
+	bool room;
+	float lf;
+	float hf;
+	float direct_lf;
+	float direct_hf;
+	float through_lf;
+	float through_hf;
+	u32 crossings;
+	bool blocked;
+	float open;
+	float reflect_lf;
+	float reflect_hf;
+};
+
+/// one collision shape of a moving object, material is the game material index
+struct CSound_occluder_shape
+{
+	u16 type;
+	u16 material;
+	Fvector size;
+};
+
+/// the listener's raytraced room, -1 marks a decay band the fit missed or an ambient filter the level lacks
+struct CSound_acoustics
+{
+	u32 serial;
+	Fvector position;
+	float sky;
+	float returned;
+	float decay_lf;
+	float decay_hf;
+	float absorption_lf;
+	float absorption_hf;
+	float roughness;
+	float ambient_lf;
+	float ambient_hf;
+};
+
+/// the EFX reverb the raytracer built for the listener, applied is false while the console overwrite replaces it
+struct CSound_reverb
+{
+	u32 serial;
+	bool applied;
+	float density;
+	float diffusion;
+	float gain;
+	float gain_hf;
+	float gain_lf;
+	float decay_time;
+	float decay_hf_ratio;
+	float decay_lf_ratio;
+	float reflections_gain;
+	float reflections_delay;
+	float late_reverb_gain;
+	float late_reverb_delay;
+	float echo_time;
+	float echo_depth;
+	float modulation_time;
+	float modulation_depth;
+	float air_absorption_gain_hf;
+	float hf_reference;
+	float lf_reference;
+	float room_rolloff_factor;
+	bool decay_hf_limit;
+};
+
+/// band gains the raytracer gives an object's sounds at the listener, and the share of each along the direct path
+struct CSound_muffling
+{
+	float lf;
+	float hf;
+	float direct_lf;
+	float direct_hf;
 };
 
 /// definition (Sound Stream Interface)
@@ -424,6 +527,18 @@ public:
 	virtual void set_geometry_env(IReader* I) = 0;
 	virtual void set_geometry_som(IReader* I) = 0;
 	virtual void set_geometry_occ(CDB::MODEL* M) = 0;
+	virtual void set_geometry_acoustics(CDB::MODEL* M, const CSound_material_desc* materials, u32 count) = 0;
+	// The shapes join the raytraced world with the owner's first move, object_relcase removes them
+	virtual bool occluder_add(const void* owner, const CSound_occluder_shape* shapes, u32 count) = 0;
+	virtual void occluder_move(const void* owner, const Fmatrix* poses, u32 count) = 0;
+	// True while a level's raytraced acoustics run, the flag alone can change mid level
+	virtual bool raytracing() const = 0;
+	// What the raytracer last published for the listener and for an object's sounds, false while it has nothing
+	virtual bool get_listener_acoustics(CSound_acoustics& out) const = 0;
+	virtual bool get_listener_reverb(CSound_reverb& out) const = 0;
+	virtual bool get_object_muffling(const CObject* O, CSound_muffling& out) const = 0;
+	// A game load holds them back from its start until the player spawns and a room traced after that comes back
+	virtual void hold_acoustics(bool hold) = 0;
 	virtual void set_handler(sound_event* E) = 0;
 
 	virtual void update(const Fvector& P, const Fvector& D, const Fvector& N) = 0;
@@ -431,6 +546,11 @@ public:
 
 	virtual float get_occlusion_to(const Fvector& hear_pt, const Fvector& snd_pt, float dispersion = 0.2f) = 0;
 	virtual float get_occlusion(Fvector& P, float R, Fvector* occ) = 0;
+	// Point queries the ray worker answers a frame or more later, a ticket of 0 means the query was not taken
+	virtual u32 query_path(const Fvector& ear, const Fvector& source, const void* skip) = 0;
+	virtual u32 query_room(const Fvector& point) = 0;
+	// 1 with the answer, 0 while it is pending, -1 once the ticket is dropped
+	virtual int query_result(u32 ticket, CSound_query& out) const = 0;
 
 	virtual void object_relcase(CObject* obj) = 0;
 	virtual const Fvector& listener_position() = 0;

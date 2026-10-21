@@ -169,6 +169,7 @@ void CLevel::g_sv_Spawn(CSE_Abstract* E)
 				}
 				SetControlEntity(O);
 				SetEntity(O); //do not switch !!!
+				::Sound->hold_acoustics(false);
 			}
 		}
 

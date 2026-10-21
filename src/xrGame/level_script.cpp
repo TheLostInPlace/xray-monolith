@@ -1067,6 +1067,68 @@ void remove_hud_motion_cam_effectors()
 		actor->Cameras().RemoveHudMotionEffectors();
 }
 
+static ::luabind::object snd_query_ticket(lua_State* L, u32 ticket)
+{
+	if (ticket)
+		return ::luabind::object(L, ticket);
+
+	::luabind::object none(L);
+	lua_pushnil(L);
+	none.set();
+	return none;
+}
+
+// A ticket for the occlusion between two points, nil while raytracing is off, for a point that is not finite or while every slot of the ring is pending
+::luabind::object snd_query_path(lua_State* L, const Fvector& ear, const Fvector& source)
+{
+	return snd_query_ticket(L, ::Sound->query_path(ear, source, nullptr));
+}
+
+// The same, passing through the moving shapes of the object with that id, a nil id skips none
+::luabind::object snd_query_path_owner(lua_State* L, const Fvector& ear, const Fvector& source, const ::luabind::object& owner_id)
+{
+	CObject* O = nullptr;
+	if (g_pGameLevel && owner_id && owner_id.type() == LUA_TNUMBER)
+		O = Level().Objects.net_Find(::luabind::object_cast<u16>(owner_id));
+	return snd_query_ticket(L, ::Sound->query_path(ear, source, O));
+}
+
+// A ticket for the room around a point, nil as snd_query_path
+::luabind::object snd_query_room(lua_State* L, const Fvector& point)
+{
+	return snd_query_ticket(L, ::Sound->query_room(point));
+}
+
+// The answer as a table, nil while it is pending, false once the ticket is dropped or for a nil ticket
+::luabind::object snd_query_result(lua_State* L, const ::luabind::object& ticket)
+{
+	if (!ticket || ticket.type() != LUA_TNUMBER)
+		return ::luabind::object(L, false);
+
+	CSound_query q;
+	const int state = ::Sound->query_result(::luabind::object_cast<u32>(ticket), q);
+	if (state <= 0)
+		return state ? ::luabind::object(L, false) : snd_query_ticket(L, 0);
+
+	::luabind::object table = ::luabind::newtable(L);
+	if (q.room)
+	{
+		table["open"] = q.open;
+		table["reflect_lf"] = q.reflect_lf;
+		table["reflect_hf"] = q.reflect_hf;
+		return table;
+	}
+	table["lf"] = q.lf;
+	table["hf"] = q.hf;
+	table["direct_lf"] = q.direct_lf;
+	table["direct_hf"] = q.direct_hf;
+	table["through_lf"] = q.through_lf;
+	table["through_hf"] = q.through_hf;
+	table["crossings"] = q.crossings;
+	table["blocked"] = q.blocked;
+	return table;
+}
+
 float get_snd_volume()
 {
 	return psSoundVFactor;
@@ -1091,6 +1153,96 @@ float get_music_volume() {
 void set_music_volume(float v) {
 	psSoundVMusicFactor = v;
 	clamp(psSoundVMusicFactor, 0.0f, 1.0f);
+}
+
+static ::luabind::object snd_nil(lua_State* L)
+{
+	::luabind::object none(L);
+	lua_pushnil(L);
+	none.set();
+	return none;
+}
+
+bool is_snd_raytracing()
+{
+	return ::Sound->raytracing();
+}
+
+// The listener's raytraced room, nil while raytracing is off, before its first result or through a game load, a band or filter it lacks is left out
+::luabind::object get_snd_acoustics(lua_State* L)
+{
+	CSound_acoustics a;
+	if (!::Sound->get_listener_acoustics(a))
+		return snd_nil(L);
+
+	::luabind::object table = ::luabind::newtable(L);
+	table["serial"] = a.serial;
+	table["position"] = a.position;
+	table["sky"] = a.sky;
+	table["returned"] = a.returned;
+	if (a.decay_lf >= 0.f)
+		table["decay_lf"] = a.decay_lf;
+	if (a.decay_hf >= 0.f)
+		table["decay_hf"] = a.decay_hf;
+	table["absorption_lf"] = a.absorption_lf;
+	table["absorption_hf"] = a.absorption_hf;
+	table["roughness"] = a.roughness;
+	if (a.ambient_lf >= 0.f)
+		table["ambient_lf"] = a.ambient_lf;
+	if (a.ambient_hf >= 0.f)
+		table["ambient_hf"] = a.ambient_hf;
+	return table;
+}
+
+// The listener's raytraced EFX reverb under the snd_efx_reverb_overwrite_* names, nil as get_snd_acoustics
+::luabind::object get_snd_reverb(lua_State* L)
+{
+	CSound_reverb r;
+	if (!::Sound->get_listener_reverb(r))
+		return snd_nil(L);
+
+	::luabind::object table = ::luabind::newtable(L);
+	table["serial"] = r.serial;
+	table["applied"] = r.applied;
+	table["density"] = r.density;
+	table["diffusion"] = r.diffusion;
+	table["gain"] = r.gain;
+	table["gain_hf"] = r.gain_hf;
+	table["gain_lf"] = r.gain_lf;
+	table["decay_time"] = r.decay_time;
+	table["decay_hf_ratio"] = r.decay_hf_ratio;
+	table["decay_lf_ratio"] = r.decay_lf_ratio;
+	table["reflections_gain"] = r.reflections_gain;
+	table["reflections_delay"] = r.reflections_delay;
+	table["late_reverb_gain"] = r.late_reverb_gain;
+	table["late_reverb_delay"] = r.late_reverb_delay;
+	table["echo_time"] = r.echo_time;
+	table["echo_depth"] = r.echo_depth;
+	table["modulation_time"] = r.modulation_time;
+	table["modulation_depth"] = r.modulation_depth;
+	table["air_absorption_gain_hf"] = r.air_absorption_gain_hf;
+	table["hf_reference"] = r.hf_reference;
+	table["lf_reference"] = r.lf_reference;
+	table["room_rolloff_factor"] = r.room_rolloff_factor;
+	table["decay_hf_limit"] = r.decay_hf_limit;
+	return table;
+}
+
+// Band gains of the object's sounds at the camera, nil while the object has no traced sound
+// An idle owner keeps the muffling of its last sound until it makes the next one
+::luabind::object get_snd_muffling(lua_State* L, u16 id)
+{
+	CSound_muffling m;
+	CObject* O = g_pGameLevel ? Level().Objects.net_Find(id) : nullptr;
+	if (!O || !::Sound->get_object_muffling(O, m))
+		return snd_nil(L);
+
+	::luabind::object table = ::luabind::newtable(L);
+	table["lf"] = m.lf;
+	table["hf"] = m.hf;
+	table["direct_lf"] = m.direct_lf;
+	table["direct_hf"] = m.direct_hf;
+	return table;
 }
 
 #include "actor_statistic_mgr.h"
@@ -2813,11 +2965,19 @@ void CLevel::script_register(lua_State* L)
 			def("iterate_sounds", &iterate_sounds1),
 			def("iterate_sounds", &iterate_sounds2),
 			def("physics_world", &physics_world_scripted),
+			def("snd_query_path", &snd_query_path, raw<1>()),
+			def("snd_query_path", &snd_query_path_owner, raw<1>()),
+			def("snd_query_room", &snd_query_room, raw<1>()),
+			def("snd_query_result", &snd_query_result, raw<1>()),
 			def("get_snd_volume", &get_snd_volume),
 			def("get_rain_volume", &get_rain_volume),
 			def("set_snd_volume", &set_snd_volume),
 			def("get_music_volume", &get_music_volume),
 			def("set_music_volume", &set_music_volume),
+			def("is_snd_raytracing", &is_snd_raytracing),
+			def("get_snd_acoustics", &get_snd_acoustics, raw<1>()),
+			def("get_snd_reverb", &get_snd_reverb, raw<1>()),
+			def("get_snd_muffling", &get_snd_muffling, raw<1>()),
 
 			// demonized: Set custom camera position and direction with movement smoothing (for cutscenes, etc)
 			def("set_cam_custom_position_direction", ((void (*)(Fvector&, Fvector&, unsigned int, bool, bool))& set_cam_position_direction)),

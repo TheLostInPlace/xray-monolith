@@ -4,9 +4,11 @@
 #include <cmath>
 
 #include "AL/al.h"
+#include "AL/alext.h"
 #include "AL/efx.h"
 
 #include "alc/effects/base.h"
+#include "alnumeric.h"
 #include "effects.h"
 
 #ifdef ALSOFT_EAX
@@ -72,9 +74,17 @@ void Reverb_setParamf(EffectProps *props, ALenum param, float val)
         break;
 
     case AL_EAXREVERB_DECAY_TIME:
-        if(!(val >= AL_EAXREVERB_MIN_DECAY_TIME && val <= AL_EAXREVERB_MAX_DECAY_TIME))
+        if(!(val >= AL_EAXREVERB_MIN_DECAY_TIME
+            && val <= maxf(props->Reverb.DecayTimeLimit, AL_EAXREVERB_MAX_DECAY_TIME)))
             throw effect_exception{AL_INVALID_VALUE, "EAX Reverb decay time out of range"};
         props->Reverb.DecayTime = val;
+        break;
+
+    case AL_EAXREVERB_DECAY_TIME_LIMIT_SOFT:
+        if(!(val >= AL_EAXREVERB_MAX_DECAY_TIME && val <= 60.0f))
+            throw effect_exception{AL_INVALID_VALUE, "EAX Reverb decay time limit out of range"};
+        props->Reverb.DecayTimeLimit = val;
+        props->Reverb.DecayTime = minf(props->Reverb.DecayTime, val);
         break;
 
     case AL_EAXREVERB_DECAY_HFRATIO:
@@ -231,6 +241,10 @@ void Reverb_getParamf(const EffectProps *props, ALenum param, float *val)
 
     case AL_EAXREVERB_DECAY_TIME:
         *val = props->Reverb.DecayTime;
+        break;
+
+    case AL_EAXREVERB_DECAY_TIME_LIMIT_SOFT:
+        *val = maxf(props->Reverb.DecayTimeLimit, AL_EAXREVERB_MAX_DECAY_TIME);
         break;
 
     case AL_EAXREVERB_DECAY_HFRATIO:

@@ -1158,7 +1158,8 @@ void ReverbState::update(const ContextBase *Context, const EffectSlot *Slot,
             props->Reverb.DecayTime);
 
     /* Calculate the LF/HF decay times. */
-    constexpr float MinDecayTime{0.1f}, MaxDecayTime{20.0f};
+    constexpr float MinDecayTime{0.1f};
+    const float MaxDecayTime{maxf(props->Reverb.DecayTimeLimit, 20.0f)};
     const float lfDecayTime{clampf(props->Reverb.DecayTime*props->Reverb.DecayLFRatio,
         MinDecayTime, MaxDecayTime)};
     const float hfDecayTime{clampf(props->Reverb.DecayTime*hfRatio, MinDecayTime, MaxDecayTime)};
@@ -1246,7 +1247,12 @@ void ReverbState::update(const ContextBase *Context, const EffectSlot *Slot,
 
     const float decaySamples{(props->Reverb.ReflectionsDelay + props->Reverb.LateReverbDelay
         + props->Reverb.DecayTime) * frequency};
-    pipeline.mFadeSampleCount = static_cast<size_t>(minf(decaySamples, 1'000'000.0f));
+    /* A raised decay time limit lets the old pipeline fade over its whole
+     * tail, up to the longest delays plus the limit.
+     */
+    const float maxFadeSamples{(props->Reverb.DecayTimeLimit > 20.0f)
+        ? (0.4f + props->Reverb.DecayTimeLimit) * frequency : 1'000'000.0f};
+    pipeline.mFadeSampleCount = static_cast<size_t>(minf(decaySamples, maxFadeSamples));
 }
 
 

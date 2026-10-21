@@ -6,6 +6,7 @@
 #include "SoundRender_Core.h"
 #include "SoundRender_Source.h"
 #include "SoundRender_Emitter.h"
+#include "SoundRender_Raytrace.h"
 
 #include "NotificationClient.h"
 
@@ -46,6 +47,10 @@ CSoundRender_Core::CSoundRender_Core()
 	e_current.set_identity();
 	e_identity.set_identity();
 	e_target_ptr = &e_identity;
+	raytrace = nullptr;
+	rt_reverb = reverbs[0];
+	rt_reverb_active = false;
+	rt_reverb_step_time = 0.f;
 	bListenerMoved = FALSE;
 	bReady = FALSE;
 	bLocked = FALSE;
@@ -73,6 +78,7 @@ void CSoundRender_Core::_initialize(int stage)
 
 	// load environment
 	env_load();
+	i_load_interface_list();
 
 	bPresent = TRUE;
 
@@ -110,6 +116,8 @@ void CSoundRender_Core::_clear()
 
 	g_target_temp_data.clear();
 	g_target_temp_data_16.clear();
+
+	xr_delete(raytrace);
 }
 
 void CSoundRender_Core::stop_emitters()
@@ -176,6 +184,101 @@ void CSoundRender_Core::set_handler(sound_event* E)
 void CSoundRender_Core::set_geometry_occ(CDB::MODEL* M)
 {
 	geom_MODEL = M;
+}
+
+void CSoundRender_Core::set_geometry_acoustics(CDB::MODEL* M, const CSound_material_desc* materials, u32 count)
+{
+	VERIFY(!bLocked);
+	if (raytrace)
+		raytrace->destroy();
+	if (!M || !psSoundFlags.test(ss_Raytrace))
+		return;
+
+	if (!bPresent || !m_is_supported)
+	{
+		Msg("! SOUND: Raytrace: needs EFX on a live device, raytracing stays off");
+		return;
+	}
+	if (!raytrace)
+		raytrace = xr_new<CSoundRender_Raytrace>();
+	raytrace->create(M, materials, count);
+}
+
+bool CSoundRender_Core::occluder_add(const void* owner, const CSound_occluder_shape* shapes, u32 count)
+{
+	return raytrace && raytrace->occluder_add(owner, shapes, count);
+}
+
+void CSoundRender_Core::occluder_move(const void* owner, const Fmatrix* poses, u32 count)
+{
+	if (raytrace)
+		raytrace->occluder_move(owner, poses, count);
+}
+
+u32 CSoundRender_Core::query_path(const Fvector& ear, const Fvector& source, const void* skip)
+{
+	return raytrace ? raytrace->post_query(false, ear, source, skip) : 0;
+}
+
+u32 CSoundRender_Core::query_room(const Fvector& point)
+{
+	return raytrace ? raytrace->post_query(true, point, point, nullptr) : 0;
+}
+
+int CSoundRender_Core::query_result(u32 ticket, CSound_query& out) const
+{
+	return raytrace ? raytrace->query_result(ticket, out) : -1;
+}
+
+bool CSoundRender_Core::raytracing() const
+{
+	return raytrace && raytrace->running();
+}
+
+bool CSoundRender_Core::get_listener_acoustics(CSound_acoustics& out) const
+{
+	return raytrace && raytrace->read_acoustics(out);
+}
+
+bool CSoundRender_Core::get_listener_reverb(CSound_reverb& out) const
+{
+	return raytrace && raytrace->read_reverb(out);
+}
+
+bool CSoundRender_Core::get_object_muffling(const CObject* O, CSound_muffling& out) const
+{
+	return raytrace && raytrace->read_muffling(O, out);
+}
+
+void CSoundRender_Core::hold_acoustics(bool hold)
+{
+	if (raytrace)
+		raytrace->hold(hold);
+}
+
+bool CSoundRender_Core::get_muffling(CSoundRender_Emitter* E, float& lf, float& hf)
+{
+	return raytrace && raytrace->muffle_gains(E, lf, hf);
+}
+
+void CSoundRender_Core::release_muffling(CSoundRender_Emitter* E)
+{
+	raytrace->release_source(E);
+}
+
+void CSoundRender_Core::cull_muffling(CSoundRender_Emitter* E)
+{
+	raytrace->range_release(E);
+}
+
+bool CSoundRender_Core::get_ambience(CSoundRender_Emitter* E, float& lf, float& hf)
+{
+	return raytrace && raytrace->ambient_gains(E, lf, hf);
+}
+
+bool CSoundRender_Core::hold_ambience()
+{
+	return raytrace && raytrace->ambient_held();
 }
 
 void CSoundRender_Core::set_geometry_som(IReader* I)
@@ -350,6 +453,7 @@ void CSoundRender_Core::play(ref_sound& S, CObject* O, u32 flags, float delay)
 	{
 		S._feedback()->switch_to_Intro();
 	}
+	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed);
 }
 
 void CSoundRender_Core::play_no_feedback(ref_sound& S, CObject* O, u32 flags, float delay, Fvector* pos, float* vol, float* freq, Fvector2* range)
@@ -397,6 +501,7 @@ void CSoundRender_Core::play_at_pos(ref_sound& S, CObject* O, const Fvector &pos
 	{
 		S._feedback()->switch_to_Intro();
 	}
+	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed);
 }
 
 void CSoundRender_Core::destroy(ref_sound& S)
@@ -511,6 +616,8 @@ void CSoundRender_Core::object_relcase(CObject* obj)
 			if (s_emitters[eit] && s_emitters[eit]->owner_data && (obj == s_emitters[eit]->owner_data->g_object))
 				s_emitters[eit]->owner_data->g_object = nullptr;
 		}
+		if (raytrace)
+			raytrace->object_released(obj);
 	}
 }
 

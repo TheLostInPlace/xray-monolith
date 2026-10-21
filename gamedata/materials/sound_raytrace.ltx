@@ -1,0 +1,265 @@
+; Acoustic preset per static game material for snd_raytrace
+; presets brick cloth concrete concrete_polished dirt glass grass gravel gyprock ice leaf marble metal mud rock sand snow tile tree water wood_indoor wood_outdoor
+; optional keys absorption_lf absorption_hf scattering transmission_lf transmission_hf flat_transmission_lf flat_transmission_hf skip
+; absorption_lf at 250 Hz and absorption_hf in the 4000 Hz octave, which holds the 5000 Hz reference, random incidence,
+; from Vorlaender Auralization 2008 annex, Yang 2013 Sheffield thesis, Reethof 1976 and 1977, steel decking from the Adrian James table,
+; water from the sengpielaudio RT60 table, gravel from the SDK preset
+; scattering is the 707 Hz value of the ODEON 14 manual floored at 0.1, transmission copied from the preset,
+; flat transmission from the game material's sound_occlusion_factor, the share a crossing keeps at 250 Hz, mass law to 5000 Hz
+; transmission_lf and transmission_hf take no effect while every level and occluder primitive uses flat transmission
+
+[default]
+preset = concrete
+absorption_lf = 0.03
+absorption_hf = 0.07
+scattering = 0.10
+transmission_lf = 0.6
+transmission_hf = 0.3
+
+[default_passable]
+preset = leaf
+absorption_lf = 0.06
+absorption_hf = 0.15
+scattering = 0.10
+transmission_lf = 5.0
+transmission_hf = 1.0
+
+[materials\asphalt]
+preset = concrete
+absorption_lf = 0.03
+absorption_hf = 0.02
+scattering = 0.10
+transmission_lf = 0.6
+transmission_hf = 0.3
+
+[materials\bricks]
+preset = brick
+absorption_lf = 0.09
+absorption_hf = 0.24
+scattering = 0.15
+transmission_lf = 0.5
+transmission_hf = 0.3
+
+[materials\bush]
+preset = leaf
+absorption_lf = 0.06
+absorption_hf = 0.15
+scattering = 0.10
+transmission_lf = 5.0
+transmission_hf = 1.0
+
+[materials\bush_sux]
+preset = leaf
+absorption_lf = 0.06
+absorption_hf = 0.15
+scattering = 0.10
+transmission_lf = 5.0
+transmission_hf = 1.0
+
+[materials\cloth]
+preset = cloth
+absorption_lf = 0.10
+absorption_hf = 0.73
+scattering = 0.10
+transmission_lf = 3.0
+transmission_hf = 0.5
+
+[materials\concrete]
+preset = concrete
+absorption_lf = 0.03
+absorption_hf = 0.07
+scattering = 0.10
+transmission_lf = 0.6
+transmission_hf = 0.3
+
+[materials\death]
+skip = true
+
+[materials\dirt]
+preset = dirt
+absorption_lf = 0.39
+absorption_hf = 0.20
+scattering = 0.10
+transmission_lf = 1.5
+transmission_hf = 0.4
+
+[materials\earth]
+preset = dirt
+absorption_lf = 0.39
+absorption_hf = 0.20
+scattering = 0.10
+transmission_lf = 1.5
+transmission_hf = 0.4
+
+[materials\earth_death]
+preset = dirt
+absorption_lf = 0.39
+absorption_hf = 0.20
+scattering = 0.10
+transmission_lf = 1.5
+transmission_hf = 0.4
+
+[materials\earth_slide]
+preset = dirt
+absorption_lf = 0.39
+absorption_hf = 0.20
+scattering = 0.10
+transmission_lf = 1.5
+transmission_hf = 0.4
+
+[materials\fake]
+skip = true
+
+[materials\fake_slide]
+skip = true
+
+[materials\flooring_tile]
+preset = tile
+absorption_lf = 0.01
+absorption_hf = 0.02
+scattering = 0.10
+transmission_lf = 0.5
+transmission_hf = 0.2
+
+[materials\glass]
+preset = glass
+absorption_lf = 0.05
+absorption_hf = 0.03
+scattering = 0.10
+transmission_lf = 0.2
+transmission_hf = 0.05
+
+[materials\grass]
+preset = grass
+absorption_lf = 0.25
+absorption_hf = 0.60
+scattering = 0.10
+transmission_lf = 4.3
+transmission_hf = 0.9
+
+[materials\gravel]
+preset = gravel
+; compacted gravel has no open measurement, absorption is the SDK gravel preset
+absorption_lf = 0.06
+absorption_hf = 0.12
+scattering = 0.10
+transmission_lf = 1.0
+transmission_hf = 0.3
+
+[materials\metal]
+preset = metal
+absorption_lf = 0.02
+absorption_hf = 0.05
+scattering = 0.10
+transmission_lf = 0.1
+transmission_hf = 0.05
+
+[materials\metal_pipe]
+preset = metal
+absorption_lf = 0.02
+absorption_hf = 0.05
+scattering = 0.10
+transmission_lf = 0.1
+transmission_hf = 0.05
+
+[materials\metal_plate]
+preset = metal
+absorption_lf = 0.09
+absorption_hf = 0.11
+scattering = 0.10
+transmission_lf = 0.1
+transmission_hf = 0.05
+
+[materials\sand]
+preset = sand
+absorption_lf = 0.66
+absorption_hf = 0.73
+scattering = 0.10
+transmission_lf = 2.0
+transmission_hf = 0.5
+
+[materials\setka_rabica]
+skip = true
+
+[materials\shifer]
+preset = tile
+absorption_lf = 0.04
+absorption_hf = 0.02
+scattering = 0.10
+transmission_lf = 0.5
+transmission_hf = 0.2
+
+[materials\stucco]
+preset = gyprock
+absorption_lf = 0.03
+absorption_hf = 0.07
+scattering = 0.10
+transmission_lf = 0.4
+transmission_hf = 0.2
+
+[materials\tin]
+preset = metal
+absorption_lf = 0.09
+absorption_hf = 0.11
+scattering = 0.10
+transmission_lf = 0.1
+transmission_hf = 0.05
+
+[materials\tree_trunk]
+preset = tree
+absorption_lf = 0.05
+absorption_hf = 0.05
+scattering = 0.10
+transmission_lf = 1.5
+transmission_hf = 0.4
+
+[materials\water]
+preset = water
+absorption_lf = 0.008
+absorption_hf = 0.025
+scattering = 0.10
+transmission_lf = 0.5
+transmission_hf = 0.2
+
+[materials\water_radiation]
+preset = water
+absorption_lf = 0.008
+absorption_hf = 0.025
+scattering = 0.10
+transmission_lf = 0.5
+transmission_hf = 0.2
+
+[materials\wood]
+preset = wood_indoor
+absorption_lf = 0.12
+absorption_hf = 0.07
+scattering = 0.10
+transmission_lf = 0.4
+transmission_hf = 0.2
+
+[materials\wooden_board]
+preset = wood_outdoor
+absorption_lf = 0.23
+absorption_hf = 0.07
+scattering = 0.10
+transmission_lf = 0.5
+transmission_hf = 0.2
+
+; dynamic object materials take the acoustics of the static section their like key names, for moving occluders
+[objects\large_furniture]
+like = materials\wood
+
+[objects\large_metal_trash]
+like = materials\metal_plate
+
+[objects\metal_box]
+like = materials\metal_plate
+
+[objects\large_weapon]
+like = materials\metal_plate
+
+[objects\tin_can]
+like = materials\tin
+
+[objects\glass]
+like = materials\glass

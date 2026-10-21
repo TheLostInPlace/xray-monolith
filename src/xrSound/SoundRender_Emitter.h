@@ -6,6 +6,8 @@
 #include "SoundRender_Core.h"
 #include "soundrender_environment.h"
 
+struct CSoundRender_RaytraceSource;
+
 class CSoundRender_Emitter : public CSound_emitter
 {
 	float starting_delay;
@@ -50,6 +52,21 @@ public:
 	float fade_volume;
 	Fvector occluder [3];
 
+	// Raytraced muffling, occluder_hf is the treble ratio on the direct path
+	CSoundRender_RaytraceSource* rt_source;
+	float occluder_hf;
+	// The direct path's absolute treble gain, occluder_volume times occluder_hf
+	float occluder_gain_hf;
+	float rt_lf;
+	float rt_hf;
+	bool rt_traced;
+	// The reverb group of the traced source, -1 for the listener's reverb
+	int rt_group;
+	// A one-shot that started before its source was traced
+	bool rt_cold;
+	// A weather bed on the listener's ambient filter, read by the rain loop on the main thread
+	std::atomic<bool> rt_ambient;
+
 	State m_current_state;
 	u32 m_stream_cursor;
 	u32 m_cur_handle_cursor;
@@ -59,6 +76,7 @@ public:
 	BOOL bMoved;
 	BOOL b2D;
 	bool bIntro;
+	bool bBed;
 	BOOL bStopping;
 	BOOL bRewind;
 	float fTimeStarted; // time of "Start"
@@ -121,11 +139,14 @@ public:
 	void update(float dt);
 	BOOL update_culling(float dt);
 	void update_environment(float dt);
+	void start_occlusion();
+	void ease_occlusion(float lf, float hf, float dt);
 	void rewind();
 	virtual void stop(BOOL bDeffered);
 	void pause(BOOL bVal, int id);
 
 	virtual u32 play_time();
+	virtual bool ambient_filtered() { return bBed && rt_ambient.load(std::memory_order_relaxed); }
 
 	CSoundRender_Emitter();
 	~CSoundRender_Emitter();

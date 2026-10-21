@@ -229,7 +229,7 @@ void CEffect_Rain::OnFrame()
 			: 1.0f;
 		if (rain_volume_mult > EPS_S)
 		{
-			snd_Ambient.play(0, sm_Looped);
+			snd_Ambient.play(0, sm_Looped | sm_Bed);
 			snd_Ambient.set_position(Fvector().set(0, 0, 0));
 			snd_Ambient.set_range(source_offset, source_offset * 2.f);
 		}
@@ -253,7 +253,14 @@ void CEffect_Rain::OnFrame()
 		// snd_Ambient.set_position(sndP);
 		rain_volume = factor * hemi_factor;
 		clamp(rain_volume, .1f, 1.f);
-		snd_Ambient.set_volume(rain_volume * rain_volume_mult);
+		// On the listener's ambient filter the loop takes its indoor cut from the filter instead of the hemi duck
+		float loop_volume = rain_volume;
+		if (snd_Ambient._feedback()->ambient_filtered())
+		{
+			loop_volume = factor;
+			clamp(loop_volume, .1f, 1.f);
+		}
+		snd_Ambient.set_volume(loop_volume * rain_volume_mult);
 	}
 }
 

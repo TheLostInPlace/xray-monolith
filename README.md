@@ -239,6 +239,15 @@ How to compile exes:
 13. A short video demonstration of the entire process: https://youtu.be/MmZwyM2QO38
 
 ## Changelog
+**2026.10.20**
+* MT:
+  * Raytraced acoustics from the optional Vercidium Audio SDK: reverb, muffling through walls and direct paths. `snd_raytrace on` enables it, off by default. To build with it, put `vaudio.h` in `src/3rd party/vaudio/` and `vaudionative.lib` in `sdk/libraries/x64/`, and ship `vaudionative.dll` next to the exe. Without them the engine builds and runs as before
+  * Fix a crash when the Lua GC stopped a sound while the sound update culled it
+  * A Lua panic writes the log before the game exits
+  * EFX: the listener reads back gain LF and the HF limit, and decay ratios are clamped to the EFX range
+  * Lua: `level.snd_query_path`, `snd_query_room` and `snd_query_result` ask the raytracer for the occlusion between two points or the room around one, see `lua_help_ex.script`
+  * Lua: `level.get_snd_acoustics`, `get_snd_reverb`, `get_snd_muffling` and `is_snd_raytracing` read the raytraced acoustics, see `lua_help_ex.script`
+
 **2026.10.11**
 * Main and MT:
   * DLTX: `reload system ini` call will invalidate whole cache

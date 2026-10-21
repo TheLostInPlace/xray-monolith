@@ -136,7 +136,7 @@ void CSoundRender_Emitter::update(float dt)
 		fTimeToStop = fTime + (get_length_sec() / psSpeedOfSound); 
 		fTimeToPropagade = fTime;
 		fade_volume = 1.f;
-		occluder_volume = SoundRender->get_occlusion(p_source.position, .2f, occluder);
+		start_occlusion();
 		smooth_volume = p_source.base_volume * p_source.volume * (owner_data->s_type == st_Effect
 			                                                          ? psSoundVEffects * psSoundVFactor
 			                                                          : psSoundVMusic * psSoundVMusicFactor) * (b2D ? 1.f : occluder_volume);
@@ -164,7 +164,7 @@ void CSoundRender_Emitter::update(float dt)
 		fTimeToStop = 0xffffffff;
 		fTimeToPropagade = fTime;
 		fade_volume = 1.f;
-		occluder_volume = SoundRender->get_occlusion(p_source.position, .2f, occluder);
+		start_occlusion();
 		smooth_volume = p_source.base_volume * p_source.volume * (owner_data->s_type == st_Effect
 			                                                          ? psSoundVEffects * psSoundVFactor
 			                                                          : psSoundVMusic * psSoundVMusicFactor) * (b2D ? 1.f : occluder_volume);
@@ -344,6 +344,14 @@ IC void volume_lerp(float& c, float t, float s, float dt)
 	c += (diff / diff_a) * mot;
 }
 
+// Bass and treble ease toward their targets at 1/s, the treble as an absolute gain so it never passes its target
+void CSoundRender_Emitter::ease_occlusion(float lf, float hf, float dt)
+{
+	volume_lerp(occluder_volume, lf, 1.f, dt);
+	volume_lerp(occluder_gain_hf, lf * hf, 1.f, dt);
+	occluder_hf = occluder_volume > 0.f ? occluder_gain_hf / occluder_volume : 1.f;
+}
+
 #include "..\xrServerEntities\ai_sounds.h"
 
 BOOL CSoundRender_Emitter::update_culling(float dt)
@@ -353,7 +361,29 @@ BOOL CSoundRender_Emitter::update_culling(float dt)
 
 	if (b2D)
 	{
-		occluder_volume = 1.f;
+		// A 2D weather bed eases onto the listener's ambient filter, other 2D sounds stay unoccluded
+		float occ, hf;
+		if (bBed && SoundRender->get_ambience(this, occ, hf))
+			ease_occlusion(occ, hf, dt);
+		else if (bBed && SoundRender->hold_ambience())
+		{
+			// A bed waits silent for the listener's first ambient result and eases in from there
+			occluder_volume = 0.f;
+			occluder_hf = 1.f;
+			occluder_gain_hf = 0.f;
+		}
+		else if (SoundRender->raytracing() && bBed)
+		{
+			// A bed past its hold or off the ambient filter eases back to open at 1/s, the stock path keeps it open
+			ease_occlusion(1.f, 1.f, dt);
+		}
+		else
+		{
+			// A bed that leaves the ambient filter drops its treble cut too
+			occluder_volume = 1.f;
+			occluder_hf = 1.f;
+			occluder_gain_hf = 1.f;
+		}
 		fade_volume += dt * 10.f * (bStopping ? -1.f : 1.f);
 		volume_att = p_source.volume;
 	}
@@ -363,6 +393,12 @@ BOOL CSoundRender_Emitter::update_culling(float dt)
 		float dist = SoundRender->listener_position().distance_to(p_source.position);
 		if (dist > p_source.max_distance)
 		{
+			// Well past its range a source lets go of its target and traces again on return
+			if (rt_source && dist > p_source.max_distance * sdef_range_release)
+			{
+				SoundRender->cull_muffling(this);
+				rt_traced = false;
+			}
 			smooth_volume = 0;
 			return FALSE;
 		}
@@ -382,10 +418,25 @@ BOOL CSoundRender_Emitter::update_culling(float dt)
 			volume_att -= 0.1f;
 		//v2v3v4 out
 
-		// Update occlusion
-		float occ = (owner_data->g_type == SOUND_TYPE_WORLD_AMBIENT) ? 1.0f : SoundRender->get_occlusion(p_source.position, .2f, occluder);
-		volume_lerp(occluder_volume, occ, 1.f, dt);
+		// Update occlusion, the first raytraced result replaces the stock ray at once for a one-shot that started on it
+		float occ = 1.f, hf = 1.f;
+		const bool was_traced = rt_traced;
+		// A weather bed takes the listener's ambient filter ahead of the world ambient test
+		const bool bed = bBed && SoundRender->get_ambience(this, occ, hf);
+		if (!bed && owner_data->g_type != SOUND_TYPE_WORLD_AMBIENT && !SoundRender->get_muffling(this, occ, hf))
+			occ = SoundRender->get_occlusion(p_source.position, .2f, occluder);
+		if (rt_traced && !was_traced && rt_cold)
+		{
+			occluder_volume = occ;
+			occluder_hf = hf;
+			occluder_gain_hf = occ * hf;
+		}
+		else
+			ease_occlusion(occ, hf, dt);
+		if (rt_traced)
+			rt_cold = false;
 		clamp(occluder_volume, 0.f, 1.f);
+		occluder_hf = std::max(occluder_hf, 0.f);
 	}
 	clamp(fade_volume, 0.f, 1.f);
 
@@ -432,4 +483,25 @@ void CSoundRender_Emitter::update_environment(float dt)
 	if (bMoved) {
 		p_source.update_velocity(dt);
 	}
+}
+
+// A sound starts on its owner's raytraced gains when they exist, on the stock ray otherwise
+void CSoundRender_Emitter::start_occlusion()
+{
+	occluder_hf = 1.f;
+	rt_cold = false;
+	// A weather bed starts on the listener's ambient filter once it is ready, with no stock ray
+	if (bBed && SoundRender->get_ambience(this, occluder_volume, occluder_hf))
+	{
+		occluder_gain_hf = occluder_volume * occluder_hf;
+		return;
+	}
+	if (b2D || owner_data->g_type == SOUND_TYPE_WORLD_AMBIENT ||
+		SoundRender->listener_position().distance_to(p_source.position) > p_source.max_distance ||
+		!SoundRender->get_muffling(this, occluder_volume, occluder_hf))
+	{
+		occluder_volume = SoundRender->get_occlusion(p_source.position, .2f, occluder);
+		rt_cold = rt_source && m_current_state == stStarting;
+	}
+	occluder_gain_hf = occluder_volume * occluder_hf;
 }

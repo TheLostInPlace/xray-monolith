@@ -19,6 +19,7 @@ class CSoundRender_CoreA : public CSoundRender_Core
 {
 	typedef CSoundRender_Core inherited;
 	friend class CNotificationClient;
+	friend class CSoundRender_TargetA;
 	
 	ALCdevice* pDevice;
 	ALCcontext* pContext;
@@ -77,17 +78,28 @@ public:
 	ALuint effectfv{};
 	ALuint slot{};
 
+	// Grouped raytraced reverb, an effect and slot per group made when the group is first heard
+	ALuint group_effect[sdef_reverb_groups]{};
+	ALuint group_slot[sdef_reverb_groups]{};
+	bool group_ready[sdef_reverb_groups]{};
+	bool group_refused{};
+	// What each group's slot holds, gliding toward the raytracer's result
+	EFXEAXREVERBPROPERTIES group_reverb[sdef_reverb_groups]{};
+	float group_gain[sdef_reverb_groups]{};
+
 	virtual void update_listener(const Fvector& P, const Fvector& D, const Fvector& N, float dt);
 
 	// EFX Slots
 	void LoadEffect();
 	void DestroyEffect();
+	bool make_group(int i);
+	void commit_group(int i, float gain);
 
 public:
 	CSoundRender_CoreA();
 	virtual ~CSoundRender_CoreA();
 
-	int load_reverb(ALuint effect, const EFXEAXREVERBPROPERTIES* reverb);
+	int load_reverb(ALuint effect, const EFXEAXREVERBPROPERTIES* reverb, float decay_limit = AL_EAXREVERB_MAX_DECAY_TIME);
 
 	virtual void _initialize(int stage);
 	virtual void _clear();

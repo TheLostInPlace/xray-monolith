@@ -14,6 +14,15 @@ CSoundRender_TargetA::CSoundRender_TargetA(): CSoundRender_Target()
 	cache_pitch = 1.f;
 	pSource = 0;
 	Slot = u32(-1);
+	direct_filter = 0;
+	cache_hf = 1.f;
+	cache_lf = 1.f;
+	direct_attached = false;
+	send_group = -1;
+	send_filter = 0;
+	cache_send = 1.f;
+	cache_band = 1.f;
+	send_direct = false;
 }
 
 CSoundRender_TargetA::~CSoundRender_TargetA()
@@ -53,6 +62,20 @@ void CSoundRender_TargetA::_destroy()
 	// clean up target
 	if (alIsSource(pSource))
 		alDeleteSources(1, &pSource);
+	if (direct_filter)
+	{
+		A_CHK(SoundRenderA->alDeleteFilters(1, &direct_filter));
+		direct_filter = 0;
+	}
+	direct_attached = false;
+	send_direct = false;
+	if (send_filter)
+	{
+		A_CHK(SoundRenderA->alDeleteFilters(1, &send_filter));
+		send_filter = 0;
+	}
+	if (send_group >= 0)
+		leave_group();
 	A_CHK(alDeleteBuffers (sdef_target_count, pBuffers));
 	inherited::_destroy();
 }
@@ -79,15 +102,21 @@ void CSoundRender_TargetA::render()
 		fill_block(pBuffers[buf_idx]);
 
 	A_CHK(alSourceQueueBuffers(pSource, sdef_target_count, pBuffers));
-	if (Slot != u32(-1) && !m_pEmitter->bIntro)
+	if (Slot != u32(-1) && !skips_reverb())
 	{
-		A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, AL_FILTER_NULL));
+		// The direct filter fill_parameters left goes to the slot too
+		send_direct = direct_attached;
+		A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, send_direct ? direct_filter : AL_FILTER_NULL));
 	}
 	// demonized: explicitly disable effects by sending sounds to null slot, ie. not sending
 	else
 	{
+		send_direct = false;
 		A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 0, NULL));
 	}
+	// The send above replaced any group's
+	if (send_group >= 0)
+		leave_group();
 	A_CHK(alSourcePlay(pSource));
 
 	inherited::render();
@@ -101,7 +130,30 @@ void CSoundRender_TargetA::stop()
 		A_CHK(alSourcei (pSource, AL_BUFFER, NULL));
 		A_CHK(alSourcei (pSource, AL_SOURCE_RELATIVE, TRUE));
 	}
+	// A stopped source sends nothing until its next render resets the send
+	if (send_group >= 0)
+		leave_group();
 	inherited::stop();
+}
+
+// Intro sounds, and interface files under raytraced acoustics, skip the listener's reverb
+bool CSoundRender_TargetA::skips_reverb() const
+{
+	return m_pEmitter->bIntro || (SoundRender->raytracing() && m_pEmitter->source()->m_bInterface);
+}
+
+// The group a playing 3D source sends to, -1 for the listener's slot
+int CSoundRender_TargetA::grouped() const
+{
+	if (!rendering || Slot == u32(-1) || m_pEmitter->b2D || skips_reverb() || !m_pEmitter->rt_traced)
+		return -1;
+	const int g = m_pEmitter->rt_group;
+	return g >= 0 && g < sdef_reverb_groups && SoundRenderA->group_ready[g] ? g : -1;
+}
+
+void CSoundRender_TargetA::leave_group()
+{
+	send_group = -1;
 }
 
 void CSoundRender_TargetA::rewind()
@@ -181,12 +233,99 @@ void CSoundRender_TargetA::fill_parameters()
 	A_CHK(alSourcef (pSource, AL_ROLLOFF_FACTOR, psSoundRolloff));
 
 	VERIFY2(m_pEmitter, SE->source()->file_name());
-	float _gain = m_pEmitter->smooth_volume;
+	// Treble that passes better than bass lifts the gain by the ratio and the filter takes the bass down instead
+	const float _hf = m_pEmitter->occluder_hf;
+	float _gain = m_pEmitter->smooth_volume * std::max(_hf, 1.f);
 	clamp(_gain, EPS_S, 1.f);
+	// A grouped source plays at the louder of its dry and unoccluded levels, the direct and send filters take each path down to its own
+	const int group = grouped();
+	const float dry = _gain;
+	const float wet = group >= 0 ? std::clamp(m_pEmitter->smooth_volume / std::max(m_pEmitter->occluder_volume, EPS_S), EPS_S, 1.f) : 0.f;
+	if (group >= 0)
+		_gain = std::max(dry, wet);
 	if (!fsimilar(_gain, cache_gain, 0.01f))
 	{
 		cache_gain = _gain;
 		A_CHK(alSourcef (pSource, AL_GAIN, _gain));
+	}
+
+	// Raytraced treble loss, the source copies the filter when it is attached
+	bool direct_set = false;
+	if (m_pEmitter->rt_traced || _hf != 1.f)
+	{
+		if (!direct_filter)
+		{
+			A_CHK(SoundRenderA->alGenFilters(1, &direct_filter));
+			A_CHK(SoundRenderA->alFilteri(direct_filter, AL_FILTER_TYPE, AL_FILTER_BANDPASS));
+			A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAIN, 1.f));
+		}
+		// The bass comes back to the volume from the gain actually sent, so only the treble lift gives way to the clamp
+		const float _dry = group >= 0 ? dry : cache_gain;
+		const float _lf = _hf > 1.f && _dry > 0.f ? std::min(m_pEmitter->smooth_volume / _dry, 1.f) : 1.f;
+		// A grouped source's dry path keeps its share of the gain sent
+		const float _band = group >= 0 && cache_gain > 0.f ? std::min(dry / cache_gain, 1.f) : 1.f;
+		const bool band_moved = _band == 1.f ? cache_band != 1.f : _abs(_band - cache_band) > 0.01f * cache_band;
+		if (!direct_attached || !fsimilar(_hf, cache_hf, 0.01f) || _abs(_lf - cache_lf) > 0.01f * cache_lf || band_moved)
+		{
+			cache_hf = _hf;
+			cache_lf = _lf;
+			direct_attached = true;
+			if (_band != cache_band)
+			{
+				cache_band = _band;
+				A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAIN, _band));
+			}
+			A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAINHF, std::min(_hf, 1.f)));
+			A_CHK(SoundRenderA->alFilterf(direct_filter, AL_BANDPASS_GAINLF, _lf));
+			A_CHK(alSourcei(pSource, AL_DIRECT_FILTER, direct_filter));
+			direct_set = true;
+		}
+	}
+	else if (direct_attached)
+	{
+		direct_attached = false;
+		A_CHK(alSourcei(pSource, AL_DIRECT_FILTER, AL_FILTER_NULL));
+	}
+
+	// The send follows the group with a flat gain filter, the reverb hears the source unfiltered at its unoccluded level
+	if (group >= 0)
+	{
+		const float _send = cache_gain > 0.f ? std::min(wet / cache_gain, 1.f) : 1.f;
+		if (group != send_group || _abs(_send - cache_send) > 0.01f * cache_send)
+		{
+			if (!send_filter)
+			{
+				A_CHK(SoundRenderA->alGenFilters(1, &send_filter));
+				A_CHK(SoundRenderA->alFilteri(send_filter, AL_FILTER_TYPE, AL_FILTER_LOWPASS));
+				A_CHK(SoundRenderA->alFilterf(send_filter, AL_LOWPASS_GAINHF, 1.f));
+			}
+			send_group = group;
+			send_direct = false;
+			cache_send = _send;
+			A_CHK(SoundRenderA->alFilterf(send_filter, AL_LOWPASS_GAIN, _send));
+			A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, SoundRenderA->group_slot[group], 0, send_filter));
+		}
+	}
+	else if (send_group >= 0)
+	{
+		A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, AL_FILTER_NULL));
+		leave_group();
+	}
+
+	// A source on the listener's slot sends through its direct filter, attached again whenever the filter changes since an attach copies it
+	if (group < 0 && Slot != u32(-1) && !skips_reverb())
+	{
+		const bool direct = direct_attached;
+		if (direct && (!send_direct || direct_set))
+		{
+			A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, direct_filter));
+			send_direct = true;
+		}
+		else if (!direct && send_direct)
+		{
+			A_CHK(alSource3i(pSource, AL_AUXILIARY_SEND_FILTER, Slot, 0, AL_FILTER_NULL));
+			send_direct = false;
+		}
 	}
 
 	VERIFY2(m_pEmitter, SE->source()->file_name());

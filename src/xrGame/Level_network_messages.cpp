@@ -317,6 +317,8 @@ void CLevel::ClientReceive()
 
 				if (m_type == M_LOAD_GAME)
 				{
+					// Scripts read no room from before the load, on this level or the next
+					::Sound->hold_acoustics(true);
 					string256 saved_name;
 					P->r_stringZ_s(saved_name);
 					if (xr_strlen(saved_name) && ai().get_alife())

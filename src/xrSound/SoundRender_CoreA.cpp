@@ -9,6 +9,7 @@
 #include "../xrEngine/XR_IOConsole.h"
 
 #include <AL/efx.h>
+#include <AL/alext.h>
 
 BOOL reverb_overwrite = FALSE;
 
@@ -76,7 +77,47 @@ void CSoundRender_CoreA::DestroyEffect()
 		alDeleteEffects(1, &effect);
 		if (alIsAuxiliaryEffectSlot(slot))
 			alDeleteAuxiliaryEffectSlots(1, &slot);
+		for (int i = 0; i < sdef_reverb_groups; ++i)
+		{
+			if (!group_slot[i])
+				continue;
+			alDeleteAuxiliaryEffectSlots(1, &group_slot[i]);
+			alDeleteEffects(1, &group_effect[i]);
+			group_slot[i] = group_effect[i] = 0;
+			group_ready[i] = false;
+		}
+		group_refused = false;
 	}
+}
+
+bool CSoundRender_CoreA::make_group(int i)
+{
+	if (group_slot[i])
+		return true;
+	if (group_refused)
+		return false;
+	alGetError();
+	alGenEffects(1, &group_effect[i]);
+	alGenAuxiliaryEffectSlots(1, &group_slot[i]);
+	const ALenum err = alGetError();
+	if (err == AL_NO_ERROR && load_reverb(group_effect[i], &reverbs[0]))
+		return true;
+	Msg("! SOUND: OpenAL: grouped reverb slot %d refused (0x%04x), grouped sources stay on the listener's reverb", i, err);
+	if (alIsAuxiliaryEffectSlot(group_slot[i]))
+		alDeleteAuxiliaryEffectSlots(1, &group_slot[i]);
+	if (alIsEffect(group_effect[i]))
+		alDeleteEffects(1, &group_effect[i]);
+	group_slot[i] = group_effect[i] = 0;
+	group_refused = true;
+	return false;
+}
+
+// A group's slot plays at the gain the listener hears that group with
+void CSoundRender_CoreA::commit_group(int i, float gain)
+{
+	A_CHK(alAuxiliaryEffectSlotf(group_slot[i], AL_EFFECTSLOT_GAIN, gain));
+	A_CHK(alAuxiliaryEffectSloti(group_slot[i], AL_EFFECTSLOT_AUXILIARY_SEND_AUTO, false));
+	A_CHK(alAuxiliaryEffectSloti(group_slot[i], AL_EFFECTSLOT_EFFECT, group_effect[i]));
 }
 
 void CSoundRender_CoreA::LoadEffect()
@@ -112,7 +153,7 @@ void CSoundRender_CoreA::LoadEffect()
 
 // load_reverb loads the given initial reverb properties into the given OpenAL
 //  effect object, and returns non-zero on success.
-int CSoundRender_CoreA::load_reverb(ALuint effect_, const EFXEAXREVERBPROPERTIES* reverb)
+int CSoundRender_CoreA::load_reverb(ALuint effect_, const EFXEAXREVERBPROPERTIES* reverb, float decay_limit)
 {
 	ALenum err;
 
@@ -130,7 +171,9 @@ int CSoundRender_CoreA::load_reverb(ALuint effect_, const EFXEAXREVERBPROPERTIES
 	A_CHK(alEffectf(effect_, AL_EAXREVERB_GAIN, reverb->flGain));
 	A_CHK(alEffectf(effect_, AL_EAXREVERB_GAINHF, reverb->flGainHF));
 	A_CHK(alEffectf(effect_, AL_EAXREVERB_GAINLF, reverb->flGainLF));
-	A_CHK(alEffectf(effect_, AL_EAXREVERB_DECAY_TIME, reverb->flDecayTime));
+	// The limit goes first since the decay time is checked against it, and a decay still gliding down from above it is held at it
+	A_CHK(alEffectf(effect_, AL_EAXREVERB_DECAY_TIME_LIMIT_SOFT, decay_limit));
+	A_CHK(alEffectf(effect_, AL_EAXREVERB_DECAY_TIME, std::min(reverb->flDecayTime, decay_limit)));
 	A_CHK(alEffectf(effect_, AL_EAXREVERB_DECAY_HFRATIO, reverb->flDecayHFRatio));
 	A_CHK(alEffectf(effect_, AL_EAXREVERB_DECAY_LFRATIO, reverb->flDecayLFRatio));
 	A_CHK(alEffectf(effect_, AL_EAXREVERB_REFLECTIONS_GAIN, reverb->flReflectionsGain));

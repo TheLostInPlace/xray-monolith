@@ -583,9 +583,20 @@
         float get_music_volume()
         void set_music_volume(float)
 
+        // Raytraced acoustics, read only, every table is a copy the engine never changes
+        bool is_snd_raytracing() -- the current level's raytraced acoustics run, false with snd_raytrace 0, without EFX or the SDK
+        table get_snd_acoustics() -- nil or the listener's room {serial, position, sky, returned, decay_lf, decay_hf, absorption_lf, absorption_hf, roughness, ambient_lf, ambient_hf}, sky compares across levels, returned within one level only
+        table get_snd_reverb() -- nil or the listener's raytraced EFX reverb {serial, applied, and the snd_efx_reverb_overwrite_* values}
+        table get_snd_muffling(number id) -- nil or the object's sounds at the camera {lf, hf, direct_lf, direct_hf}, an idle owner reports the muffling of its last sound until it makes the next one
+
         float get_weather_weight()
         void set_weather_weight(float)
         void set_weather_smooth(string)
+
+        // Raytraced point queries, answered on the ray worker a frame or more later, 16 pending at most
+        number snd_query_path(vector ear, vector source, number owner_id = nil) -- a ticket for the path between two points or nil, the path passes through the moving shapes of the object owner_id names, a nil owner_id skips none
+        number snd_query_room(vector point) -- a ticket for the open air sphere around any point or nil, its 512 rays take about 8 frames at 60 fps, unlike get_snd_acoustics which reads the listener's processed reverb
+        table snd_query_result(number ticket) -- nil while pending, false for a nil ticket or once a level change or a reused slot dropped it, else {lf, hf, direct_lf, direct_hf, through_lf, through_hf, crossings, blocked} for a path or {open, reflect_lf, reflect_hf} for a room
 
         // Camera, position is x,y,z vector, direction is head,pitch,roll vector in RADIANS
         void set_cam_custom_position_direction(Fvector position, Fvector direction, int smoothing, bool hudDraw, bool hudAffect)

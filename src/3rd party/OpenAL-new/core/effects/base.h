@@ -84,6 +84,7 @@ union EffectProps {
         float LFReference;
         float RoomRolloffFactor;
         bool DecayHFLimit;
+        float DecayTimeLimit; /* 0 acts as the EFX maximum of 20 */
     } Reverb;
 
     struct {

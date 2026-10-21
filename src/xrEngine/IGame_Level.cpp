@@ -12,6 +12,7 @@
 #include "xr_object.h"
 #include "feel_sound.h"
 #include "shader_bus.h"
+#include "GameMtlLib.h"
 
 #include "../xrCore/profiler.h"
 
@@ -52,6 +53,7 @@ IGame_Level::~IGame_Level()
 	CCameraManager::ResetPP();
 	///////////////////////////////////////////
 	Sound->set_geometry_occ(NULL);
+	Sound->set_geometry_acoustics(NULL, NULL, 0);
 	Sound->set_handler(NULL);
 	Device.DumpResourcesMemoryUsage();
 
@@ -123,6 +125,18 @@ bool IGame_Level::Load(u32 dwNum)
 	ObjectSpace.Load( [](Fvector* V, int Vcnt, CDB::TRI* T, int Tcnt, void* params){g_pGameLevel->Load_GameSpecific_CFORM(T, Tcnt);});
 	//Sound->set_geometry_occ ( &Static );
 	Sound->set_geometry_occ(ObjectSpace.GetStaticModel());
+	if (psSoundFlags.test(ss_Raytrace))
+	{
+		// TRI.material holds the GMLib index once Load_GameSpecific_CFORM has run
+		xr_vector<CSound_material_desc> materials(GMLib.CountMaterial());
+		for (u32 i = 0; i < materials.size(); ++i)
+		{
+			const SGameMtl* M = GMLib.GetMaterialByIdx(u16(i));
+			materials[i] = { M->m_Name, !!M->Flags.test(SGameMtl::flPassable), !!M->Flags.test(SGameMtl::flLiquid), M->fSndOcclusionFactor,
+				!!M->Flags.test(SGameMtl::flDynamic) };
+		}
+		Sound->set_geometry_acoustics(ObjectSpace.GetStaticModel(), materials.data(), u32(materials.size()));
+	}
 	Sound->set_handler(_sound_event);
 
 	pApp->LoadSwitch();

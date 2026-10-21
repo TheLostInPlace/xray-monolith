@@ -5,6 +5,7 @@
 #include "SoundRender_Cache.h"
 
 class CNotificationClient;
+class CSoundRender_Raytrace;
 
 class CSoundRender_Core : public CSound_manager_interface
 {
@@ -24,6 +25,13 @@ protected:
 	CSoundRender_Environment e_current;
 	CSoundRender_Environment e_identity;
 	CSoundRender_Environment* e_target_ptr;
+
+	// Raytraced acoustics, the world lives from level load to unload
+	CSoundRender_Raytrace* raytrace;
+	EFXEAXREVERBPROPERTIES rt_reverb;
+	bool rt_reverb_active;
+	// Time since the hand-back glide last stepped the rebuilding fields
+	float rt_reverb_step_time;
 
 public:
 	typedef std::pair<ref_sound_data_ptr, float> event;
@@ -49,6 +57,9 @@ protected:
 
 	// Containers
 	xr_unordered_map<xr_string, CSoundRender_Source*> s_sources;
+	// Interface sound files and file prefixes from misc\sound\sound_interface.ltx
+	xr_unordered_set<xr_string> s_interface_files;
+	xr_vector<xr_string> s_interface_prefixes;
 	xr_vector<CSoundRender_Emitter*> s_emitters;
 	u32 s_emitters_u; // emitter update marker
 	xr_vector<CSoundRender_Target*> s_targets;
@@ -93,6 +104,14 @@ public:
 	virtual void set_geometry_env(IReader* I);
 	virtual void set_geometry_som(IReader* I);
 	virtual void set_geometry_occ(CDB::MODEL* M);
+	virtual void set_geometry_acoustics(CDB::MODEL* M, const CSound_material_desc* materials, u32 count);
+	virtual bool occluder_add(const void* owner, const CSound_occluder_shape* shapes, u32 count);
+	virtual void occluder_move(const void* owner, const Fmatrix* poses, u32 count);
+	virtual bool raytracing() const;
+	virtual bool get_listener_acoustics(CSound_acoustics& out) const;
+	virtual bool get_listener_reverb(CSound_reverb& out) const;
+	virtual bool get_object_muffling(const CObject* O, CSound_muffling& out) const;
+	virtual void hold_acoustics(bool hold);
 	virtual void set_handler(sound_event* E);
 
 	virtual void update(const Fvector& P, const Fvector& D, const Fvector& N);
@@ -118,6 +137,8 @@ public:
 public:
 	CSoundRender_Source* i_create_source(LPCSTR name);
 	void i_destroy_source(CSoundRender_Source* S);
+	void i_load_interface_list();
+	bool i_interface_file(LPCSTR name) const;
 	CSoundRender_Emitter* i_play(ref_sound* S, BOOL _loop, float delay);
 	void i_start(CSoundRender_Emitter* E);
 	void i_stop(CSoundRender_Emitter* E);
@@ -131,6 +152,14 @@ public:
 
 	virtual float get_occlusion_to(const Fvector& hear_pt, const Fvector& snd_pt, float dispersion = 0.2f);
 	float get_occlusion(Fvector& P, float R, Fvector* occ) override;
+	virtual u32 query_path(const Fvector& ear, const Fvector& source, const void* skip);
+	virtual u32 query_room(const Fvector& point);
+	virtual int query_result(u32 ticket, CSound_query& out) const;
+	bool get_muffling(CSoundRender_Emitter* E, float& lf, float& hf);
+	void release_muffling(CSoundRender_Emitter* E);
+	void cull_muffling(CSoundRender_Emitter* E);
+	bool get_ambience(CSoundRender_Emitter* E, float& lf, float& hf);
+	bool hold_ambience();
 	CSoundRender_Environment* get_environment(const Fvector& P);
 
 	void env_load();

@@ -358,7 +358,7 @@ void CGamePersistent::WeathersUpdate()
 
 					if (bed_volume_mult > EPS_S)
 					{
-						snd.play_at_pos(0, pos);
+						snd.play_at_pos(0, pos, sm_Bed);
 						if (bed_volume_mult < 1.0f)
 							snd.set_volume(bed_volume_mult);
 					}
