@@ -7,6 +7,16 @@
 class CNotificationClient;
 class CSoundRender_Raytrace;
 
+// Sound files and file prefixes named in one section of a config list
+struct CSoundRender_FileList
+{
+	xr_unordered_set<xr_string> files;
+	xr_vector<xr_string> prefixes;
+
+	void load(LPCSTR file, LPCSTR section);
+	bool has(LPCSTR name) const;
+};
+
 class CSoundRender_Core : public CSound_manager_interface
 {
 	volatile BOOL bLocked;
@@ -57,9 +67,10 @@ protected:
 
 	// Containers
 	xr_unordered_map<xr_string, CSoundRender_Source*> s_sources;
-	// Interface sound files and file prefixes from misc\sound\sound_interface.ltx
-	xr_unordered_set<xr_string> s_interface_files;
-	xr_vector<xr_string> s_interface_prefixes;
+	// Interface sounds from misc\sound\sound_interface.ltx
+	CSoundRender_FileList s_interface_list;
+	// Sounds that play and play_at_pos start as beds, from misc\sound\sound_beds.ltx
+	CSoundRender_FileList s_bed_list;
 	xr_vector<CSoundRender_Emitter*> s_emitters;
 	u32 s_emitters_u; // emitter update marker
 	xr_vector<CSoundRender_Target*> s_targets;
@@ -142,8 +153,9 @@ public:
 public:
 	CSoundRender_Source* i_create_source(LPCSTR name);
 	void i_destroy_source(CSoundRender_Source* S);
-	void i_load_interface_list();
-	bool i_interface_file(LPCSTR name) const;
+	void i_load_file_lists();
+	bool i_interface_file(LPCSTR name) const { return s_interface_list.has(name); }
+	bool i_bed_file(LPCSTR name) const { return s_bed_list.has(name); }
 	CSoundRender_Emitter* i_play(ref_sound* S, BOOL _loop, float delay);
 	void i_start(CSoundRender_Emitter* E);
 	void i_stop(CSoundRender_Emitter* E);

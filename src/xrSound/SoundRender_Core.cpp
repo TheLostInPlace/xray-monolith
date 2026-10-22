@@ -79,7 +79,7 @@ void CSoundRender_Core::_initialize(int stage)
 
 	// load environment
 	env_load();
-	i_load_interface_list();
+	i_load_file_lists();
 
 	bPresent = TRUE;
 
@@ -480,7 +480,8 @@ void CSoundRender_Core::play(ref_sound& S, CObject* O, u32 flags, float delay)
 	{
 		S._feedback()->switch_to_Intro();
 	}
-	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed);
+	// A file named in the bed list plays as a bed whatever the caller's flags
+	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed) || ((CSoundRender_Source*)S._handle())->m_bBed;
 	((CSoundRender_Emitter*)S._feedback())->bLayer = !!(flags & sm_Layer);
 }
 
@@ -530,7 +531,7 @@ void CSoundRender_Core::play_at_pos(ref_sound& S, CObject* O, const Fvector &pos
 	{
 		S._feedback()->switch_to_Intro();
 	}
-	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed);
+	((CSoundRender_Emitter*)S._feedback())->bBed = !!(flags & sm_Bed) || ((CSoundRender_Source*)S._handle())->m_bBed;
 	((CSoundRender_Emitter*)S._feedback())->bLayer = !!(flags & sm_Layer);
 }
 

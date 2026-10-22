@@ -168,6 +168,7 @@ void CSoundRender_Source::load(LPCSTR name)
 
 	fname = N;
 	m_bInterface = SoundRender->i_interface_file(N);
+	m_bBed = SoundRender->i_bed_file(N);
 
 	strconcat(sizeof(fn), fn, N, ".ogg");
 	if (!FS.exist("$level$", fn))

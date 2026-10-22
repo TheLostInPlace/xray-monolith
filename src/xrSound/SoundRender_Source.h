@@ -26,6 +26,8 @@ public:
 	u32 m_uGameType;
 	// Named in the interface list, set once at load
 	bool m_bInterface;
+	// Named in the bed list, set once at load
+	bool m_bBed;
 private:
 	void i_decompress_fr(OggVorbis_File* ovf, char* dest, u32 size);
 	bool LoadWave(LPCSTR name);
