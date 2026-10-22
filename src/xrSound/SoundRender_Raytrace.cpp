@@ -27,7 +27,7 @@ CSoundRender_Raytrace::CSoundRender_Raytrace() :
 	formula(false), model(nullptr), direct_moves(0), direct_tick(0), ray_time(0.f), direct_window(0),
 	open_air(false), open_air_window(0), rays(), rays_out(false), ray_lapsed(false), ray_done(false),
 	query_next(0), query_generation(0), queries_open(false), query_window(0),
-	visual_reported(false), drawing(false), update_thread(0),
+	drawing(false),
 	monitor_left(0.f), monitor_rays(false), rays_used{}, tick_ms(0.f), monitor_valid(false)
 {
 	bounds.invalidate();
@@ -42,8 +42,6 @@ CSoundRender_Raytrace::~CSoundRender_Raytrace()
 	// Sound shutdown waits for every old world still finishing its round
 	for (HANDLE h : teardowns)
 	{
-		if (WaitForSingleObject(h, 0) == WAIT_TIMEOUT)
-			Msg("SOUND: Raytrace: waiting for an old world to finish its round");
 		WaitForSingleObject(h, INFINITE);
 		CloseHandle(h);
 	}
@@ -848,12 +846,6 @@ void CSoundRender_Raytrace::visualise(VAEmitter* emitter, VAVisualisationData* d
 		s.b.set(data[i].position.x, data[i].position.y, data[i].position.z);
 		s.bounce = u32(bounce);
 	}
-	if (!self->visual_reported)
-	{
-		self->visual_reported = true;
-		Msg("SOUND: Raytrace: visualisation %u segments from %d points, %d rays of %d bounces, callback thread %u, update thread %u",
-			u32(self->visual.size()), count, visual_rays, visual_bounces, u32(GetCurrentThreadId()), u32(self->update_thread.load(std::memory_order_relaxed)));
-	}
 }
 
 void CSoundRender_Raytrace::set_drawing(bool value)
@@ -865,7 +857,6 @@ void CSoundRender_Raytrace::set_drawing(bool value)
 	check(vaEmitterSetVisualisationRayCount(listener, value ? visual_rays : 0), "vaEmitterSetVisualisationRayCount");
 	xrCriticalSectionGuard guard(visual_lock);
 	visual.clear();
-	visual_reported = false;
 }
 
 bool CSoundRender_Raytrace::visualisation(xr_vector<CSound_ray_segment>& segments, u32& bounces)
@@ -1004,7 +995,7 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 	xr_vector<int> material_id(count, 0);
 	// Level cells of a mass-law class take its flat values by wall thickness, unless the section sets its own
 	xr_vector<int> mass_class(count, -1);
-	u32 used = 0, skipped = per_material[count], unmapped = 0;
+	u32 used = 0, skipped = per_material[count];
 	for (u32 m = 0; m < count; ++m)
 	{
 		if (!per_material[m] && !wanted[m])
@@ -1013,10 +1004,7 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 		LPCSTR name = materials[m].name.c_str();
 		LPCSTR section = name;
 		if (!section_exist(section))
-		{
 			section = materials[m].passable ? "default_passable" : "default";
-			++unmapped;
-		}
 		const bool has_section = section_exist(section);
 		// An empty value reads as NULL and counts as missing
 		auto text = [&](LPCSTR key) -> LPCSTR
@@ -1083,8 +1071,6 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 				mass_class[m] = int(row - std::begin(mass_law_classes));
 		}
 	}
-	if (unmapped)
-		Msg("SOUND: Raytrace: %u materials unmapped, each uses its default", unmapped);
 
 	// The direct path skips what the upload skipped, and a passable material lets it through
 	model = M;
@@ -1163,10 +1149,7 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 
 	// Cells of a thick mass-law class take their wall thickness from the collision tree, cast across the task pool
 	// Sheet classes keep a fixed skin, since the probe finds the air inside a hollow shell
-	CTimer probe_timer;
-	probe_timer.Start();
 	M->syncronize();
-	const float tree_ms = probe_timer.GetElapsed_sec() * 1000.f;
 	const u32 run_count = u32(runs.size());
 	xr_vector<ThicknessSample> samples(run_count * thickness_points, { { 0.f, 0.f, 0.f }, -1.f });
 	constexpr u32 probe_block = 256;
@@ -1181,19 +1164,6 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 				probe_cell(collider, M, order.data(), runs[i], direct_static, &samples[i * thickness_points]);
 		}
 	});
-	const float probe_ms = probe_timer.GetElapsed_sec() * 1000.f - tree_ms;
-	u32 probed = 0, backed = 0;
-	for (u32 i = 0; i < run_count; ++i)
-	{
-		const int row = mass_class[runs[i].material];
-		if (row < 0 || mass_law_classes[row].sheet)
-			continue;
-		++probed;
-		for (u32 p = 0; p < thickness_points; ++p)
-			backed += samples[i * thickness_points + p].thickness >= 0.f;
-	}
-	Msg("SOUND: Raytrace: thickness probe %u of %u cells, %u of %u points with a back face, %.0f ms, %.0f ms waiting for the collision tree",
-		probed, run_count, backed, probed * thickness_points, probe_ms, tree_ms);
 
 	// Each thick class triangle casts from just off its centroid along minus its normal, the first face looking back is its partner
 	// The partner's distance is the triangle's own wall thickness
@@ -1887,8 +1857,6 @@ bool CSoundRender_Raytrace::tick(const Fvector& P, const Fvector& D, const Fvect
 	const bool draw = !!psSoundRaytraceFlags.test(ssr_Draw);
 	if (draw != drawing)
 		set_drawing(draw);
-	if (drawing)
-		update_thread.store(GetCurrentThreadId(), std::memory_order_relaxed);
 	check(vaEmitterSetPosition(listener, va_vector(P)), "vaEmitterSetPosition");
 	// Refreshed trails keep part of the last room, so a listener that stops for 1 s after 1.5 m casts them all again
 	if (!first_result)
@@ -3125,14 +3093,6 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 			check(vaEmitterSetMaxEchogramTime(e, 5000), "vaEmitterSetMaxEchogramTime");
 			check(vaEmitterSetEchogramGranularity(e, 100), "vaEmitterSetEchogramGranularity");
 			check(vaEmitterSetKeepReverbTailAlive(e, true), "vaEmitterSetKeepReverbTailAlive");
-		}
-		// The first dry and the first reverb source of the session read their floors back
-		static bool floor_read[2] = { false, false };
-		if (!floor_read[reverb])
-		{
-			floor_read[reverb] = true;
-			Msg("SOUND: Raytrace: %s source permeation floor %.4f ambient %.4f", reverb ? "reverb" : "dry",
-				vaEmitterGetMinimumPermeationEnergy(e), vaEmitterGetMinimumAmbientPermeationEnergy(e));
 		}
 		check(vaEmitterSetLogCallback(e, sdk_log), "vaEmitterSetLogCallback");
 		check(vaEmitterSetLogErrorCallback(e, sdk_log), "vaEmitterSetLogErrorCallback");

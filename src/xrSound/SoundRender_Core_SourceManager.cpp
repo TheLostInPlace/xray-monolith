@@ -59,7 +59,6 @@ void CSoundRender_Core::i_load_interface_list()
 		else
 			s_interface_files.emplace(N);
 	}
-	Msg("SOUND: Interface list: %u files, %u prefixes", u32(s_interface_files.size()), u32(s_interface_prefixes.size()));
 }
 
 bool CSoundRender_Core::i_interface_file(LPCSTR name) const

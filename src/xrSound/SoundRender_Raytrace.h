@@ -347,10 +347,7 @@ class CSoundRender_Raytrace
 	// The listener's visualisation rays for snd_raytrace_draw, the SDK callback fills them and the render copies them under their lock
 	xr_vector<CSound_ray_segment> visual;
 	xrCriticalSection visual_lock;
-	bool visual_reported;
 	bool drawing;
-	// The thread that runs vaWorldUpdate while drawing, logged once against the callback's
-	std::atomic<DWORD> update_thread;
 
 	// Script reads set monitor_asked and ray requests monitor_requested, the tick takes both with one load
 	mutable std::atomic<u32> monitor{ 0 };

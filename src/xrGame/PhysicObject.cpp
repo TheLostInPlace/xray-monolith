@@ -19,11 +19,6 @@
 #endif
 BOOL dbg_draw_doors = false;
 
-// Sound occluder counts for one level, logged when its last object with shapes leaves
-static u32 g_occluder_objects = 0;
-static u32 g_occluder_doors = 0, g_occluder_door_shapes = 0, g_occluder_props = 0, g_occluder_prop_shapes = 0;
-static u32 g_occluder_moves = 0, g_occluder_stale = 0, g_occluder_awake_updates = 0;
-
 CPhysicObject::CPhysicObject(void):
 	m_anim_blend(0),
 	m_type(epotBox),
@@ -333,17 +328,7 @@ void CPhysicObject::net_Destroy()
 	}
 #endif
 
-	if (!m_occluders.empty())
-	{
-		m_occluders.clear();
-		if (!--g_occluder_objects)
-		{
-			Msg("SOUND: Raytrace: dynamic occluders left with the level, %u doors with %u shapes, %u props with %u shapes, %u moves, bones stale in %u of %u awake updates",
-				g_occluder_doors, g_occluder_door_shapes, g_occluder_props, g_occluder_prop_shapes, g_occluder_moves, g_occluder_stale, g_occluder_awake_updates);
-			g_occluder_doors = g_occluder_door_shapes = g_occluder_props = g_occluder_prop_shapes = 0;
-			g_occluder_moves = g_occluder_stale = g_occluder_awake_updates = 0;
-		}
-	}
+	m_occluders.clear();
 
 	inherited::net_Destroy();
 	CPHSkeleton::RespawnInit();
@@ -535,18 +520,6 @@ void CPhysicObject::create_occluders()
 	m_occluder_xform.set(XFORM());
 	m_occluder_time = Device.dwTimeGlobal;
 	m_occluder_awake = false;
-
-	++g_occluder_objects;
-	if (door)
-	{
-		++g_occluder_doors;
-		g_occluder_door_shapes += u32(shapes.size());
-	}
-	else
-	{
-		++g_occluder_props;
-		g_occluder_prop_shapes += u32(shapes.size());
-	}
 }
 
 // One shape's world pose, placed as CCF_Skeleton places its element
@@ -584,24 +557,18 @@ void CPhysicObject::update_occluders()
 	m_occluder_xform.set(XFORM());
 
 	IKinematics* K = Visual()->dcast_PKinematics();
+	// The bone thread serves near objects first, so a far object's bones can trail its shell
 	if (awake)
-	{
-		// The bone thread serves near objects first, so a far object's bones can trail its shell
-		occluder_poses(K, m_occluder_next);
 		K->CalculateBones(TRUE);
-		++g_occluder_awake_updates;
-	}
 
-	bool stale = false, moved = false, changed = false;
+	bool moved = false, changed = false;
 	for (u32 k = 0; k < m_occluders.size(); ++k)
 	{
 		const Fmatrix pose = occluder_pose(K, k);
-		stale = stale || (awake && occluder_moved(m_occluder_next[k], pose));
 		moved = moved || occluder_moved(m_occluder_poses[k], pose);
 		changed = changed || !!std::memcmp(&m_occluder_poses[k], &pose, sizeof(Fmatrix));
 		m_occluder_next[k] = pose;
 	}
-	g_occluder_stale += stale;
 
 	const u32 now = Device.dwTimeGlobal;
 	if (awake ? moved && now - m_occluder_time >= 50 : moved || (m_occluder_awake && changed))
@@ -609,7 +576,6 @@ void CPhysicObject::update_occluders()
 		m_occluder_poses.swap(m_occluder_next);
 		m_occluder_time = now;
 		::Sound->occluder_move(static_cast<CObject*>(this), m_occluder_poses.data(), u32(m_occluder_poses.size()));
-		++g_occluder_moves;
 	}
 	m_occluder_awake = awake;
 }
