@@ -588,6 +588,10 @@
         table get_snd_acoustics() -- nil or the listener's room {serial, position, sky, returned, decay_lf, decay_hf, absorption_lf, absorption_hf, roughness, ambient_lf, ambient_hf}, sky compares across levels, returned within one level only
         table get_snd_reverb() -- nil or the listener's raytraced EFX reverb {serial, applied, and the snd_efx_reverb_overwrite_* values}
         table get_snd_muffling(number id) -- nil or the object's sounds at the camera {lf, hf, direct_lf, direct_hf}, an idle owner reports the muffling of its last sound until it makes the next one
+        // The sound tick captures sources and ray counts only while a script read them within the last 2 s, the first read returns nil
+        table get_snd_sources() -- nil or an array of the sounds the raytracer holds or traced {file, id, position, distance, volume, traced, lf, hf, group, cold, rendered, age, type}, id is nil for a sound without a live owner, group -1 for the listener's reverb, at most 256
+        table get_snd_rays() -- nil or {reverb, ambient_occlusion, ambient_permeation, occlusion, permeation, group} each {count, shipped, on}, plus tick_ms (the sound tick, smoothed) and raytracing_ms (the SDK's raytracing threads)
+        bool set_snd_rays(string family, number count) -- true once queued for the next tick, family as get_snd_rays names it or "all", count 1 to 2048 or 0 for the shipped one, never saved and dropped at the next level load, a family the level leaves off stays off
 
         float get_weather_weight()
         void set_weather_weight(float)

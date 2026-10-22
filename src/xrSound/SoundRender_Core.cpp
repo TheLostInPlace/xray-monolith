@@ -262,6 +262,21 @@ bool CSoundRender_Core::get_object_muffling(const CObject* O, CSound_muffling& o
 	return raytrace && raytrace->read_muffling(O, out);
 }
 
+bool CSoundRender_Core::get_sources(xr_vector<CSound_source_info>& out) const
+{
+	return raytrace && raytrace->read_sources(out);
+}
+
+bool CSoundRender_Core::get_rays(CSound_rays& out) const
+{
+	return raytrace && raytrace->read_rays(out);
+}
+
+bool CSoundRender_Core::set_rays(int family, int count)
+{
+	return raytrace && raytrace->request_rays(family, count);
+}
+
 void CSoundRender_Core::hold_acoustics(bool hold)
 {
 	if (raytrace)

@@ -464,6 +464,46 @@ struct CSound_muffling
 	float direct_hf;
 };
 
+/// one sound the raytracer holds, owner is compared against live objects and never read through
+struct CSound_source_info
+{
+	const CObject* owner;
+	string128 file;
+	Fvector position;
+	float distance;
+	float volume;
+	bool traced;
+	float lf;
+	float hf;
+	int group;
+	bool cold;
+	bool rendered;
+	float age;
+	u32 type;
+};
+
+/// the raytracer's ray families, in the order CSound_rays lists them
+enum
+{
+	srf_reverb,
+	srf_ambient_occlusion,
+	srf_ambient_permeation,
+	srf_occlusion,
+	srf_permeation,
+	srf_group,
+	srf_count
+};
+
+/// ray counts per family as the tick uses them and as they ship, on is false for a family the level leaves off
+struct CSound_rays
+{
+	int count[srf_count];
+	int shipped[srf_count];
+	bool on[srf_count];
+	float tick_ms;
+	float raytracing_ms;
+};
+
 /// definition (Sound Stream Interface)
 class XRSOUND_API CSound_stats
 {
@@ -558,6 +598,11 @@ public:
 	virtual bool get_listener_acoustics(CSound_acoustics& out) const = 0;
 	virtual bool get_listener_reverb(CSound_reverb& out) const = 0;
 	virtual bool get_object_muffling(const CObject* O, CSound_muffling& out) const = 0;
+	// The sounds and ray counts the tick last captured, captured only while a script asked within the last 2 s
+	virtual bool get_sources(xr_vector<CSound_source_info>& out) const = 0;
+	virtual bool get_rays(CSound_rays& out) const = 0;
+	// Queues a family's ray count for the tick until the next level load, a count of 0 or less restores it and a family of -1 restores all
+	virtual bool set_rays(int family, int count) = 0;
 	// A game load holds them back from its start until the player spawns and a room traced after that comes back
 	virtual void hold_acoustics(bool hold) = 0;
 	virtual void set_handler(sound_event* E) = 0;

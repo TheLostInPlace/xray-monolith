@@ -151,7 +151,7 @@ void CSoundRender_Core::update(const Fvector& P, const Fvector& D, const Fvector
 	fTimer_Value = new_tm;
 
 	if (raytrace)
-		raytrace->frame(P, D, N, dt_sec);
+		raytrace->frame(P, D, N, dt_sec, s_emitters);
 
 	s_emitters_u ++;
 

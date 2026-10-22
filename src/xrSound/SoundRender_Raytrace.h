@@ -352,6 +352,23 @@ class CSoundRender_Raytrace
 	// The thread that runs vaWorldUpdate while drawing, logged once against the callback's
 	std::atomic<DWORD> update_thread;
 
+	// Script reads set monitor_asked and ray requests monitor_requested, the tick takes both with one load
+	mutable std::atomic<u32> monitor{ 0 };
+	// Seconds the tick keeps capturing after the last read, and a request a missed lock left for the next tick
+	float monitor_left;
+	bool monitor_rays;
+	// Counts scripts asked for per family, 0 for the shipped one, and the counts the tick applied
+	std::atomic<int> rays_wanted[srf_count]{};
+	int rays_used[srf_count];
+	// The smoothed tick time while capturing
+	float tick_ms;
+	// The last capture, the tick fills its own list and swaps it in under the lock
+	xr_vector<CSound_source_info> monitor_fill;
+	xr_vector<CSound_source_info> monitor_sources;
+	CSound_rays monitor_counts{};
+	bool monitor_valid;
+	mutable xrCriticalSection monitor_lock;
+
 	bool check(int result, LPCSTR call);
 	void build(CDB::MODEL* M, const CSound_material_desc* materials, u32 count);
 	void release();
@@ -383,6 +400,11 @@ class CSoundRender_Raytrace
 	static void emitter_removed(VAEmitter* emitter);
 	void set_drawing(bool value);
 	static void visualise(VAEmitter* emitter, VAVisualisationData* data, int count);
+	// The tick itself, false when it found the lock taken or no world
+	bool tick(const Fvector& P, const Fvector& D, const Fvector& N, float dt, const xr_vector<CSoundRender_Emitter*>* watch);
+	void apply_rays();
+	void reset_rays();
+	void capture(const Fvector& P, const xr_vector<CSoundRender_Emitter*>& emitters);
 
 public:
 	CSoundRender_Raytrace();
@@ -394,12 +416,16 @@ public:
 	void destroy();
 	// True from a finished level create until destroy
 	bool running() const;
-	void frame(const Fvector& P, const Fvector& D, const Fvector& N, float dt);
+	void frame(const Fvector& P, const Fvector& D, const Fvector& N, float dt, const xr_vector<CSoundRender_Emitter*>& emitters);
 	bool listener_reverb(EFXEAXREVERBPROPERTIES& props) const;
 	// The last published room, reverb and object gains, read from any thread without the lock
 	bool read_acoustics(CSound_acoustics& out) const;
 	bool read_reverb(CSound_reverb& out) const;
 	bool read_muffling(const void* owner, CSound_muffling& out) const;
+	// The last captured sounds and ray counts, read from any thread, and a ray count queued for the tick
+	bool read_sources(xr_vector<CSound_source_info>& out) const;
+	bool read_rays(CSound_rays& out) const;
+	bool request_rays(int family, int count);
 	void hold(bool value);
 	bool group_reverb(int i, EFXEAXREVERBPROPERTIES& props, float& gain) const;
 	bool muffle_gains(CSoundRender_Emitter* E, float& lf, float& hf);

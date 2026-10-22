@@ -27,7 +27,8 @@ CSoundRender_Raytrace::CSoundRender_Raytrace() :
 	formula(false), model(nullptr), direct_moves(0), direct_tick(0), ray_time(0.f), direct_window(0),
 	open_air(false), open_air_window(0), rays(), rays_out(false), ray_lapsed(false), ray_done(false),
 	query_next(0), query_generation(0), queries_open(false), query_window(0),
-	visual_reported(false), drawing(false), update_thread(0)
+	visual_reported(false), drawing(false), update_thread(0),
+	monitor_left(0.f), monitor_rays(false), rays_used{}, tick_ms(0.f), monitor_valid(false)
 {
 	bounds.invalidate();
 	std::fill(std::begin(group_heard), std::end(group_heard), false);
@@ -61,6 +62,11 @@ namespace
 	constexpr u32 snapshot_valid = 1;
 	constexpr u32 snapshot_applied = 2;
 	constexpr u32 snapshot_hf_limit = 4;
+
+	constexpr u32 monitor_asked = 1;
+	constexpr u32 monitor_requested = 2;
+	// A script's ray count goes up to 2048 per family
+	constexpr int monitor_max_rays = 2048;
 
 	u32 snapshot_bits(float f)
 	{
@@ -156,6 +162,44 @@ bool CSoundRender_Raytrace::read_muffling(const void* owner, CSound_muffling& ou
 		}
 	});
 	return read && found;
+}
+
+bool CSoundRender_Raytrace::read_sources(xr_vector<CSound_source_info>& out) const
+{
+	if (!(monitor.load(std::memory_order_relaxed) & monitor_asked))
+		monitor.fetch_or(monitor_asked, std::memory_order_relaxed);
+	if (!ready.load(std::memory_order_acquire))
+		return false;
+	xrCriticalSectionGuard guard(monitor_lock);
+	if (!monitor_valid)
+		return false;
+	out = monitor_sources;
+	return true;
+}
+
+bool CSoundRender_Raytrace::read_rays(CSound_rays& out) const
+{
+	if (!(monitor.load(std::memory_order_relaxed) & monitor_asked))
+		monitor.fetch_or(monitor_asked, std::memory_order_relaxed);
+	if (!ready.load(std::memory_order_acquire))
+		return false;
+	xrCriticalSectionGuard guard(monitor_lock);
+	if (!monitor_valid)
+		return false;
+	out = monitor_counts;
+	return true;
+}
+
+// The counts wait in atomics for the tick, which applies them to the SDK and drops them with the world
+bool CSoundRender_Raytrace::request_rays(int family, int count)
+{
+	if (!ready.load(std::memory_order_acquire) || family < -1 || family >= srf_count || count > monitor_max_rays)
+		return false;
+	const int wanted = std::max(count, 0);
+	for (int f = std::max(family, 0); f < (family < 0 ? srf_count : family + 1); ++f)
+		rays_wanted[f].store(wanted, std::memory_order_relaxed);
+	monitor.fetch_or(monitor_requested, std::memory_order_release);
+	return true;
 }
 
 void CSoundRender_Raytrace::hold(bool value)
@@ -334,6 +378,16 @@ namespace
 	// Visualisation rays create no trails and leave the listener's reverb alone
 	constexpr int visual_rays = 64;
 	constexpr int visual_bounces = 8;
+
+	// The listener's reverb rays and the ambient occlusion rays that count the escape to open sky
+	constexpr int listener_reverb_rays = 256;
+	constexpr int listener_ambient_rays = 512;
+	// Each family's shipped count in CSound_rays order, a script's count replaces it until the world goes
+	constexpr int shipped_rays[srf_count] = { listener_reverb_rays, listener_ambient_rays, ambient_permeation_rays, occlusion_rays, permeation_rays, group_rays };
+	// The capture holds the sounds of one busy scene, and the tick time follows each tick by a tenth
+	constexpr u32 monitor_sources_max = 256;
+	constexpr float monitor_hold = 2.f;
+	constexpr float monitor_smooth = 0.1f;
 
 	// The DLL is probed once per session
 	int sdk_state = -1;
@@ -1467,7 +1521,7 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 	// Emitter messages reach the game log beside the world's
 	check(vaEmitterSetLogCallback(listener, sdk_log), "vaEmitterSetLogCallback");
 	check(vaEmitterSetLogErrorCallback(listener, sdk_log), "vaEmitterSetLogErrorCallback");
-	check(vaEmitterSetReverbRayCount(listener, 256), "vaEmitterSetReverbRayCount");
+	check(vaEmitterSetReverbRayCount(listener, listener_reverb_rays), "vaEmitterSetReverbRayCount");
 	// Reverb rays run to 30 dB down, so the decay fit sees most of the tail
 	check(vaEmitterSetMinimumReverbEnergy(listener, 0.001f), "vaEmitterSetMinimumReverbEnergy");
 	check(vaEmitterSetMinimumPermeationEnergy(listener, permeation_floor), "vaEmitterSetMinimumPermeationEnergy");
@@ -1487,7 +1541,7 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 	check(vaEmitterSetMaxEchogramTime(listener, 20000), "vaEmitterSetMaxEchogramTime");
 	check(vaEmitterSetEchogramGranularity(listener, 50), "vaEmitterSetEchogramGranularity");
 	// Ambient occlusion rays count the energy that escapes to open sky
-	check(vaEmitterSetAmbientOcclusionRayCount(listener, 512), "vaEmitterSetAmbientOcclusionRayCount");
+	check(vaEmitterSetAmbientOcclusionRayCount(listener, listener_ambient_rays), "vaEmitterSetAmbientOcclusionRayCount");
 	check(vaEmitterSetAmbientOcclusionBounceCount(listener, 8), "vaEmitterSetAmbientOcclusionBounceCount");
 	if (ambient)
 	{
@@ -1612,6 +1666,7 @@ void CSoundRender_Raytrace::wait_create()
 	has_reverb = false;
 	room = false;
 	first_result = true;
+	reset_rays();
 	ready.store(true, std::memory_order_release);
 }
 
@@ -1725,6 +1780,12 @@ void CSoundRender_Raytrace::release()
 	open_air_absorption.clear();
 	direct_moves = 0;
 	model = nullptr;
+	reset_rays();
+	{
+		xrCriticalSectionGuard monitor_guard(monitor_lock);
+		monitor_sources.clear();
+		monitor_valid = false;
+	}
 
 	if (HANDLE h = thread_spawn_ex(teardown, "X-Ray Raytrace Teardown", 0, t))
 		teardowns.push_back(h);
@@ -1732,13 +1793,41 @@ void CSoundRender_Raytrace::release()
 		teardown(t);
 }
 
-void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvector& N, float dt)
+void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvector& N, float dt, const xr_vector<CSoundRender_Emitter*>& emitters)
+{
+	// While no script reads or asks, the monitor costs this one load
+	if (!monitor.load(std::memory_order_relaxed) && monitor_left <= 0.f)
+	{
+		tick(P, D, N, dt, nullptr);
+		return;
+	}
+	const u32 flags = monitor.exchange(0, std::memory_order_acquire);
+	if (flags & monitor_requested)
+		monitor_rays = true;
+	monitor_left = flags & monitor_asked ? monitor_hold : monitor_left - dt;
+	if (monitor_left <= 0.f)
+	{
+		tick_ms = 0.f;
+		xrCriticalSectionGuard monitor_guard(monitor_lock);
+		monitor_valid = false;
+		monitor_sources.clear();
+	}
+	CTimer timer;
+	timer.Start();
+	if (tick(P, D, N, dt, monitor_left > 0.f ? &emitters : nullptr) && monitor_left > 0.f)
+	{
+		const float ms = timer.GetElapsed_sec() * 1000.f;
+		tick_ms = tick_ms > 0.f ? tick_ms + (ms - tick_ms) * monitor_smooth : ms;
+	}
+}
+
+bool CSoundRender_Raytrace::tick(const Fvector& P, const Fvector& D, const Fvector& N, float dt, const xr_vector<CSoundRender_Emitter*>* watch)
 {
 	if (!ready.load(std::memory_order_acquire))
-		return;
+		return false;
 	xrCriticalSectionTryGuard guard(lock);
 	if (!guard.owns_lock() || !world)
-		return;
+		return false;
 
 	// The player spawns and sets the camera in the game frame before this update, so a held room waits for one trace from there and its handback
 	const bool holding = held.load(std::memory_order_relaxed);
@@ -1766,6 +1855,8 @@ void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvec
 		set_open_air(!open_air);
 	drain();
 	apply_occluders();
+	if (monitor_rays)
+		apply_rays();
 	// An idle source goes once its owner is gone, the listener leaves its range or muffling stops
 	for (size_t i = sources.size(); i-- > 0;)
 	{
@@ -2039,6 +2130,119 @@ void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvec
 	}
 	if (asked.load(std::memory_order_relaxed))
 		publish(!holding);
+	if (watch)
+		capture(P, *watch);
+	return true;
+}
+
+// A script's count replaces the shipped one where the family is on, it never turns a family on
+void CSoundRender_Raytrace::apply_rays()
+{
+	monitor_rays = false;
+	bool listener_counts = false;
+	for (int f = 0; f < srf_count; ++f)
+	{
+		const int wanted = rays_wanted[f].load(std::memory_order_relaxed);
+		const int n = wanted > 0 ? wanted : shipped_rays[f];
+		if (n == rays_used[f])
+			continue;
+		switch (f)
+		{
+		case srf_reverb:
+			check(vaEmitterSetReverbRayCount(listener, n), "vaEmitterSetReverbRayCount");
+			listener_counts = true;
+			break;
+		case srf_ambient_occlusion:
+			check(vaEmitterSetAmbientOcclusionRayCount(listener, n), "vaEmitterSetAmbientOcclusionRayCount");
+			listener_counts = true;
+			break;
+		case srf_ambient_permeation:
+			if (!ambient)
+				continue;
+			check(vaEmitterSetAmbientPermeationRayCount(listener, n), "vaEmitterSetAmbientPermeationRayCount");
+			listener_counts = true;
+			break;
+		case srf_occlusion:
+			if (!muffle || !muffle_rays)
+				continue;
+			check(vaEmitterSetOcclusionRayCount(muffle, n), "vaEmitterSetOcclusionRayCount");
+			retrace = true;
+			break;
+		case srf_permeation:
+			if (!muffle || !muffle_rays)
+				continue;
+			check(vaEmitterSetPermeationRayCount(muffle, n), "vaEmitterSetPermeationRayCount");
+			retrace = true;
+			break;
+		case srf_group:
+			if (!muffle || !muffle_rays)
+				continue;
+			for (CSoundRender_RaytraceSource* S : sources)
+			{
+				if (S->reverb && S->emitter)
+					check(vaEmitterSetReverbRayCount(S->emitter, n), "vaEmitterSetReverbRayCount");
+			}
+			break;
+		}
+		rays_used[f] = n;
+	}
+	// New counts leave a cache that misses permeation, as the muffle's retrace does
+	if (listener_counts)
+		check(vaEmitterResetTrails(listener), "vaEmitterResetTrails");
+}
+
+// Every family back to its shipped count, a request still flagged then finds nothing to change
+void CSoundRender_Raytrace::reset_rays()
+{
+	for (int f = 0; f < srf_count; ++f)
+	{
+		rays_wanted[f].store(0, std::memory_order_relaxed);
+		rays_used[f] = shipped_rays[f];
+	}
+}
+
+// Every sound the raytracer holds or traced, then the counts in use, swapped in for the script reads
+void CSoundRender_Raytrace::capture(const Fvector& P, const xr_vector<CSoundRender_Emitter*>& emitters)
+{
+	monitor_fill.clear();
+	const float now = SoundRender->fTimer_Value;
+	for (CSoundRender_Emitter* E : emitters)
+	{
+		if (monitor_fill.size() == monitor_sources_max)
+			break;
+		if ((!E->rt_source && !E->rt_traced) || !E->owner_data)
+			continue;
+		CSound_source_info& I = monitor_fill.emplace_back();
+		I.owner = E->owner_data->g_object;
+		const LPCSTR name = E->source()->file_name();
+		strncpy_s(I.file, name ? name : "", _TRUNCATE);
+		I.position = E->p_source.position;
+		I.distance = P.distance_to(I.position);
+		I.volume = E->smooth_volume;
+		I.traced = E->rt_traced;
+		I.lf = E->rt_lf;
+		I.hf = E->rt_hf;
+		I.group = E->rt_group;
+		I.cold = E->rt_cold;
+		I.rendered = !!E->target;
+		I.age = now - E->fTimeStarted;
+		I.type = E->owner_data->s_type;
+	}
+	CSound_rays R;
+	for (int f = 0; f < srf_count; ++f)
+	{
+		R.count[f] = rays_used[f];
+		R.shipped[f] = shipped_rays[f];
+	}
+	R.on[srf_reverb] = R.on[srf_ambient_occlusion] = true;
+	R.on[srf_ambient_permeation] = ambient;
+	R.on[srf_occlusion] = R.on[srf_permeation] = R.on[srf_group] = muffle && muffle_rays;
+	R.tick_ms = tick_ms;
+	R.raytracing_ms = float(vaWorldGetRaytracingTime(world));
+	xrCriticalSectionGuard monitor_guard(monitor_lock);
+	monitor_sources.swap(monitor_fill);
+	monitor_counts = R;
+	monitor_valid = true;
 }
 
 // Copies the listener's room and every traced owner's gains where scripts read them, a cleared publish leaves them nothing
@@ -2903,7 +3107,7 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 			!E->source()->m_bInterface;
 		if (reverb)
 		{
-			check(vaEmitterSetReverbRayCount(e, group_rays), "vaEmitterSetReverbRayCount");
+			check(vaEmitterSetReverbRayCount(e, rays_used[srf_group]), "vaEmitterSetReverbRayCount");
 			check(vaEmitterSetReverbBounceCount(e, group_bounces), "vaEmitterSetReverbBounceCount");
 			check(vaEmitterSetAffectsGroupedEAX(e, true), "vaEmitterSetAffectsGroupedEAX");
 			check(vaEmitterSetScatteringSeed(e, 1), "vaEmitterSetScatteringSeed");
@@ -3142,7 +3346,7 @@ bool CSoundRender_Raytrace::running() const
 	return false;
 }
 
-void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvector& N, float dt)
+void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvector& N, float dt, const xr_vector<CSoundRender_Emitter*>& emitters)
 {
 }
 

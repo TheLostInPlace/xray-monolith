@@ -113,6 +113,9 @@ public:
 	virtual bool get_listener_acoustics(CSound_acoustics& out) const;
 	virtual bool get_listener_reverb(CSound_reverb& out) const;
 	virtual bool get_object_muffling(const CObject* O, CSound_muffling& out) const;
+	virtual bool get_sources(xr_vector<CSound_source_info>& out) const;
+	virtual bool get_rays(CSound_rays& out) const;
+	virtual bool set_rays(int family, int count);
 	virtual void hold_acoustics(bool hold);
 	virtual void set_handler(sound_event* E);
 

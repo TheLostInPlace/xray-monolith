@@ -1245,6 +1245,100 @@ bool is_snd_raytracing()
 	return table;
 }
 
+// The sounds the raytracer holds or traced, nil while raytracing is off or until the tick after the first call
+// Owners are matched to live objects by address, an owner gone since the capture has no id
+::luabind::object get_snd_sources(lua_State* L)
+{
+	xr_vector<CSound_source_info> sources;
+	if (!::Sound->get_sources(sources))
+		return snd_nil(L);
+
+	xr_vector<std::pair<const CObject*, u16>> owners;
+	for (const CSound_source_info& s : sources)
+	{
+		if (s.owner)
+			owners.emplace_back(s.owner, u16(-1));
+	}
+	std::sort(owners.begin(), owners.end());
+	owners.erase(std::unique(owners.begin(), owners.end()), owners.end());
+	if (!owners.empty() && g_pGameLevel)
+	{
+		for (u32 i = 0, n = Level().Objects.o_count(); i < n; ++i)
+		{
+			const CObject* O = Level().Objects.o_get_by_iterator(i);
+			const auto it = std::lower_bound(owners.begin(), owners.end(), std::make_pair(O, u16(0)));
+			if (it != owners.end() && it->first == O)
+				it->second = O->ID();
+		}
+	}
+
+	::luabind::object table = ::luabind::newtable(L);
+	int i = 0;
+	for (const CSound_source_info& s : sources)
+	{
+		::luabind::object row = ::luabind::newtable(L);
+		row["file"] = LPCSTR(s.file);
+		if (s.owner)
+		{
+			const auto it = std::lower_bound(owners.begin(), owners.end(), std::make_pair(s.owner, u16(0)));
+			if (it != owners.end() && it->first == s.owner && it->second != u16(-1))
+				row["id"] = it->second;
+		}
+		row["position"] = s.position;
+		row["distance"] = s.distance;
+		row["volume"] = s.volume;
+		row["traced"] = s.traced;
+		row["lf"] = s.lf;
+		row["hf"] = s.hf;
+		row["group"] = s.group;
+		row["cold"] = s.cold;
+		row["rendered"] = s.rendered;
+		row["age"] = s.age;
+		row["type"] = s.type;
+		table[++i] = row;
+	}
+	return table;
+}
+
+static LPCSTR snd_ray_families[] = { "reverb", "ambient_occlusion", "ambient_permeation", "occlusion", "permeation", "group" };
+static_assert(sizeof(snd_ray_families) / sizeof(snd_ray_families[0]) == srf_count, "ray family names out of step with Sound.h");
+
+// Each ray family's {count, shipped, on} and the tick's cost, nil as get_snd_sources
+::luabind::object get_snd_rays(lua_State* L)
+{
+	CSound_rays r;
+	if (!::Sound->get_rays(r))
+		return snd_nil(L);
+
+	::luabind::object table = ::luabind::newtable(L);
+	for (int f = 0; f < srf_count; ++f)
+	{
+		::luabind::object family = ::luabind::newtable(L);
+		family["count"] = r.count[f];
+		family["shipped"] = r.shipped[f];
+		family["on"] = r.on[f];
+		table[snd_ray_families[f]] = family;
+	}
+	table["tick_ms"] = r.tick_ms;
+	table["raytracing_ms"] = r.raytracing_ms;
+	return table;
+}
+
+// Queues a family's ray count until the next level load, "all" or a count of 0 restores the shipped ones
+bool set_snd_rays(LPCSTR family, int count)
+{
+	if (!family)
+		return false;
+	if (!xr_strcmp(family, "all"))
+		return ::Sound->set_rays(-1, count);
+	for (int f = 0; f < srf_count; ++f)
+	{
+		if (!xr_strcmp(family, snd_ray_families[f]))
+			return ::Sound->set_rays(f, count);
+	}
+	return false;
+}
+
 #include "actor_statistic_mgr.h"
 
 void add_actor_points(LPCSTR sect, LPCSTR detail_key, int cnt, int pts)
@@ -2978,6 +3072,9 @@ void CLevel::script_register(lua_State* L)
 			def("get_snd_acoustics", &get_snd_acoustics, raw<1>()),
 			def("get_snd_reverb", &get_snd_reverb, raw<1>()),
 			def("get_snd_muffling", &get_snd_muffling, raw<1>()),
+			def("get_snd_sources", &get_snd_sources, raw<1>()),
+			def("get_snd_rays", &get_snd_rays, raw<1>()),
+			def("set_snd_rays", &set_snd_rays),
 
 			// demonized: Set custom camera position and direction with movement smoothing (for cutscenes, etc)
 			def("set_cam_custom_position_direction", ((void (*)(Fvector&, Fvector&, unsigned int, bool, bool))& set_cam_position_direction)),
