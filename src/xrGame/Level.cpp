@@ -1246,6 +1246,21 @@ extern void render_reshade_effects();
 
 extern int ps_r4_hdr10_pda; // NOTE: this is a hack to avoid double HDR tonemapping the PDA
 
+// Sound raytracing rays from bounce point to bounce point, red at the first bounce to blue at the last
+static void render_sound_rays()
+{
+	static xr_vector<CSound_ray_segment> segments;
+	u32 bounces = 0;
+	if (!::Sound->raytrace_rays(segments, bounces))
+		return;
+	const u32 span = std::max(bounces, 3u) - 2;
+	for (const CSound_ray_segment& s : segments)
+	{
+		const u32 t = 255 * (s.bounce - 1) / span;
+		Level().debug_renderer().draw_line(Fidentity, s.a, s.b, color_rgba(255 - t, 64, t, 255), false);
+	}
+}
+
 void CLevel::OnRender()
 {
 	// PDA
@@ -1321,6 +1336,9 @@ void CLevel::OnRender()
 	HUD().RenderUI();
 
 	ScriptDebugRender();
+
+	if (psSoundRaytraceFlags.test(ssr_Draw))
+		render_sound_rays();
 
 #ifdef DEBUG
     draw_wnds_rects();

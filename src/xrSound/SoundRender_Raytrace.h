@@ -7,6 +7,7 @@
 struct VAWorld;
 struct VAEmitter;
 struct VAMeshPrimitive;
+struct VAVisualisationData;
 class CSoundRender_Emitter;
 
 // One SDK target per owner object, shared by every emitter the object plays
@@ -343,6 +344,14 @@ class CSoundRender_Raytrace
 	float walked;
 	float still_time;
 
+	// The listener's visualisation rays for snd_raytrace_draw, the SDK callback fills them and the render copies them under their lock
+	xr_vector<CSound_ray_segment> visual;
+	xrCriticalSection visual_lock;
+	bool visual_reported;
+	bool drawing;
+	// The thread that runs vaWorldUpdate while drawing, logged once against the callback's
+	std::atomic<DWORD> update_thread;
+
 	bool check(int result, LPCSTR call);
 	void build(CDB::MODEL* M, const CSound_material_desc* materials, u32 count);
 	void release();
@@ -372,6 +381,8 @@ class CSoundRender_Raytrace
 	void retire(CSoundRender_RaytraceOccluder& O);
 	void publish(bool valid);
 	static void emitter_removed(VAEmitter* emitter);
+	void set_drawing(bool value);
+	static void visualise(VAEmitter* emitter, VAVisualisationData* data, int count);
 
 public:
 	CSoundRender_Raytrace();
@@ -402,4 +413,5 @@ public:
 	// Any thread may post and read, a ticket of 0 means the ring or the raytracer took none
 	u32 post_query(bool sweep, const Fvector& ear, const Fvector& source, const void* skip);
 	int query_result(u32 ticket, CSound_query& out) const;
+	bool visualisation(xr_vector<CSound_ray_segment>& segments, u32& bounces);
 };

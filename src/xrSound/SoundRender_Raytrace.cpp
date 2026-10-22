@@ -26,7 +26,8 @@ CSoundRender_Raytrace::CSoundRender_Raytrace() :
 	ambient(false), ambient_ready(false), ambient_lf(1.f), ambient_hf(1.f), ambient_wait(-1.f), group_sources(0), group_count(0),
 	formula(false), model(nullptr), direct_moves(0), direct_tick(0), ray_time(0.f), direct_window(0),
 	open_air(false), open_air_window(0), rays(), rays_out(false), ray_lapsed(false), ray_done(false),
-	query_next(0), query_generation(0), queries_open(false), query_window(0)
+	query_next(0), query_generation(0), queries_open(false), query_window(0),
+	visual_reported(false), drawing(false), update_thread(0)
 {
 	bounds.invalidate();
 	std::fill(std::begin(group_heard), std::end(group_heard), false);
@@ -329,6 +330,10 @@ namespace
 	constexpr float query_keep_floor = 1e-4f;
 	// The upload's mesh cell, a query's line pays each material once per cell
 	constexpr float mesh_split = 2.f;
+
+	// Visualisation rays create no trails and leave the listener's reverb alone
+	constexpr int visual_rays = 64;
+	constexpr int visual_bounces = 8;
 
 	// The DLL is probed once per session
 	int sdk_state = -1;
@@ -767,6 +772,54 @@ void CSoundRender_Raytrace::emitter_removed(VAEmitter* emitter)
 {
 	if (CSoundRender_Raytrace* self = static_cast<CSoundRender_Raytrace*>(vaEmitterGetUserData(emitter)))
 		self->freed.push_back(emitter);
+}
+
+// Each ray hands visual_bounces points in order, the first call after a switch on logs which thread it ran on
+void CSoundRender_Raytrace::visualise(VAEmitter* emitter, VAVisualisationData* data, int count)
+{
+	CSoundRender_Raytrace* self = static_cast<CSoundRender_Raytrace*>(vaEmitterGetUserData(emitter));
+	if (!self)
+		return;
+	xrCriticalSectionGuard guard(self->visual_lock);
+	self->visual.clear();
+	for (int i = 0; i < count; ++i)
+	{
+		// A bounce off the world edge carries a point far outside the level box
+		const int bounce = i % visual_bounces;
+		if (!bounce || !self->bounds.contains(data[i - 1].position.x, data[i - 1].position.y, data[i - 1].position.z) ||
+			!self->bounds.contains(data[i].position.x, data[i].position.y, data[i].position.z))
+			continue;
+		CSound_ray_segment& s = self->visual.emplace_back();
+		s.a.set(data[i - 1].position.x, data[i - 1].position.y, data[i - 1].position.z);
+		s.b.set(data[i].position.x, data[i].position.y, data[i].position.z);
+		s.bounce = u32(bounce);
+	}
+	if (!self->visual_reported)
+	{
+		self->visual_reported = true;
+		Msg("SOUND: Raytrace: visualisation %u segments from %d points, %d rays of %d bounces, callback thread %u, update thread %u",
+			u32(self->visual.size()), count, visual_rays, visual_bounces, u32(GetCurrentThreadId()), u32(self->update_thread.load(std::memory_order_relaxed)));
+	}
+}
+
+void CSoundRender_Raytrace::set_drawing(bool value)
+{
+	drawing = value;
+	check(vaEmitterSetUserData(listener, value ? this : nullptr), "vaEmitterSetUserData");
+	check(vaEmitterSetVisualisationCallback(listener, value ? visualise : nullptr), "vaEmitterSetVisualisationCallback");
+	check(vaEmitterSetVisualisationBounceCount(listener, value ? visual_bounces : 0), "vaEmitterSetVisualisationBounceCount");
+	check(vaEmitterSetVisualisationRayCount(listener, value ? visual_rays : 0), "vaEmitterSetVisualisationRayCount");
+	xrCriticalSectionGuard guard(visual_lock);
+	visual.clear();
+	visual_reported = false;
+}
+
+bool CSoundRender_Raytrace::visualisation(xr_vector<CSound_ray_segment>& segments, u32& bounces)
+{
+	xrCriticalSectionGuard guard(visual_lock);
+	segments = visual;
+	bounces = visual_bounces;
+	return !segments.empty();
 }
 
 void CSoundRender_Raytrace::create(CDB::MODEL* M, const CSound_material_desc* materials, u32 count)
@@ -1593,6 +1646,10 @@ void CSoundRender_Raytrace::release()
 	ray_targets.clear();
 	close_queries();
 
+	// The teardown's wait may still hand visualisation data, so the callback goes first
+	if (drawing)
+		set_drawing(false);
+
 	// Finished teardowns give their handles back here
 	teardowns.erase(std::remove_if(teardowns.begin(), teardowns.end(), [](HANDLE h)
 	{
@@ -1736,6 +1793,11 @@ void CSoundRender_Raytrace::frame(const Fvector& P, const Fvector& D, const Fvec
 		reset_updates = 2;
 		check(vaEmitterResetTrails(muffle), "vaEmitterResetTrails");
 	}
+	const bool draw = !!psSoundRaytraceFlags.test(ssr_Draw);
+	if (draw != drawing)
+		set_drawing(draw);
+	if (drawing)
+		update_thread.store(GetCurrentThreadId(), std::memory_order_relaxed);
 	check(vaEmitterSetPosition(listener, va_vector(P)), "vaEmitterSetPosition");
 	// Refreshed trails keep part of the last room, so a listener that stops for 1 s after 1.5 m casts them all again
 	if (!first_result)
@@ -3120,6 +3182,11 @@ bool CSoundRender_Raytrace::occluder_add(const void* owner, const CSound_occlude
 
 void CSoundRender_Raytrace::occluder_move(const void* owner, const Fmatrix* poses, u32 count)
 {
+}
+
+bool CSoundRender_Raytrace::visualisation(xr_vector<CSound_ray_segment>& segments, u32& bounces)
+{
+	return false;
 }
 
 #endif

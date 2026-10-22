@@ -41,6 +41,7 @@ XRSOUND_API extern float psSoundMaxDistanceMultiplier;
 XRSOUND_API extern float psSoundMaxAIDistanceMultiplier;
 XRSOUND_API extern float psSoundOcclusionScale;
 XRSOUND_API extern Flags32 psSoundFlags;
+XRSOUND_API extern Flags32 psSoundRaytraceFlags;
 XRSOUND_API extern int psSoundTargets;
 XRSOUND_API extern float snd_efx_environment_change_time;
 XRSOUND_API extern float psSpeedOfSound;
@@ -85,6 +86,14 @@ enum
 	ss_Raytrace = (1ul << 3ul),
 	//!< Raytraced acoustics, read at level load
 	ss_forcedword = u32(-1)
+};
+
+// Raytrace debug views
+enum
+{
+	ssr_Draw = (1ul << 0ul),
+	//!< Visualisation rays drawn in the world
+	ssr_forcedword = u32(-1)
 };
 
 enum
@@ -394,6 +403,14 @@ struct CSound_occluder_shape
 	Fvector size;
 };
 
+/// one visualisation ray step from one bounce point to the next
+struct CSound_ray_segment
+{
+	Fvector a;
+	Fvector b;
+	u32 bounce;
+};
+
 /// the listener's raytraced room, -1 marks a decay band the fit missed or an ambient filter the level lacks
 struct CSound_acoustics
 {
@@ -536,6 +553,7 @@ public:
 	virtual void occluder_move(const void* owner, const Fmatrix* poses, u32 count) = 0;
 	// True while a level's raytraced acoustics run, the flag alone can change mid level
 	virtual bool raytracing() const = 0;
+	virtual bool raytrace_rays(xr_vector<CSound_ray_segment>& segments, u32& bounces) = 0;
 	// What the raytracer last published for the listener and for an object's sounds, false while it has nothing
 	virtual bool get_listener_acoustics(CSound_acoustics& out) const = 0;
 	virtual bool get_listener_reverb(CSound_reverb& out) const = 0;

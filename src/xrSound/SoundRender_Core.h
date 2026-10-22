@@ -109,6 +109,7 @@ public:
 	virtual bool occluder_add(const void* owner, const CSound_occluder_shape* shapes, u32 count);
 	virtual void occluder_move(const void* owner, const Fmatrix* poses, u32 count);
 	virtual bool raytracing() const;
+	virtual bool raytrace_rays(xr_vector<CSound_ray_segment>& segments, u32& bounces);
 	virtual bool get_listener_acoustics(CSound_acoustics& out) const;
 	virtual bool get_listener_reverb(CSound_reverb& out) const;
 	virtual bool get_object_muffling(const CObject* O, CSound_muffling& out) const;

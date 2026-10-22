@@ -15,6 +15,7 @@
 float psSpeedOfSound = 1.f;
 int psSoundTargets = 1024;
 Flags32 psSoundFlags = {ss_Hardware | ss_EFX};
+Flags32 psSoundRaytraceFlags = {0};
 float psSoundOcclusionScale = 0.5f;
 float psSoundCull = 0.01f;
 float psSoundRolloff = 0.75f;
@@ -239,6 +240,11 @@ int CSoundRender_Core::query_result(u32 ticket, CSound_query& out) const
 bool CSoundRender_Core::raytracing() const
 {
 	return raytrace && raytrace->running();
+}
+
+bool CSoundRender_Core::raytrace_rays(xr_vector<CSound_ray_segment>& segments, u32& bounces)
+{
+	return raytrace && raytrace->visualisation(segments, bounces);
 }
 
 bool CSoundRender_Core::get_listener_acoustics(CSound_acoustics& out) const
