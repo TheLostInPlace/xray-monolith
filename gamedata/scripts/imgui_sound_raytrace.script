@@ -1,9 +1,9 @@
 -- Raytraced sound monitor in the ImGui debug menu
 -- Debug > Raytraced sound opens a panel of the listener's room, its reverb and the muffling of the sounds around it
 
-local ipairs, type = ipairs, type
-local math_max, math_min = math.max, math.min
-local string_format, string_gsub = string.format, string.gsub
+local ipairs, pairs, type = ipairs, pairs, type
+local math_max, math_min, math_floor = math.max, math.min, math.floor
+local string_format, string_gsub, string_match = string.format, string.gsub, string.match
 local table_sort, table_concat = table.sort, table.concat
 local bit_bor = bit.bor
 
@@ -14,7 +14,13 @@ local ROOM_MS    = 500
 local NEAR_MS    = 250
 local NEAR_RANGE = 80
 local NEAR_ROWS  = 12
+local SOURCES_MS = 250
+local LINGER_MS  = 5000
+local RAY_MIN    = 8
+local RAY_MAX    = 2048
 local OVERWRITE  = "snd_efx_reverb_overwrite"
+
+local RAY_FAMILIES = { "reverb", "ambient_occlusion", "ambient_permeation", "occlusion", "permeation", "group" }
 
 local REVERB_KEYS = { "decay_time", "decay_hf_ratio", "decay_lf_ratio", "gain", "gain_hf", "gain_lf",
 	"reflections_gain", "reflections_delay", "late_reverb_gain", "late_reverb_delay", "density", "diffusion",
@@ -26,11 +32,15 @@ local snap = { frame = -1, acoustics = nil, reverb = nil, rate = 0, rate_serial 
 local target = { id = nil, name = "", dist = 0, pinned = false, muffling = nil, ticket = nil, path = nil, path_id = nil, path_at = 0 }
 local room = { ticket = nil, result = nil, at = 0 }
 local near = { rows = {}, at = 0 }
+-- rows by key from the last capture, rows that left it with the time they left, and the merged view
+local sources = { live = {}, gone = {}, view = nil, held = 0, traced = 0, at = 0, traced_only = true }
+-- slider values held while dragged and until the next read shows the tick took them
+local rays = { info = nil, edit = {}, active = nil }
 -- the overwrite cvars as they were before the panel froze the reverb
 local frozen
 
 local CLR = {}
-local HUD_FLAGS, TABLE_FLAGS
+local HUD_FLAGS, TABLE_FLAGS, SLIDER_FLAGS
 local ZERO, CORNER, HUD_POS, PANEL_SIZE, BAR_SIZE
 
 local function colors()
@@ -46,6 +56,7 @@ local function colors()
 		ImGuiWindowFlags.NoSavedSettings, ImGuiWindowFlags.NoFocusOnAppearing)
 	TABLE_FLAGS = bit_bor(ImGuiTableFlags.SizingFixedFit, ImGuiTableFlags.NoSavedSettings, ImGuiTableFlags.RowBg,
 		ImGuiTableFlags.BordersInnerV)
+	SLIDER_FLAGS = bit_bor(ImGuiSliderFlags.Logarithmic, ImGuiSliderFlags.AlwaysClamp)
 
 	ZERO       = vector2():set(0, 0)
 	CORNER     = vector2():set(1, 0)
@@ -206,6 +217,67 @@ local function read_near(now)
 	near.rows = rows
 end
 
+-- the file's name without folder or extension
+local function base_name(file)
+	local name = string_match(file, "([^\\/]+)$") or file
+	return (string_gsub(name, "%.%w+$", ""))
+end
+
+-- an owned sound is known by its owner, an ownerless one by where it plays
+local function source_key(s)
+	if s.id then return s.file .. "|" .. s.id end
+	return string_format("%s|%.1f|%.1f|%.1f", s.file, s.position.x, s.position.y, s.position.z)
+end
+
+local function read_sources(now)
+	local list = level.get_snd_sources()
+	if not list then
+		sources.view = nil
+		return
+	end
+
+	local live, rows, traced = {}, {}, 0
+	for _, s in ipairs(list) do
+		local o = s.id and level.object_by_id(s.id)
+		local r = { name = base_name(s.file), owner = o and object_name(o) or "-", dist = s.distance, volume = s.volume,
+			traced = s.traced, lf = s.lf, hf = s.hf, group = s.group, age = s.age }
+		live[source_key(s)] = r
+		rows[#rows + 1] = r
+		if s.traced then traced = traced + 1 end
+	end
+	for key, r in pairs(sources.live) do
+		if not live[key] and not sources.gone[key] then
+			r.gone = now
+			sources.gone[key] = r
+		end
+	end
+	for key, r in pairs(sources.gone) do
+		if live[key] or now - r.gone > LINGER_MS then sources.gone[key] = nil
+		else rows[#rows + 1] = r end
+	end
+	table_sort(rows, by_distance)
+	sources.live, sources.view, sources.held, sources.traced = live, rows, #list, traced
+end
+
+local function read_rays()
+	local info = level.get_snd_rays()
+	rays.info = info
+	-- a let go slider keeps its value until the tick has applied it
+	for _, f in ipairs(RAY_FAMILIES) do
+		local family = info and info[f]
+		if f ~= rays.active and (not family or not family.on or family.count == rays.edit[f]) then
+			rays.edit[f] = nil
+		end
+	end
+end
+
+local function read_monitor(now)
+	if now - sources.at < SOURCES_MS then return end
+	sources.at = now
+	read_sources(now)
+	read_rays()
+end
+
 -- one read a frame, shared by the panel and the HUD
 local function tick()
 	local frame = device().frame
@@ -217,7 +289,10 @@ local function tick()
 	if not level.is_snd_raytracing() then return end
 	read_target(now)
 	read_room(now)
-	if open.panel then read_near(now) end
+	if open.panel then
+		read_near(now)
+		read_monitor(now)
+	end
 end
 
 local function freeze_reverb()
@@ -295,6 +370,21 @@ local function dump()
 	end
 	for _, row in ipairs(near.rows) do
 		line(string_format("near %s %.1f m %s", row.name, row.dist, muffling_text(row.muffling)))
+	end
+	local counts = rays.info
+	if counts then
+		local out = {}
+		for _, f in ipairs(RAY_FAMILIES) do
+			out[#out + 1] = string_format("%s %d/%d%s", f, counts[f].count, counts[f].shipped, counts[f].on and "" or " off")
+		end
+		line(string_format("rays %s tick %.3f ms raytracing %.3f ms", table_concat(out, " "), counts.tick_ms, counts.raytracing_ms))
+	end
+	if sources.view then
+		line(string_format("sources %d held %d traced", sources.held, sources.traced))
+		for _, s in ipairs(sources.view) do
+			line(string_format("source %s owner %s %.1f m volume %.3f %s lf %.3f hf %.3f group %d age %.1f s%s", s.name, s.owner, s.dist,
+				s.volume, s.traced and "traced" or "untraced", s.lf, s.hf, s.group, s.age, s.gone and " gone" or ""))
+		end
 	end
 end
 
@@ -471,6 +561,85 @@ local function draw_near()
 	ImGui.EndTable()
 end
 
+local SOURCE_COLUMNS = { "file", "owner", "m", "volume", "traced", "lf", "hf", "group", "age" }
+
+local function draw_sources()
+	if not ImGui.CollapsingHeader("Sources", 0) then return end
+	local hit, on = ImGui.Checkbox("traced only", sources.traced_only)
+	if hit then sources.traced_only = on end
+	local view = sources.view
+	if not view then
+		ImGui.SameLine(0, -1)
+		ImGui.TextDisabled("no capture yet")
+		return
+	end
+	ImGui.SameLine(0, -1)
+	ImGui.TextDisabled(string_format("%d held, %d traced, gone rows stay %d s", sources.held, sources.traced, LINGER_MS / 1000))
+	if not ImGui.BeginTable("##sources", #SOURCE_COLUMNS, TABLE_FLAGS, ZERO, 0) then return end
+	for _, c in ipairs(SOURCE_COLUMNS) do
+		ImGui.TableSetupColumn(c, 0, 0, 0)
+	end
+	ImGui.TableHeadersRow()
+	for _, s in ipairs(view) do
+		if s.traced or not sources.traced_only then
+			local clr = s.gone and CLR.dim or CLR.normal
+			ImGui.TableNextRow(0, 0)
+			ImGui.TableNextColumn()
+			text(clr, s.name)
+			ImGui.TableNextColumn()
+			text(clr, s.owner)
+			ImGui.TableNextColumn()
+			text(clr, string_format("%.0f", s.dist))
+			ImGui.TableNextColumn()
+			text(clr, string_format("%.2f", s.volume))
+			ImGui.TableNextColumn()
+			text(s.gone and CLR.dim or s.traced and CLR.good or CLR.warn, s.traced and "yes" or "no")
+			ImGui.TableNextColumn()
+			text(clr, string_format("%.2f", s.lf))
+			ImGui.TableNextColumn()
+			text(clr, string_format("%.2f", s.hf))
+			ImGui.TableNextColumn()
+			text(clr, s.group >= 0 and string_format("%d", s.group) or "-")
+			ImGui.TableNextColumn()
+			text(clr, string_format("%.1f", s.age))
+		end
+	end
+	ImGui.EndTable()
+end
+
+local function draw_rays()
+	if not ImGui.CollapsingHeader("Rays", 0) then return end
+	local info = rays.info
+	if not info then
+		ImGui.TextDisabled("no capture yet")
+		return
+	end
+	ImGui.TextDisabled("Counts apply when a slider is let go and last until the next level load")
+	rays.active = nil
+	for _, f in ipairs(RAY_FAMILIES) do
+		local family = info[f]
+		ImGui.BeginDisabled(not family.on)
+		ImGui.SetNextItemWidth(220)
+		local _, v = ImGui.SliderFloat(f, rays.edit[f] or family.count, RAY_MIN, RAY_MAX, "%.0f", SLIDER_FLAGS)
+		v = math_floor(v + 0.5)
+		if ImGui.IsItemActive() then
+			rays.active = f
+			rays.edit[f] = v
+		elseif ImGui.IsItemDeactivatedAfterEdit() then
+			rays.edit[f] = level.set_snd_rays(f, v) and v or nil
+		end
+		ImGui.EndDisabled()
+		ImGui.SameLine(0, -1)
+		ImGui.TextDisabled(string_format("shipped %d%s", family.shipped, family.on and "" or ", off on this level"))
+	end
+	if ImGui.Button("Reset", ZERO) then
+		level.set_snd_rays("all", 0)
+		rays.edit = {}
+	end
+	ImGui.SameLine(0, -1)
+	text(CLR.normal, string_format("sound tick %.2f ms  SDK raytracing %.2f ms", info.tick_ms, info.raytracing_ms))
+end
+
 local function draw_panel()
 	if not open.panel then return end
 	colors()
@@ -494,6 +663,8 @@ local function draw_panel()
 			draw_reverb()
 			draw_target()
 			draw_near()
+			draw_sources()
+			draw_rays()
 		end
 	end
 
@@ -563,6 +734,8 @@ local function on_level_end()
 	target.id, target.pinned, target.ticket, target.path = nil, false, nil, nil
 	room.ticket, room.result = nil, nil
 	near.rows = {}
+	sources.live, sources.gone, sources.view = {}, {}, nil
+	rays.info, rays.edit, rays.active = nil, {}, nil
 end
 
 function on_game_start()
