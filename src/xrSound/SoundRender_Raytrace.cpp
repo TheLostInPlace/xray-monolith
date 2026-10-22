@@ -309,10 +309,12 @@ namespace
 	constexpr int permeation_rays = 128;
 	constexpr int permeation_bounces = 3;
 
-	// Ambient permeation rays at the ambience page's counts, and the energy share that brings a bed to full volume
+	// Ambient permeation rays at the ambience page's counts
 	constexpr int ambient_permeation_rays = 128;
 	constexpr int ambient_permeation_bounces = 3;
-	constexpr float ambient_cap = 0.3f;
+	// The occlusion and permeation shares the same rays measure on open ground, LF then HF
+	constexpr float open_ground_occlusion[2] = { 0.4248f, 0.4143f };
+	constexpr float open_ground_permeation[2] = { 0.2717f, 0.2711f };
 	// A held bed plays at stock level when the ambient filter is still missing 10 s after the world's first update
 	constexpr float ambient_timeout = 10.f;
 
@@ -492,16 +494,14 @@ namespace
 		return std::min(1.f, std::sqrt(p * p + e / open_air_reference[!lowFrequency].load(std::memory_order_relaxed)));
 	}
 
-	// The SDK's ambient sum of each energy share over its cap, the root gives the bed's amplitude
+	// The bed's amplitude from the larger of the occlusion and permeation shares, each over its open ground value
 	float ambient_gain(bool lowFrequency, int occlusionRayCount, int permeationRayCount, int permeationBounceCount, float occlusionEnergy, float permeationEnergy)
 	{
-		float gain = 0.f;
-		if (occlusionRayCount > 0)
-			gain += occlusionEnergy / (ambient_cap * occlusionRayCount);
-		if (permeationRayCount > 0 && permeationBounceCount > 0)
-			gain += permeationEnergy / (ambient_cap * permeationRayCount * permeationBounceCount);
+		const int band = lowFrequency ? 0 : 1;
+		const float e = occlusionRayCount > 0 ? occlusionEnergy / (occlusionRayCount * open_ground_occlusion[band]) : 0.f;
+		const float p = permeationRayCount > 0 && permeationBounceCount > 0 ? permeationEnergy / (permeationRayCount * permeationBounceCount * open_ground_permeation[band]) : 0.f;
 		// A NaN share reads as full, as the SDK's default formula takes it
-		return std::sqrt(gain < 1.f ? gain : 1.f);
+		return std::sqrt(e < 1.f && p < 1.f ? std::max(e, p) : 1.f);
 	}
 
 	// The SDK's own formulas, set once from the first formulas struct
@@ -1615,11 +1615,9 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 	check(vaEmitterSetAmbientOcclusionBounceCount(listener, 8), "vaEmitterSetAmbientOcclusionBounceCount");
 	if (ambient)
 	{
-		// Permeation rays add the energy that crosses walls, and each share caps where a bed plays at full volume
+		// Permeation rays measure the energy that crosses walls, the formula takes the place of the SDK's energy caps
 		check(vaEmitterSetAmbientPermeationRayCount(listener, ambient_permeation_rays), "vaEmitterSetAmbientPermeationRayCount");
 		check(vaEmitterSetAmbientPermeationBounceCount(listener, ambient_permeation_bounces), "vaEmitterSetAmbientPermeationBounceCount");
-		check(vaEmitterSetAmbientOcclusionEnergyCap(listener, ambient_cap), "vaEmitterSetAmbientOcclusionEnergyCap");
-		check(vaEmitterSetAmbientPermeationEnergyCap(listener, ambient_cap), "vaEmitterSetAmbientPermeationEnergyCap");
 		check(vaEmitterSetAmbientGainFormula(listener, ambient_gain), "vaEmitterSetAmbientGainFormula");
 	}
 	// A full sweep of the 512 trails every 32 updates, a trail recast once its first hit moves a metre
