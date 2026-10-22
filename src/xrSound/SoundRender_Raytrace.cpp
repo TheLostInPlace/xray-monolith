@@ -327,6 +327,8 @@ namespace
 	constexpr float group_near = 1.5f;
 	// A source changes group after three equal readings
 	constexpr u32 group_switch = 3;
+	// An object's sounds within 1 m of its source share it
+	constexpr float source_share = 1.f;
 	// Grouped reverb is fully directional from a pan of 0.8 and all around under 0.6
 	constexpr float group_inner = 0.6f;
 	constexpr float group_outer = 0.8f;
@@ -3026,7 +3028,7 @@ void CSoundRender_Raytrace::retire(CSoundRender_RaytraceOccluder& O)
 		++occluder_moves;
 }
 
-// Every emitter of one object within the refresh distance shares its source, any other gets its own
+// Every emitter of one object within 1 m of its source shares it, any other gets its own
 bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 {
 	xrCriticalSectionTryGuard guard(lock);
@@ -3044,8 +3046,8 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 		const auto it = std::find_if(sources.begin(), sources.end(), [owner](const CSoundRender_RaytraceSource* s) { return s->owner == owner; });
 		if (it != sources.end())
 			S = *it;
-		// An idle source follows its owner's next sound, and gains from more than the refresh distance away wait for a new trace
-		if (S && !S->users && S->emitter && S->position.distance_to(E->p_source.position) > vaEmitterGetRefreshDistanceThreshold(muffle))
+		// An idle source follows its owner's next sound, and gains from farther away wait for a new trace
+		if (S && !S->users && S->emitter && S->position.distance_to(E->p_source.position) > source_share)
 		{
 			S->position = S->sent = E->p_source.position;
 			check(vaEmitterSetPosition(S->emitter, va_vector(S->position)), "vaEmitterSetPosition");
@@ -3057,7 +3059,7 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 			std::replace(ray_targets.begin(), ray_targets.end(), S, static_cast<CSoundRender_RaytraceSource*>(nullptr));
 		}
 		// A sound farther than that from its owner's playing source is traced where it plays, on an ownerless source
-		else if (S && S->users && S->position.distance_to(E->p_source.position) > vaEmitterGetRefreshDistanceThreshold(muffle))
+		else if (S && S->users && S->position.distance_to(E->p_source.position) > source_share)
 		{
 			S = nullptr;
 			owner = nullptr;
