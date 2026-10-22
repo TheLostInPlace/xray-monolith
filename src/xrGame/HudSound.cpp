@@ -84,6 +84,13 @@ void HUD_SOUND_ITEM::DestroySound(HUD_SOUND_ITEM& hud_snd)
 	hud_snd.m_activeSnd = NULL;
 }
 
+void HUD_SOUND_ITEM::SetCategory(HUD_SOUND_ITEM& hud_snd, esound_category category)
+{
+	hud_snd.m_category = category;
+	for (SSnd& s : hud_snd.sounds)
+		s.snd.set_category(category);
+}
+
 void HUD_SOUND_ITEM::PlaySound(HUD_SOUND_ITEM& hud_snd,
                                const Fvector& position,
                                const CObject* parent,
@@ -247,6 +254,13 @@ void HUD_SOUND_COLLECTION::LoadSound(LPCSTR section, LPCSTR line, LPCSTR alias, 
 	snd_item.m_type = type;
 }
 
+void HUD_SOUND_COLLECTION::SetCategory(LPCSTR alias, esound_category category)
+{
+	HUD_SOUND_ITEM* snd_item = FindSoundItem(alias, false);
+	if (snd_item)
+		HUD_SOUND_ITEM::SetCategory(*snd_item, category);
+}
+
 //Alundaio:
 /*
 It's usage is to play a group of sounds HUD_SOUND_ITEMs as if they were a single layered entity. This is a achieved by
@@ -299,6 +313,16 @@ void HUD_SOUND_COLLECTION_LAYERED::SetPosition(LPCSTR alias, const Fvector& pos)
 	{
 		if (it->m_alias == alias)
 			it->SetPosition(alias, pos);
+	}
+}
+
+// Every layer loaded under the alias takes the category
+void HUD_SOUND_COLLECTION_LAYERED::SetCategory(LPCSTR alias, esound_category category)
+{
+	for (HUD_SOUND_COLLECTION& snd_item : m_sound_items)
+	{
+		if (snd_item.m_alias == alias)
+			snd_item.SetCategory(alias, category);
 	}
 }
 
@@ -376,7 +400,9 @@ void HUD_SOUND_COLLECTION_LAYERED::PlaySound(LPCSTR alias, const Fvector& positi
 						if (old_sound)
 						{
 							alias_to_play = new_alias.c_str();
+							const esound_category category = old_sound->m_category;
 							LoadSound(section, line, alias_to_play, old_sound->m_b_exclusive, old_sound->m_type);
+							SetCategory(alias_to_play, category);
 
 							// Crash if override sound was defined but wasn't loaded correctly
 							R_ASSERT2(FindSoundItem(alias_to_play, false), make_string("!_G.COnBeforePlayHudSound callback, HUD_SOUND_COLLECTION_LAYERED::PlaySound, failed to override sound item %s with %s, failed to load section %s line %s", alias, alias_to_play, section, line));

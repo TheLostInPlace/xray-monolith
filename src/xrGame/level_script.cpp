@@ -1155,6 +1155,31 @@ void set_music_volume(float v) {
 	clamp(psSoundVMusicFactor, 0.0f, 1.0f);
 }
 
+// Player sound levels by name, in esound_category order from sc_Weather
+static const LPCSTR snd_category_names[] = { "weather", "ambience", "gunfire", "voices", "mutants" };
+
+static esound_category snd_category(LPCSTR name)
+{
+	for (u32 i = 0; i < std::size(snd_category_names); ++i)
+		if (name && !xr_strcmp(name, snd_category_names[i]))
+			return esound_category(sc_Weather + i);
+	return sc_None;
+}
+
+float get_snd_category_volume(LPCSTR name)
+{
+	return psSoundVCategory[snd_category(name)];
+}
+
+void set_snd_category_volume(LPCSTR name, float v)
+{
+	const esound_category c = snd_category(name);
+	if (c == sc_None)
+		return;
+	psSoundVCategory[c] = v;
+	clamp(psSoundVCategory[c], 0.0f, 1.0f);
+}
+
 static ::luabind::object snd_nil(lua_State* L)
 {
 	::luabind::object none(L);
@@ -3068,6 +3093,8 @@ void CLevel::script_register(lua_State* L)
 			def("set_snd_volume", &set_snd_volume),
 			def("get_music_volume", &get_music_volume),
 			def("set_music_volume", &set_music_volume),
+			def("get_snd_category_volume", &get_snd_category_volume),
+			def("set_snd_category_volume", &set_snd_category_volume),
 			def("is_snd_raytracing", &is_snd_raytracing),
 			def("get_snd_acoustics", &get_snd_acoustics, raw<1>()),
 			def("get_snd_reverb", &get_snd_reverb, raw<1>()),

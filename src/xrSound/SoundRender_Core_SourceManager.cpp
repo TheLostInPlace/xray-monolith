@@ -82,6 +82,24 @@ void CSoundRender_Core::i_load_file_lists()
 {
 	s_interface_list.load("misc\\sound\\sound_interface", "interface");
 	s_bed_list.load("misc\\sound\\sound_beds", "beds");
+	s_weather_list.load("misc\\sound\\sound_categories", "weather");
+	s_ambience_list.load("misc\\sound\\sound_categories", "ambience");
+	s_voices_list.load("misc\\sound\\sound_categories", "voices");
+	s_mutants_list.load("misc\\sound\\sound_categories", "mutants");
+}
+
+// The weather list goes first, so the wind beds under ambient\ play at the weather level
+esound_category CSoundRender_Core::i_category_file(LPCSTR name) const
+{
+	if (s_weather_list.has(name))
+		return sc_Weather;
+	if (s_voices_list.has(name))
+		return sc_Voices;
+	if (s_mutants_list.has(name))
+		return sc_Mutants;
+	if (s_ambience_list.has(name))
+		return sc_Ambience;
+	return sc_None;
 }
 
 void CSoundRender_Core::i_create_all_sources()

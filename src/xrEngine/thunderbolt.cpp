@@ -80,7 +80,11 @@ void SThunderboltDesc::load(CInifile& pIni, shared_str const& sect)
 
 	// sound
 	m_name = pIni.r_string(sect, "sound");
-	if (m_name && m_name[0]) snd.create(m_name, st_Effect, sg_Undefined);
+	if (m_name && m_name[0])
+	{
+		snd.create(m_name, st_Effect, sg_Undefined);
+		snd.set_category(sc_Weather);
+	}
 }
 
 //----------------------------------------------------------------------------------------------

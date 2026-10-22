@@ -45,6 +45,7 @@ CEffect_Rain::CEffect_Rain()
 	state = stIdle;
 
 	snd_Ambient.create("ambient\\rain", st_Effect, sg_Undefined);
+	snd_Ambient.set_category(sc_Weather);
 	rain_volume = 0.0f;
 
 	RainPerlin = xr_new<CPerlinNoise1D>(Random.randI(0, 0xFFFF));

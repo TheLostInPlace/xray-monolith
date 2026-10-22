@@ -1,0 +1,25 @@
+; Sounds that play at a player sound level besides the effects level, set from the sound mixer
+; One file per line relative to sounds\, without .ogg, a trailing * takes every file under that prefix
+; Rain, weather ambients and thunder take the weather level from the engine, shots and explosions the gunfire level
+; A file in more than one section takes the first of weather, voices, mutants and ambience
+
+[weather]
+; wind loops the weather scripts play as beds
+nature\wind_storm*
+ambient\wind_*
+
+[voices]
+; stalker speech, dialogs and story lines, and the stalker barks kept with the mutants
+characters_voice\*
+monsters\human\*
+monsters\stalker\*
+
+[mutants]
+; one folder per mutant
+monsters\*
+
+[ambience]
+; ambient loops and one-shots from scripts and level sound sources
+ambient\*
+ambience_exp\*
+nature\*

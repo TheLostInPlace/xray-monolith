@@ -119,6 +119,9 @@ void CWeaponMagazined::Load(LPCSTR section)
 	if (WeaponSoundExist(section, "snd_shot_misfire_actor"))
 		m_sounds.LoadSound(section, "snd_shot_misfire_actor", "sndShotMisfireActor", false, m_eSoundShot);
 
+	for (LPCSTR alias : {"sndShot", "sndShotActor", "sndShotActorFirst", "sndShotMisfire", "sndShotMisfireActor"})
+		m_sounds.SetCategory(alias, sc_Gunfire);
+
 	m_sounds.LoadSound(section, "snd_empty", "sndEmptyClick", true, m_eSoundEmptyClick);
 	m_sounds.LoadSound(section, "snd_reload", "sndReload", true, m_eSoundReload);
 
@@ -172,7 +175,10 @@ void CWeaponMagazined::Load(LPCSTR section)
 			m_sounds.LoadSound(section, "snd_silncer_shot_misfire", "sndSilencerShotMisfire", false, m_eSoundShot);
 		if (WeaponSoundExist(section, "snd_silncer_shot_misfire_actor"))
 			m_sounds.LoadSound(section, "snd_silncer_shot_misfire_actor", "sndSilencerShotMisfireActor", false, m_eSoundShot);
-		
+
+		for (LPCSTR alias : {"sndSilencerShot", "sndSilencerShotActor", "sndSilencerShotActorFirst",
+		                     "sndSilencerShotMisfire", "sndSilencerShotMisfireActor"})
+			m_sounds.SetCategory(alias, sc_Gunfire);
 	}
 
 	m_iBaseDispersionedBulletsCount = READ_IF_EXISTS(pSettings, r_u8, section, "base_dispersioned_bullets_count", 0);
@@ -2067,6 +2073,7 @@ bool CWeaponMagazined::install_upgrade_impl(LPCSTR section, bool test)
 	if (result2 && !test)
 	{
 		m_sounds.LoadSound(section, "snd_shoot", "sndShot", false, m_eSoundShot);
+		m_sounds.SetCategory("sndShot", sc_Gunfire);
 	}
 	result |= result2;
 
@@ -2102,6 +2109,7 @@ bool CWeaponMagazined::install_upgrade_impl(LPCSTR section, bool test)
 		if (result2 && !test)
 		{
 			m_sounds.LoadSound(section, "snd_silncer_shot", "sndSilencerShot", false, m_eSoundShot);
+			m_sounds.SetCategory("sndSilencerShot", sc_Gunfire);
 		}
 		result |= result2;
 	}

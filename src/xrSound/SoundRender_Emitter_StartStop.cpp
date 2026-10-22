@@ -22,6 +22,12 @@ void CSoundRender_Emitter::start(ref_sound* _owner, BOOL _loop, float delay)
 	set_frequency(1.f);
     p_source.max_ai_distance = source()->m_fMaxAIDist * psSoundMaxAIDistanceMultiplier; // 300.f;
 
+	// The creator's level first, then the file's own
+	if (owner_data->s_category != sc_None)
+		category = owner_data->s_category;
+	else
+		category = source()->m_category;
+
 	if (fis_zero(delay, EPS_L))
 	{
 		m_current_state = _loop ? stStartingLooped : stStarting;

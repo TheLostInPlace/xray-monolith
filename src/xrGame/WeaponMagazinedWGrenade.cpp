@@ -36,6 +36,7 @@ void CWeaponMagazinedWGrenade::Load(LPCSTR section)
 
 	//// Sounds
 	m_sounds.LoadSound(section, "snd_shoot_grenade", "sndShotG", true, m_eSoundShot);
+	m_sounds.SetCategory("sndShotG", sc_Gunfire);
 	m_sounds.LoadSound(section, "snd_reload_grenade", "sndReloadG", true, m_eSoundReload);
 	m_sounds.LoadSound(section, "snd_switch", "sndSwitch", true, m_eSoundReload);
 
@@ -1149,6 +1150,7 @@ bool CWeaponMagazinedWGrenade::install_upgrade_impl(LPCSTR section, bool test)
 	if (result2 && !test)
 	{
 		m_sounds.LoadSound(section, "snd_shoot_grenade", "sndShotG", false, m_eSoundShot);
+		m_sounds.SetCategory("sndShotG", sc_Gunfire);
 	}
 	result |= result2;
 

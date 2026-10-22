@@ -2,7 +2,7 @@
 
 struct HUD_SOUND_ITEM
 {
-	HUD_SOUND_ITEM() : m_activeSnd(NULL), m_b_exclusive(false), m_b_layer(false)
+	HUD_SOUND_ITEM() : m_activeSnd(NULL), m_b_exclusive(false), m_b_layer(false), m_category(sc_None)
 	{
 	}
 
@@ -18,6 +18,8 @@ struct HUD_SOUND_ITEM
 	                      int type = sg_SourceType);
 
 	static void DestroySound(HUD_SOUND_ITEM& hud_snd);
+
+	static void SetCategory(HUD_SOUND_ITEM& hud_snd, esound_category category);
 
 	static void PlaySound(HUD_SOUND_ITEM& snd,
 	                      const Fvector& position,
@@ -61,6 +63,7 @@ struct HUD_SOUND_ITEM
 	// One layer of a multi-layer sound section, played with sm_Layer
 	bool m_b_layer;
 	int m_type;
+	esound_category m_category;
 	xr_vector<SSnd> sounds;
 
 	bool operator ==(LPCSTR alias) const
@@ -84,6 +87,7 @@ public:
 	void StopSound(LPCSTR alias);
 
 	void LoadSound(LPCSTR section, LPCSTR line, LPCSTR alias, bool exclusive = false, int type = sg_SourceType);
+	void SetCategory(LPCSTR alias, esound_category category);
 
 	void SetPosition(LPCSTR alias, const Fvector& pos);
 	void StopAllSounds();
@@ -104,6 +108,7 @@ public:
 	void LoadSound(LPCSTR section, LPCSTR line, LPCSTR alias, bool exclusive = false, int type = sg_SourceType);
 	void LoadSound(CInifile const* ini, LPCSTR section, LPCSTR line, LPCSTR alias, bool exclusive = false,
 	               int type = sg_SourceType);
+	void SetCategory(LPCSTR alias, esound_category category);
 	void SetPosition(LPCSTR alias, const Fvector& pos);
 	void UpdateAllSoundsPositions(const Fvector& P);
 };

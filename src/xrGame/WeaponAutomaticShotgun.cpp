@@ -43,6 +43,7 @@ void CWeaponAutomaticShotgun::Load(LPCSTR section)
 		m_sounds.LoadSound(section, "snd_close_weapon_empty", "sndCloseEmpty", false, m_eSoundClose);
 
 		m_sounds.LoadSound(section, "snd_shoot_last", "sndShootL", false, m_eSoundShot);
+		m_sounds.SetCategory("sndShootL", sc_Gunfire);
 	};
 }
 

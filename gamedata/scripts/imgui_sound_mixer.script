@@ -1,0 +1,104 @@
+-- Mods > Sound mixer sets the options menu's effects and music volumes, and the weather, ambience, gunfire,
+-- voice and mutant levels on top of effects, saved in axr_options and sent to the engine
+
+local ipairs = ipairs
+local math_max, math_min = math.max, math.min
+local string_format = string.format
+
+local SECTION = "sound_mixer"
+-- The options menu's own volumes, read from the console every frame and saved with the console config
+local VOLUMES = {
+	{ cmd = "snd_volume_eff",   name = "Effects" },
+	{ cmd = "snd_volume_music", name = "Music" },
+}
+local LEVELS = {
+	{ key = "weather",  name = "Weather" },
+	{ key = "ambience", name = "Ambience" },
+	{ key = "gunfire",  name = "Gunfire" },
+	{ key = "voices",   name = "Voices" },
+	{ key = "mutants",  name = "Mutants" },
+}
+
+local open = false
+-- percent by level key
+local values = {}
+
+local ZERO, WINDOW_FLAGS, SLIDER_FLAGS
+
+local function save()
+	local c = axr_main and axr_main.config
+	if not c then return end
+	for _, l in ipairs(LEVELS) do
+		c:w_value(SECTION, l.key, values[l.key])
+	end
+	c:w_value(SECTION, "window", open)
+	c:save()
+end
+
+-- Sets one level in percent and sends it to the engine, save() writes it out
+function set_level(key, percent)
+	values[key] = math_max(0, math_min(100, percent))
+	level.set_snd_category_volume(key, values[key] / 100)
+end
+
+-- Sets an options menu volume through its console command, cfg_save writes it out
+function set_volume(cmd, value)
+	get_console():execute(string_format("%s %.3f", cmd, math_max(0, math_min(1, value))))
+end
+
+local function load()
+	local c = axr_main and axr_main.config
+	for _, l in ipairs(LEVELS) do
+		set_level(l.key, c and c:r_value(SECTION, l.key, 2, 100) or 100)
+	end
+	open = c ~= nil and c:r_value(SECTION, "window", 1, false) == true
+end
+
+local function draw_window()
+	if not open then return end
+	local visible, still = ImGui.Begin("Sound mixer", true, WINDOW_FLAGS)
+	if not still then
+		open = false
+		save()
+	end
+
+	if visible then
+		local con = get_console()
+		for _, v in ipairs(VOLUMES) do
+			local changed, nv = ImGui.SliderFloat(v.name, con:get_float(v.cmd), 0, 1, "%.2f", SLIDER_FLAGS)
+			if changed then set_volume(v.cmd, nv) end
+			if ImGui.IsItemDeactivatedAfterEdit() then con:execute("cfg_save") end
+		end
+		ImGui.Separator()
+		for _, l in ipairs(LEVELS) do
+			local changed, v = ImGui.SliderFloat(l.name, values[l.key], 0, 100, "%.0f %%", SLIDER_FLAGS)
+			if changed then set_level(l.key, v) end
+			if ImGui.IsItemDeactivatedAfterEdit() then save() end
+		end
+		if ImGui.Button("Reset", ZERO) then
+			for _, l in ipairs(LEVELS) do
+				set_level(l.key, 100)
+			end
+			save()
+		end
+	end
+
+	ImGui.End()
+end
+
+local function draw_menu()
+	if ImGui.MenuItem("Sound mixer", nil, open, true) then
+		open = not open
+		save()
+	end
+end
+
+ImGui.Groups.Widget("Mods", draw_menu)
+ImGui.Groups.Widget("Main", draw_window)
+
+function on_game_start()
+	ZERO = vector2():set(0, 0)
+	WINDOW_FLAGS = ImGuiWindowFlags.AlwaysAutoResize
+	SLIDER_FLAGS = ImGuiSliderFlags.AlwaysClamp
+	load()
+end

@@ -143,6 +143,20 @@ enum esound_type
 	st_forcedword = u32(-1),
 };
 
+// Player sound levels, sc_None plays at the effects or music level alone
+enum esound_category
+{
+	sc_None = 0,
+	sc_Weather,
+	sc_Ambience,
+	sc_Gunfire,
+	sc_Voices,
+	sc_Mutants,
+	sc_count
+};
+
+XRSOUND_API extern float psSoundVCategory[sc_count];
+
 class CSound_UserDataVisitor;
 
 class CSound_UserData : public xr_resource
@@ -166,6 +180,7 @@ public:
 	CSound_emitter* feedback; //!< Pointer to emitter, automaticaly clears on emitter-stop
 	esound_type s_type;
 	int g_type; //!< Sound type, usually for AI
+	esound_category s_category; //!< Player level set by the creator, sc_None leaves it to the file
 	CObject* g_object; //!< Game object that emitts ref_sound
 	CSound_UserDataPtr g_userdata;
 	shared_str fn_attached [2];
@@ -245,6 +260,7 @@ public:
 	IC void set_range(float min, float max);
 	IC void set_volume(float vol);
 	IC void set_priority(float vol);
+	IC void set_category(esound_category c) { if (_p) _p->s_category = c; }
 
 	IC const CSound_params* get_params();
 	IC void set_params(CSound_params* p);
@@ -640,6 +656,7 @@ IC ref_sound_data::ref_sound_data()
 	handle = 0;
 	feedback = 0;
 	g_type = 0;
+	s_category = sc_None;
 	g_object = 0;
 	s_type = st_Effect;
 }

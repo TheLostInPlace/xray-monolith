@@ -27,6 +27,7 @@ float psSoundMaxAIDistanceMultiplier = 1.0f;
 
 float psSoundVMusic = 1.f;
 float psSoundVMusicFactor = 1.f;
+float psSoundVCategory[sc_count] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f};
 int psSoundCacheSizeMB = 256;
 
 float snd_efx_environment_change_time = 1.66f;
@@ -463,6 +464,7 @@ void CSoundRender_Core::clone(ref_sound& S, const ref_sound& from, esound_type s
 	S._p->fn_attached[1] = from._p->fn_attached[1];
 	S._p->g_type = (game_type == sg_SourceType) ? S._p->handle->game_type() : game_type;
 	S._p->s_type = sound_type;
+	S._p->s_category = from._p->s_category;
 }
 
 
@@ -492,6 +494,7 @@ void CSoundRender_Core::play_no_feedback(ref_sound& S, CObject* O, u32 flags, fl
 	S._p = xr_new<ref_sound_data>();
 	S._p->handle = orig->handle;
 	S._p->g_type = orig->g_type;
+	S._p->s_category = orig->s_category;
 	S._p->g_object = O;
 	S._p->dwBytesTotal = orig->dwBytesTotal;
 	S._p->fTimeTotal = orig->fTimeTotal;
@@ -555,6 +558,7 @@ void CSoundRender_Core::_create_data(ref_sound_data& S, LPCSTR fName, esound_typ
 	S.handle = (CSound_source*)SoundRender->i_create_source(fn);
 	S.g_type = (game_type == sg_SourceType) ? S.handle->game_type() : game_type;
 	S.s_type = sound_type;
+	S.s_category = sc_None;
 	S.feedback = 0;
 	S.g_object = 0;
 	S.g_userdata = 0;

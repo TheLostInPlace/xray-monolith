@@ -79,6 +79,8 @@ public:
 	bool bBed;
 	// One layer of a multi-layer weapon sound, its far layers already carry the air loss
 	bool bLayer;
+	// Player level, set once at start
+	esound_category category;
 	BOOL bStopping;
 	BOOL bRewind;
 	float fTimeStarted; // time of "Start"
@@ -136,6 +138,11 @@ public:
 	void fill_data(u8* ptr, u32 offset, u32 size);
 
 	float priority();
+	// The effects or music volume times the sound's player level
+	float player_volume() const
+	{
+		return (owner_data->s_type == st_Effect ? psSoundVEffects * psSoundVFactor : psSoundVMusic * psSoundVMusicFactor) * psSoundVCategory[category];
+	}
 	void start(ref_sound* _owner, BOOL _loop, float delay);
 	void cancel(); // manager forces out of rendering
 	void update(float dt);

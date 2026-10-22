@@ -13,6 +13,7 @@ CSoundRender_Source::CSoundRender_Source()
 	m_uGameType = 0;
 	m_bInterface = false;
 	m_bBed = false;
+	m_category = sc_None;
 	fname = 0;
 	CAT.table = 0;
 	CAT.size = 0;

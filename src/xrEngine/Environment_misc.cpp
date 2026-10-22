@@ -113,6 +113,7 @@ void CEnvAmbient::SSndChannel::load(CInifile& config, LPCSTR sect)
 	{
 		_GetItem(snds, k, tmp);
 		m_sounds[k].create(tmp, st_Effect, sg_SourceType);
+		m_sounds[k].set_category(sc_Weather);
 	}
 }
 
@@ -126,7 +127,10 @@ CEnvAmbient::SEffect* CEnvAmbient::create_effect(CInifile& config, LPCSTR id)
 	result->wind_gust_factor = config.r_float(id, "wind_gust_factor");
 
 	if (config.line_exist(id, "sound"))
+	{
 		result->sound.create(config.r_string(id, "sound"), st_Effect, sg_SourceType);
+		result->sound.set_category(sc_Weather);
+	}
 
 	if (config.line_exist(id, "wind_blast_strength"))
 	{

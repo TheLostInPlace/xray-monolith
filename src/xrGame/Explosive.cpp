@@ -137,6 +137,7 @@ void CExplosive::Load(CInifile const* ini, LPCSTR section)
 	m_fFragmentSpeed = ini->r_float(section, "fragment_speed");
 
 	m_layered_sounds.LoadSound(ini, section, "snd_explode", "sndExplode", false, m_eSoundExplode);
+	m_layered_sounds.SetCategory("sndExplode", sc_Gunfire);
 
 	m_fExplodeDurationMax = ini->r_float(section, "explode_duration");
 	if( ini->line_exist(section,"explode_effector_sect_name") )

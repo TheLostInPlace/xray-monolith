@@ -185,6 +185,7 @@ void CWeaponStatMgun::Load(LPCSTR section)
 	inheritedShooting::Load(section);
 
 	m_sounds.LoadSound(section, "snd_shoot", "sndShot", false, SOUND_TYPE_WEAPON_SHOOTING);
+	m_sounds.SetCategory("sndShot", sc_Gunfire);
 
 #ifdef STATIONARYMGUN_NEW
 	/* Remove. */
@@ -213,6 +214,7 @@ void CWeaponStatMgun::Load(LPCSTR section)
 
 #ifdef STATIONARYMGUN_NEW
 	m_sounds.LoadSound(section, "snd_shoot", "sndShoot", false, SOUND_TYPE_WEAPON_SHOOTING);
+	m_sounds.SetCategory("sndShoot", sc_Gunfire);
 	m_sounds.LoadSound(section, "snd_empty", "sndEmpty", false, SOUND_TYPE_WEAPON_EMPTY_CLICKING);
 	m_sounds.LoadSound(section, "snd_reload", "sndReload", true, SOUND_TYPE_WEAPON_RECHARGING);
 

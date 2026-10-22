@@ -28,6 +28,8 @@ public:
 	bool m_bInterface;
 	// Named in the bed list, set once at load
 	bool m_bBed;
+	// Player level from the category lists, set once at load
+	esound_category m_category;
 private:
 	void i_decompress_fr(OggVorbis_File* ovf, char* dest, u32 size);
 	bool LoadWave(LPCSTR name);

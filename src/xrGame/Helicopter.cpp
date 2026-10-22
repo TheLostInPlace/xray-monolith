@@ -91,6 +91,8 @@ void CHelicopter::Load(LPCSTR section)
 	m_layered_sounds.LoadSound(section, "snd_shoot", "sndShoot", false, ESoundTypes::SOUND_TYPE_WEAPON_SHOOTING);
 	m_layered_sounds.LoadSound(section, "snd_shoot_rocket", "sndRocket", false, ESoundTypes::SOUND_TYPE_WEAPON_SHOOTING);
 	m_layered_sounds.LoadSound(section, "explode_sound", "sndExplode", false, ESoundTypes::SOUND_TYPE_OBJECT_EXPLODING);
+	for (LPCSTR alias : {"sndShoot", "sndRocket", "sndExplode"})
+		m_layered_sounds.SetCategory(alias, sc_Gunfire);
 
 	CRocketLauncher::Load(section);
 

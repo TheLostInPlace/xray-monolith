@@ -71,6 +71,11 @@ protected:
 	CSoundRender_FileList s_interface_list;
 	// Sounds that play and play_at_pos start as beds, from misc\sound\sound_beds.ltx
 	CSoundRender_FileList s_bed_list;
+	// Sounds by player level, from misc\sound\sound_categories.ltx
+	CSoundRender_FileList s_weather_list;
+	CSoundRender_FileList s_ambience_list;
+	CSoundRender_FileList s_voices_list;
+	CSoundRender_FileList s_mutants_list;
 	xr_vector<CSoundRender_Emitter*> s_emitters;
 	u32 s_emitters_u; // emitter update marker
 	xr_vector<CSoundRender_Target*> s_targets;
@@ -156,6 +161,7 @@ public:
 	void i_load_file_lists();
 	bool i_interface_file(LPCSTR name) const { return s_interface_list.has(name); }
 	bool i_bed_file(LPCSTR name) const { return s_bed_list.has(name); }
+	esound_category i_category_file(LPCSTR name) const;
 	CSoundRender_Emitter* i_play(ref_sound* S, BOOL _loop, float delay);
 	void i_start(CSoundRender_Emitter* E);
 	void i_stop(CSoundRender_Emitter* E);

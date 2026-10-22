@@ -137,9 +137,7 @@ void CSoundRender_Emitter::update(float dt)
 		fTimeToPropagade = fTime;
 		fade_volume = 1.f;
 		start_occlusion();
-		smooth_volume = p_source.base_volume * p_source.volume * (owner_data->s_type == st_Effect
-			                                                          ? psSoundVEffects * psSoundVFactor
-			                                                          : psSoundVMusic * psSoundVMusicFactor) * (b2D ? 1.f : occluder_volume);
+		smooth_volume = p_source.base_volume * p_source.volume * player_volume() * (b2D ? 1.f : occluder_volume);
 		if (update_culling(dt))
 		{
 			m_current_state = stPlaying;
@@ -165,9 +163,7 @@ void CSoundRender_Emitter::update(float dt)
 		fTimeToPropagade = fTime;
 		fade_volume = 1.f;
 		start_occlusion();
-		smooth_volume = p_source.base_volume * p_source.volume * (owner_data->s_type == st_Effect
-			                                                          ? psSoundVEffects * psSoundVFactor
-			                                                          : psSoundVMusic * psSoundVMusicFactor) * (b2D ? 1.f : occluder_volume);
+		smooth_volume = p_source.base_volume * p_source.volume * player_volume() * (b2D ? 1.f : occluder_volume);
 		if (update_culling(dt))
 		{
 			m_current_state = stPlayingLooped;
@@ -409,7 +405,7 @@ BOOL CSoundRender_Emitter::update_culling(float dt)
 		volume_att = (p_source.max_distance - dist) / min_max;
 		clamp(volume_att, 0.f, p_source.volume);
 
-		float fade_scale = bStopping || (p_source.base_volume * p_source.volume * (owner_data->s_type == st_Effect ? psSoundVEffects * psSoundVFactor : psSoundVMusic * psSoundVMusicFactor) < psSoundCull) ? -1.f : 1.f;
+		float fade_scale = bStopping || (p_source.base_volume * p_source.volume * player_volume() < psSoundCull) ? -1.f : 1.f;
 		fade_volume += dt * 10.f * fade_scale;
 		//LostAlphaRus out
 
@@ -442,7 +438,7 @@ BOOL CSoundRender_Emitter::update_culling(float dt)
 
 	// Update smoothing
 	//LostAlphaRus in
-	smooth_volume = (p_source.base_volume * volume_att * (owner_data->s_type == st_Effect ? psSoundVEffects * psSoundVFactor : psSoundVMusic * psSoundVMusicFactor) * occluder_volume * fade_volume);
+	smooth_volume = (p_source.base_volume * volume_att * player_volume() * occluder_volume * fade_volume);
 	//LostAlphaRus out
 
 	if (smooth_volume < psSoundCull)
