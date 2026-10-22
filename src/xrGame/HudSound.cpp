@@ -92,7 +92,8 @@ void HUD_SOUND_ITEM::PlaySound(HUD_SOUND_ITEM& hud_snd,
                                u8 index,
 							   float volume_mult,
 							   float frequency,
-							   float delay_mult)
+							   float delay_mult,
+							   bool hud_3d)
 {
 	PROF_EVENT("HUD_SOUND_ITEM::PlaySound");
 	if (hud_snd.sounds.empty()) return;
@@ -100,7 +101,8 @@ void HUD_SOUND_ITEM::PlaySound(HUD_SOUND_ITEM& hud_snd,
 	hud_snd.m_activeSnd = NULL;
 	StopSound(hud_snd);
 
-	u32 flags = b_hud_mode ? sm_2D : 0;
+	// A HUD sound played 3D keeps the HUD volume
+	u32 flags = b_hud_mode && !hud_3d ? sm_2D : 0;
 	if (looped)
 		flags |= sm_Looped;
 	if (hud_snd.m_b_layer)
@@ -193,7 +195,8 @@ void HUD_SOUND_COLLECTION::PlaySound(LPCSTR alias,
                                      u8 index,
 									 float volume_mult,
 									 float frequency,
-									 float delay_mult)
+									 float delay_mult,
+									 bool hud_3d)
 {
 	xr_vector<HUD_SOUND_ITEM>::iterator it = m_sound_items.begin();
 	xr_vector<HUD_SOUND_ITEM>::iterator it_e = m_sound_items.end();
@@ -205,7 +208,8 @@ void HUD_SOUND_COLLECTION::PlaySound(LPCSTR alias,
 
 	HUD_SOUND_ITEM* snd_item = FindSoundItem(alias, false);
 	if (snd_item)
-		HUD_SOUND_ITEM::PlaySound(*snd_item, position, parent, hud_mode, looped, index, volume_mult, frequency, delay_mult);
+		HUD_SOUND_ITEM::PlaySound(*snd_item, position, parent, hud_mode, looped, index, volume_mult, frequency, delay_mult,
+		                          hud_3d);
 }
 
 void HUD_SOUND_COLLECTION::StopSound(LPCSTR alias)
@@ -311,7 +315,7 @@ void HUD_SOUND_COLLECTION_LAYERED::UpdateAllSoundsPositions(const Fvector& P)
 
 void HUD_SOUND_COLLECTION_LAYERED::PlaySound(LPCSTR alias, const Fvector& position, const CObject* parent,
                                              bool hud_mode, bool looped, u8 index, float volume_mult, float frequency,
-                                             float delay_mult)
+                                             float delay_mult, bool hud_3d)
 {
 	PROF_EVENT("HUD_SOUND_COLLECTION_LAYERED::PlaySound");
 	LPCSTR alias_to_play = alias;
@@ -398,7 +402,8 @@ void HUD_SOUND_COLLECTION_LAYERED::PlaySound(LPCSTR alias, const Fvector& positi
 	for (; it != it_e; ++it)
 	{
 		if (it->m_alias == alias_to_play && volume_mult > EPS_S)
-			it->PlaySound(alias_to_play, position, parent, hud_mode, looped, index, volume_mult, frequency, delay_mult);
+			it->PlaySound(alias_to_play, position, parent, hud_mode, looped, index, volume_mult, frequency, delay_mult,
+			              hud_3d);
 	}
 }
 

@@ -140,7 +140,7 @@ void CWeaponMagazinedWGrenade::OnShot()
 	if (m_bGrenadeMode)
 	{
 		PlayAnimShoot();
-		PlaySound("sndShotG", get_LastFP2());
+		PlayShotSound("sndShotG", get_LastFP2());
 		AddShotEffector();
 		StartFlameParticles2();
 
@@ -382,7 +382,7 @@ void CWeaponMagazinedWGrenade::OnEvent(NET_Packet& P, u16 type)
 			if (bLaunch)
 			{
 				PlayAnimShoot();
-				PlaySound("sndShotG", get_LastFP2());
+				PlayShotSound("sndShotG", get_LastFP2());
 				AddShotEffector();
 				StartFlameParticles2();
 			}

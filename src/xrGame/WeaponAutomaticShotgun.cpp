@@ -190,7 +190,7 @@ void CWeaponAutomaticShotgun::PlaySoundShot()
 	{
 		if (m_sounds.FindSoundItem("sndShootL", false))
 		{
-			m_sounds.PlaySound("sndShootL", get_LastFP(), H_Root(), !!GetHUDmode(), false, (u8)-1);
+			PlayShotSound("sndShootL", get_LastFP());
 		}
 		else
 		{

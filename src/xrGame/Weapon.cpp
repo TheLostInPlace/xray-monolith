@@ -283,6 +283,29 @@ void CWeapon::UpdateFireDependencies_internal()
 	}
 }
 
+bool CWeapon::HudShot3D()
+{
+	return psSoundFlags.test(ss_HudShot3D) && GetHUDmode();
+}
+
+// On the aim line at the camera to fire point distance, 5 cm short of a wall on that line
+Fvector CWeapon::HudShotPos(const Fvector& fire_point)
+{
+	const Fvector& cam = Device.vCameraPosition;
+	const Fvector& dir = Device.vCameraDirection;
+	const float L = clampr(cam.distance_to(fire_point), 0.2f, 1.5f);
+	collide::rq_result RQ;
+	const bool wall = Level().ObjectSpace.RayPick(cam, dir, L, collide::rqtStatic, RQ, H_Root());
+	return Fvector().mad(cam, dir, wall ? _max(RQ.range - 0.05f, 0.f) : L);
+}
+
+void CWeapon::PlayShotSound(LPCSTR alias, const Fvector& fire_point)
+{
+	const bool hud_3d = HudShot3D();
+	const Fvector P = hud_3d ? HudShotPos(fire_point) : fire_point;
+	m_sounds.PlaySound(alias, P, H_Root(), !!GetHUDmode(), false, (u8)-1, 1.f, 1.f, 1.f, hud_3d);
+}
+
 void updateCurrentScope() {
 	if (!g_pGameLevel) return;
 

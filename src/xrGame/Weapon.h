@@ -653,6 +653,10 @@ protected:
 	virtual void OnShot()
 	{
 	};
+	// First-person shots play as 3D sounds on the aim line under snd_hud_shot_3d
+	bool HudShot3D();
+	Fvector HudShotPos(const Fvector& fire_point);
+	void PlayShotSound(LPCSTR alias, const Fvector& fire_point);
 	virtual void AddShotEffector();
 	virtual void RemoveShotEffector();
 	virtual void ClearShotEffector();

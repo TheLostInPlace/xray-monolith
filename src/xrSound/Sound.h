@@ -85,6 +85,8 @@ enum
 	//!< Use eax
 	ss_Raytrace = (1ul << 3ul),
 	//!< Raytraced acoustics, read at level load
+	ss_HudShot3D = (1ul << 4ul),
+	//!< First-person shots play as 3D sounds on the aim line
 	ss_forcedword = u32(-1)
 };
 

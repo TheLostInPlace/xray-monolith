@@ -44,6 +44,9 @@ protected:
 	// General
 	//кадр момента пересчета UpdateSounds
 	u32 dwUpdateSounds_Frame = 0;
+	// A first-person shot played 3D follows the aim line
+	bool m_hud_shot_3d = false;
+	Fvector m_hud_shot_pos;
 protected:
 	virtual void OnMagazineEmpty();
 
