@@ -504,13 +504,105 @@ namespace
 		return std::sqrt(gain < 1.f ? gain : 1.f);
 	}
 
-	// The SDK's own fit, for echograms the continuous one cannot span, set once from the first formulas struct
+	// The SDK's own formulas, set once from the first formulas struct
 	std::atomic<CustomEAXFormulas_CalculateRT60Func> sdk_rt60{ nullptr };
+	std::atomic<CustomEAXFormulas_InitialiseFunc> sdk_initialise{ nullptr };
+	std::atomic<CustomEAXFormulas_CalculateReflectionsDelayFunc> sdk_reflections_delay{ nullptr };
+
+	// 1 ms bins place the first reflection, the SDK's formulas read them summed to 10 ms and the decay fit to the coarse bins
+	constexpr int echogram_bin_ms = 1, eax_bin_ms = 10;
+	constexpr int listener_echogram_ms = 20000, listener_decay_bin_ms = 50;
+	constexpr int group_echogram_ms = 5000, group_decay_bin_ms = 100;
+
+	// The fine bins of this thread's analysis up to the longest reflections delay
+	constexpr int fine_head = int(EAX_REFLECTIONS_DELAY_MAX * 1000.f) / echogram_bin_ms + 1;
+	struct fine_echogram
+	{
+		const VACustomEAXFormulas* formulas = nullptr;
+		float bin_ms = 0.f;
+		int full_length = 0, length = 0;
+		float peak = 0.f;
+		float average[fine_head];
+	};
+	thread_local fine_echogram fine;
+
+	// Sums the fine echograms to 10 ms bins for the SDK's formulas and keeps the fine head for the reflections delay
+	void eax_initialise(VACustomEAXFormulas* formulas, VAProcessedReverb* processed, float totalReturnedEnergyLF, float totalReturnedEnergyHF, float echogramGranularity, float* echogramLF, float* echogramHF, float* echogramAverage, int echogramLength)
+	{
+		const auto sdk = sdk_initialise.load(std::memory_order_relaxed);
+		const float ratio = eax_bin_ms / echogramGranularity;
+		const int factor = int(std::lround(ratio));
+		if (factor <= 1 || std::abs(ratio - factor) >= 1e-3f)
+		{
+			fine.formulas = nullptr;
+			sdk(formulas, processed, totalReturnedEnergyLF, totalReturnedEnergyHF, echogramGranularity, echogramLF, echogramHF, echogramAverage, echogramLength);
+			return;
+		}
+		fine.formulas = formulas;
+		fine.bin_ms = echogramGranularity;
+		fine.full_length = echogramLength;
+		fine.length = std::min(echogramLength, fine_head);
+		fine.peak = echogramLength > 0 ? *std::max_element(echogramAverage, echogramAverage + echogramLength) : 0.f;
+		std::copy_n(echogramAverage, fine.length, fine.average);
+		thread_local xr_vector<float> coarse[3];
+		const float* bands[3] = { echogramLF, echogramHF, echogramAverage };
+		const int length = (echogramLength + factor - 1) / factor;
+		for (int b = 0; b < 3; ++b)
+		{
+			coarse[b].assign(length, 0.f);
+			for (int i = 0; i < echogramLength; ++i)
+				coarse[b][i / factor] += bands[b][i];
+		}
+		sdk(formulas, processed, totalReturnedEnergyLF, totalReturnedEnergyHF, float(eax_bin_ms), coarse[0].data(), coarse[1].data(), coarse[2].data(), length);
+	}
+
+	// The first fine bin holding the SDK's share of the fine peak, the SDK's coarse rule when no fine bins were kept or none passes
+	float eax_reflections_delay(VACustomEAXFormulas* formulas, float energyThreshold)
+	{
+		if (fine.formulas == formulas && fine.peak > 0.f)
+		{
+			const float level = fine.peak * energyThreshold;
+			for (int i = 0; i < fine.length; ++i)
+			{
+				if (fine.average[i] >= level)
+					return std::clamp(i * fine.bin_ms * 0.001f, EAX_REFLECTIONS_DELAY_MIN, EAX_REFLECTIONS_DELAY_MAX);
+			}
+		}
+		return sdk_reflections_delay.load(std::memory_order_relaxed)(formulas, energyThreshold);
+	}
 
 	// A band's decay from its echogram's first run of filled bins on the analysis thread, kept in the EAX decay range
 	float decay_rt60(VACustomEAXFormulas* formulas, float* echogram, int echogramLength)
 	{
-		float decay = schroeder_t20(echogram, echogramLength, formulas->binDurationMs * 0.001f);
+		// The SDK passes its own fine echogram, summed here to the bins its formulas read
+		if (fine.formulas == formulas && echogramLength == fine.full_length)
+		{
+			const int sum = int(std::lround(formulas->binDurationMs / fine.bin_ms));
+			thread_local xr_vector<float> view;
+			view.assign((echogramLength + sum - 1) / sum, 0.f);
+			for (int i = 0; i < echogramLength; ++i)
+				view[i / sum] += echogram[i];
+			echogram = view.data();
+			echogramLength = int(view.size());
+		}
+		// The echogram's span tells the listener from a group, an unknown span or uneven factor fits the bins as passed
+		const float bin_ms = formulas->binDurationMs;
+		const long span_ms = std::lround(echogramLength * bin_ms);
+		const float coarse_ms = span_ms == listener_echogram_ms ? float(listener_decay_bin_ms) :
+			span_ms == group_echogram_ms ? float(group_decay_bin_ms) : bin_ms;
+		const float ratio = coarse_ms / bin_ms;
+		const int factor = int(std::lround(ratio));
+		float decay;
+		if (factor > 1 && std::abs(ratio - factor) < 1e-3f)
+		{
+			thread_local xr_vector<float> coarse;
+			coarse.assign((echogramLength + factor - 1) / factor, 0.f);
+			for (int i = 0; i < echogramLength; ++i)
+				coarse[i / factor] += echogram[i];
+			decay = schroeder_t20(coarse.data(), int(coarse.size()), coarse_ms * 0.001f);
+		}
+		else
+			decay = schroeder_t20(echogram, echogramLength, bin_ms * 0.001f);
 		if (decay <= 0.f)
 			decay = sdk_rt60.load(std::memory_order_relaxed)(formulas, echogram, echogramLength);
 		return std::clamp(decay, EAX_DECAY_TIME_MIN, EAX_DECAY_TIME_MAX);
@@ -939,13 +1031,19 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 	// Open sky stays open past the box edge
 	check(vaWorldSetEmittersOutsideTheWorldAreMuffled(world, false), "vaWorldSetEmittersOutsideTheWorldAreMuffled");
 	check(vaWorldSetOcclusionRaysLoseEnergyFromWorldBounds(world, false), "vaWorldSetOcclusionRaysLoseEnergyFromWorldBounds");
-	// The world frees its formulas with itself, only the decay fit differs from the SDK's
+	// The world frees its formulas with itself, the echogram view, reflections delay and decay fit differ from the SDK's
 	if (VACustomEAXFormulas* formulas = vaCustomEAXFormulasCreate())
 	{
-		// Every struct holds the same SDK fit, so only the first world sets it
+		// Every struct holds the same SDK formulas, so only the first world sets them
 		CustomEAXFormulas_CalculateRT60Func unset = nullptr;
 		sdk_rt60.compare_exchange_strong(unset, formulas->calculateRt60);
 		formulas->calculateRt60 = decay_rt60;
+		CustomEAXFormulas_InitialiseFunc no_initialise = nullptr;
+		sdk_initialise.compare_exchange_strong(no_initialise, formulas->initialise);
+		formulas->initialise = eax_initialise;
+		CustomEAXFormulas_CalculateReflectionsDelayFunc no_delay = nullptr;
+		sdk_reflections_delay.compare_exchange_strong(no_delay, formulas->calculateReflectionsDelay);
+		formulas->calculateReflectionsDelay = eax_reflections_delay;
 		if (!check(vaWorldSetCustomEAXFormulas(world, formulas), "vaWorldSetCustomEAXFormulas"))
 			check(vaCustomEAXFormulasDestroy(formulas), "vaCustomEAXFormulasDestroy");
 	}
@@ -1509,9 +1607,9 @@ void CSoundRender_Raytrace::build(CDB::MODEL* M, const CSound_material_desc* mat
 	const float cap = vaEmitterGetReverbEnergyCap(listener) * reference_bounces / vaEmitterGetReverbBounceCount(listener);
 	check(vaEmitterSetReverbEnergyCap(listener, std::min(cap, 1.f)), "vaEmitterSetReverbEnergyCap");
 	check(vaEmitterSetScatteringSeed(listener, 1), "vaEmitterSetScatteringSeed");
-	// A 20 s echogram holds a concrete hall's whole tail, 50 ms bins keep the first arrival sharp for the decay fit
-	check(vaEmitterSetMaxEchogramTime(listener, 20000), "vaEmitterSetMaxEchogramTime");
-	check(vaEmitterSetEchogramGranularity(listener, 50), "vaEmitterSetEchogramGranularity");
+	// A 20 s echogram holds a concrete hall's whole tail, 1 ms bins place the first reflection
+	check(vaEmitterSetMaxEchogramTime(listener, listener_echogram_ms), "vaEmitterSetMaxEchogramTime");
+	check(vaEmitterSetEchogramGranularity(listener, echogram_bin_ms), "vaEmitterSetEchogramGranularity");
 	// Ambient occlusion rays count the energy that escapes to open sky
 	check(vaEmitterSetAmbientOcclusionRayCount(listener, listener_ambient_rays), "vaEmitterSetAmbientOcclusionRayCount");
 	check(vaEmitterSetAmbientOcclusionBounceCount(listener, 8), "vaEmitterSetAmbientOcclusionBounceCount");
@@ -3091,9 +3189,9 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 			check(vaEmitterSetScatteringSeed(e, 1), "vaEmitterSetScatteringSeed");
 			check(vaEmitterSetTrailRefreshCount(e, group_refresh), "vaEmitterSetTrailRefreshCount");
 			check(vaEmitterSetRefreshDistanceThreshold(e, 1.f), "vaEmitterSetRefreshDistanceThreshold");
-			// A 5 s echogram in 100 ms bins
-			check(vaEmitterSetMaxEchogramTime(e, 5000), "vaEmitterSetMaxEchogramTime");
-			check(vaEmitterSetEchogramGranularity(e, 100), "vaEmitterSetEchogramGranularity");
+			// A 5 s echogram in 1 ms bins
+			check(vaEmitterSetMaxEchogramTime(e, group_echogram_ms), "vaEmitterSetMaxEchogramTime");
+			check(vaEmitterSetEchogramGranularity(e, echogram_bin_ms), "vaEmitterSetEchogramGranularity");
 			check(vaEmitterSetKeepReverbTailAlive(e, true), "vaEmitterSetKeepReverbTailAlive");
 		}
 		check(vaEmitterSetLogCallback(e, sdk_log), "vaEmitterSetLogCallback");
