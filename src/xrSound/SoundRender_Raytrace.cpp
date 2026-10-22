@@ -3058,7 +3058,7 @@ void CSoundRender_Raytrace::retire(CSoundRender_RaytraceOccluder& O)
 		++occluder_moves;
 }
 
-// Every emitter of one object shares its source, an ownerless emitter gets its own
+// Every emitter of one object within the refresh distance shares its source, any other gets its own
 bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 {
 	xrCriticalSectionTryGuard guard(lock);
@@ -3070,6 +3070,7 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 
 	const void* owner = E->owner_data->g_object;
 	CSoundRender_RaytraceSource* S = nullptr;
+	bool split = false;
 	if (owner)
 	{
 		const auto it = std::find_if(sources.begin(), sources.end(), [owner](const CSoundRender_RaytraceSource* s) { return s->owner == owner; });
@@ -3087,6 +3088,13 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 			// A path still on the worker was cast from the old spot, so nobody takes it
 			std::replace(ray_targets.begin(), ray_targets.end(), S, static_cast<CSoundRender_RaytraceSource*>(nullptr));
 		}
+		// A sound farther than that from its owner's playing source is traced where it plays, on an ownerless source
+		else if (S && S->users && S->position.distance_to(E->p_source.position) > vaEmitterGetRefreshDistanceThreshold(muffle))
+		{
+			S = nullptr;
+			owner = nullptr;
+			split = true;
+		}
 	}
 	if (!S)
 	{
@@ -3102,8 +3110,8 @@ bool CSoundRender_Raytrace::acquire(CSoundRender_Emitter* E)
 		check(vaEmitterSetMinimumPermeationEnergy(e, permeation_floor), "vaEmitterSetMinimumPermeationEnergy");
 		check(vaEmitterSetMinimumAmbientPermeationEnergy(e, permeation_floor), "vaEmitterSetMinimumAmbientPermeationEnergy");
 		// A source away from the listener casts its own reverb into a group, its tail stays after removal
-		// Interface files kept dry take no group place
-		const bool reverb = group_sources < group_budget && listener_last.distance_to(E->p_source.position) > group_near &&
+		// Interface files kept dry and sounds split off their owner's source take no group place
+		const bool reverb = !split && group_sources < group_budget && listener_last.distance_to(E->p_source.position) > group_near &&
 			!E->source()->m_bInterface;
 		if (reverb)
 		{

@@ -10,7 +10,7 @@ struct VAMeshPrimitive;
 struct VAVisualisationData;
 class CSoundRender_Emitter;
 
-// One SDK target per owner object, shared by every emitter the object plays
+// One SDK target per owner object, shared by every emitter the object plays within the refresh distance of it
 // An owner's target outlives its sounds while the listener stays within range
 struct CSoundRender_RaytraceSource
 {
