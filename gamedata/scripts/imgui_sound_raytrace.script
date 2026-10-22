@@ -1,0 +1,572 @@
+-- Raytraced sound monitor in the ImGui debug menu
+-- Debug > Raytraced sound opens a panel of the listener's room, its reverb and the muffling of the sounds around it
+
+local ipairs, type = ipairs, type
+local math_max, math_min = math.max, math.min
+local string_format, string_gsub = string.format, string.gsub
+local table_sort, table_concat = table.sort, table.concat
+local bit_bor = bit.bor
+
+local SECTION    = "imgui_sound_raytrace"
+local RATE_MS    = 1000
+local PATH_MS    = 250
+local ROOM_MS    = 500
+local NEAR_MS    = 250
+local NEAR_RANGE = 80
+local NEAR_ROWS  = 12
+local OVERWRITE  = "snd_efx_reverb_overwrite"
+
+local REVERB_KEYS = { "decay_time", "decay_hf_ratio", "decay_lf_ratio", "gain", "gain_hf", "gain_lf",
+	"reflections_gain", "reflections_delay", "late_reverb_gain", "late_reverb_delay", "density", "diffusion",
+	"echo_time", "echo_depth", "modulation_time", "modulation_depth", "air_absorption_gain_hf",
+	"hf_reference", "lf_reference", "room_rolloff_factor" }
+
+local open = { panel = false, hud = false }
+local snap = { frame = -1, acoustics = nil, reverb = nil, rate = 0, rate_serial = nil, rate_at = 0, serial = nil, changed_at = 0 }
+local target = { id = nil, name = "", dist = 0, pinned = false, muffling = nil, ticket = nil, path = nil, path_id = nil, path_at = 0 }
+local room = { ticket = nil, result = nil, at = 0 }
+local near = { rows = {}, at = 0 }
+-- the overwrite cvars as they were before the panel froze the reverb
+local frozen
+
+local CLR = {}
+local HUD_FLAGS, TABLE_FLAGS
+local ZERO, CORNER, HUD_POS, PANEL_SIZE, BAR_SIZE
+
+local function colors()
+	if CLR.normal then return end
+	local function rgba(r, g, b, a) return fcolor():set(r / 255, g / 255, b / 255, a / 255) end
+	CLR.normal = rgba(215, 215, 215, 255)
+	CLR.good   = rgba(130, 205, 130, 255)
+	CLR.warn   = rgba(235, 165, 60, 235)
+	CLR.dim    = rgba(140, 140, 140, 175)
+	CLR.alarm  = rgba(240, 80, 70, 240)
+
+	HUD_FLAGS = bit_bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoInputs, ImGuiWindowFlags.AlwaysAutoResize,
+		ImGuiWindowFlags.NoSavedSettings, ImGuiWindowFlags.NoFocusOnAppearing)
+	TABLE_FLAGS = bit_bor(ImGuiTableFlags.SizingFixedFit, ImGuiTableFlags.NoSavedSettings, ImGuiTableFlags.RowBg,
+		ImGuiTableFlags.BordersInnerV)
+
+	ZERO       = vector2():set(0, 0)
+	CORNER     = vector2():set(1, 0)
+	HUD_POS    = vector2():set(0, 15)
+	PANEL_SIZE = vector2():set(520, 540)
+	BAR_SIZE   = vector2():set(160, 0)
+end
+
+-- text widgets read their string as a printf format
+local function esc(s)
+	return (string_gsub(s, "%%", "%%%%"))
+end
+
+local function text(clr, s)
+	ImGui.TextColored(clr, esc(s))
+end
+
+local function num(v, fmt)
+	if type(v) ~= "number" then return "-" end
+	return string_format(fmt or "%.3f", v)
+end
+
+-- -1 marks a decay band the fit missed or an ambient filter the level lacks
+local function band(v, fmt)
+	if type(v) ~= "number" or v < 0 then return "-" end
+	return string_format(fmt or "%.3f", v)
+end
+
+local function con_bool(name)
+	return get_console():get_bool(name)
+end
+
+local function con_set(name, on)
+	get_console():execute(name .. (on and " on" or " off"))
+end
+
+local function mt_level_call()
+	return con_bool("mt_level_call")
+end
+
+local function save_view()
+	local c = axr_main and axr_main.config
+	if not c then return end
+	c:w_value(SECTION, "panel", open.panel)
+	c:w_value(SECTION, "hud", open.hud)
+	c:save()
+end
+
+local function load_view()
+	local c = axr_main and axr_main.config
+	if not c then return end
+	open.panel = c:r_value(SECTION, "panel", 1, false) == true
+	open.hud = c:r_value(SECTION, "hud", 1, false) == true
+end
+
+local function object_name(o)
+	if IsStalker(o) then return o:character_name() end
+	return o:section()
+end
+
+local function cam_pos()
+	return vector():set(device().cam_pos)
+end
+
+-- a ticket's answer, nil while pending, false once dropped
+local function collect(ticket)
+	if not ticket then return false end
+	return level.snd_query_result(ticket)
+end
+
+local function read_listener(now)
+	local a = level.get_snd_acoustics()
+	snap.acoustics = a
+	snap.reverb = level.get_snd_reverb()
+
+	local serial = a and a.serial
+	if serial ~= snap.serial then
+		snap.serial = serial
+		snap.changed_at = now
+	end
+	if now - snap.rate_at < RATE_MS then return end
+	if serial and snap.rate_serial and serial >= snap.rate_serial then
+		snap.rate = (serial - snap.rate_serial) * 1000 / (now - snap.rate_at)
+	else
+		snap.rate = 0
+	end
+	snap.rate_serial = serial
+	snap.rate_at = now
+end
+
+local function read_target(now)
+	if not target.pinned then
+		local o = level.get_target_obj()
+		target.id = o and o:id() or nil
+	end
+
+	local o = target.id and level.object_by_id(target.id)
+	if not o then
+		target.id, target.pinned, target.muffling = nil, false, nil
+		return
+	end
+
+	local cam = cam_pos()
+	target.name = object_name(o)
+	target.dist = o:position():distance_to(cam)
+	target.muffling = level.get_snd_muffling(target.id)
+
+	if target.path_id ~= target.id then
+		target.path, target.ticket, target.path_id, target.path_at = nil, nil, target.id, 0
+	end
+	if target.ticket then
+		local r = collect(target.ticket)
+		if r == nil then return end
+		if r then target.path = r end
+		target.ticket = nil
+	end
+	if now - target.path_at >= PATH_MS then
+		target.ticket = level.snd_query_path(cam, o:center(), target.id)
+		target.path_at = now
+	end
+end
+
+local function read_room(now)
+	if room.ticket then
+		local r = collect(room.ticket)
+		if r == nil then return end
+		if r then room.result = r end
+		room.ticket = nil
+	end
+	if now - room.at >= ROOM_MS then
+		room.ticket = level.snd_query_room(cam_pos())
+		room.at = now
+	end
+end
+
+local function by_distance(a, b)
+	return a.dist < b.dist
+end
+
+local function read_near(now)
+	if now - near.at < NEAR_MS then return end
+	near.at = now
+
+	local rows, cam = {}, cam_pos()
+	for _, id in ipairs(db.OnlineStalkers) do
+		local o = id ~= 0 and level.object_by_id(id)
+		if o then
+			local dist = o:position():distance_to(cam)
+			if dist <= NEAR_RANGE then
+				rows[#rows + 1] = { name = object_name(o), dist = dist, alive = o:alive(), muffling = level.get_snd_muffling(id) }
+			end
+		end
+	end
+	table_sort(rows, by_distance)
+	for i = #rows, NEAR_ROWS + 1, -1 do
+		rows[i] = nil
+	end
+	near.rows = rows
+end
+
+-- one read a frame, shared by the panel and the HUD
+local function tick()
+	local frame = device().frame
+	if frame == snap.frame then return end
+	snap.frame = frame
+
+	local now = time_global()
+	read_listener(now)
+	if not level.is_snd_raytracing() then return end
+	read_target(now)
+	read_room(now)
+	if open.panel then read_near(now) end
+end
+
+local function freeze_reverb()
+	local r = snap.reverb
+	if not r or frozen then return end
+
+	local c = get_console()
+	frozen = { on = c:get_integer(OVERWRITE), hf_limit = c:get_integer(OVERWRITE .. "_decay_hf_limit") }
+	for _, k in ipairs(REVERB_KEYS) do
+		frozen[k] = c:get_float(OVERWRITE .. "_" .. k)
+		c:execute(string_format("%s_%s %.5f", OVERWRITE, k, r[k]))
+	end
+	c:execute(string_format("%s_decay_hf_limit %d", OVERWRITE, r.decay_hf_limit and 1 or 0))
+	c:execute(OVERWRITE .. " 1")
+end
+
+local function live_reverb()
+	if not frozen then return end
+
+	local c = get_console()
+	for _, k in ipairs(REVERB_KEYS) do
+		c:execute(string_format("%s_%s %.5f", OVERWRITE, k, frozen[k]))
+	end
+	c:execute(string_format("%s_decay_hf_limit %d", OVERWRITE, frozen.hf_limit))
+	c:execute(string_format("%s %d", OVERWRITE, frozen.on))
+	frozen = nil
+end
+
+local function status_text()
+	if not level.is_snd_raytracing() then
+		return CLR.alarm, "raytracing off"
+	end
+	if not snap.acoustics then
+		return CLR.warn, "raytracing on, no result yet"
+	end
+	local age = (time_global() - snap.changed_at) / 1000
+	return age > 2 and CLR.warn or CLR.good, string_format("raytracing on  %.0f updates/s  last %.1fs ago", snap.rate, age)
+end
+
+local function muffling_text(m)
+	if not m then return "no traced sound yet" end
+	return string_format("lf %.2f  hf %.2f  direct lf %.2f  hf %.2f", m.lf, m.hf, m.direct_lf, m.direct_hf)
+end
+
+local function path_text(p)
+	if not p then return "pending" end
+	return string_format("lf %.2f  hf %.2f  direct %.2f/%.2f  through %.2f/%.2f  %d crossings%s",
+		p.lf, p.hf, p.direct_lf, p.direct_hf, p.through_lf, p.through_hf, p.crossings, p.blocked and "  blocked" or "")
+end
+
+local function dump()
+	local function line(s) printf("[SND-RT] %s", s) end
+	local _, status = status_text()
+	line(status)
+
+	local a = snap.acoustics
+	if a then
+		line(string_format("room serial %d at (%.1f, %.1f, %.1f) outside %.3f returned %.3f decay lf %s hf %s absorption lf %.3f hf %.3f roughness %.3f ambient lf %s hf %s",
+			a.serial, a.position.x, a.position.y, a.position.z, a.sky, a.returned, band(a.decay_lf), band(a.decay_hf),
+			a.absorption_lf, a.absorption_hf, a.roughness, band(a.ambient_lf), band(a.ambient_hf)))
+	end
+	local r = snap.reverb
+	if r then
+		local out = {}
+		for _, k in ipairs(REVERB_KEYS) do
+			out[#out + 1] = string_format("%s %.4f", k, r[k])
+		end
+		line(string_format("reverb %s %s", r.applied and "applied" or "overwritten", table_concat(out, " ")))
+	end
+	if room.result then
+		line(string_format("camera room open %.3f reflect lf %.3f hf %.3f", room.result.open, room.result.reflect_lf, room.result.reflect_hf))
+	end
+	if target.id then
+		line(string_format("target %s %.1f m muffling %s path %s", target.name, target.dist, muffling_text(target.muffling), path_text(target.path)))
+	end
+	for _, row in ipairs(near.rows) do
+		line(string_format("near %s %.1f m %s", row.name, row.dist, muffling_text(row.muffling)))
+	end
+end
+
+local function bar(label, v, fmt)
+	ImGui.TableNextRow(0, 0)
+	ImGui.TableNextColumn()
+	ImGui.Text(esc(label))
+	ImGui.TableNextColumn()
+	if type(v) ~= "number" or v < 0 then
+		ImGui.TextDisabled("-")
+		return
+	end
+	ImGui.ProgressBar(math_max(0, math_min(1, v)), BAR_SIZE, string_format(fmt or "%.3f", v))
+end
+
+local function row(label, value)
+	ImGui.TableNextRow(0, 0)
+	ImGui.TableNextColumn()
+	ImGui.Text(esc(label))
+	ImGui.TableNextColumn()
+	ImGui.Text(esc(value))
+end
+
+local function begin_pairs(id)
+	return ImGui.BeginTable(id, 2, TABLE_FLAGS, ZERO, 0)
+end
+
+local function draw_switches()
+	local hit, on = ImGui.Checkbox("Draw rays", con_bool("snd_raytrace_draw"))
+	if hit then con_set("snd_raytrace_draw", on) end
+	ImGui.SameLine(0, -1)
+	hit, on = ImGui.Checkbox("Engine sound stats", con_bool("snd_stats"))
+	if hit then con_set("snd_stats", on) end
+	ImGui.SameLine(0, -1)
+	hit, on = ImGui.Checkbox("HUD", open.hud)
+	if hit then
+		open.hud = on
+		save_view()
+	end
+
+	hit, on = ImGui.Checkbox("snd_raytrace", con_bool("snd_raytrace"))
+	if hit then con_set("snd_raytrace", on) end
+	ImGui.SameLine(0, -1)
+	ImGui.TextDisabled("next level load")
+	ImGui.SameLine(0, -1)
+	hit, on = ImGui.Checkbox("snd_efx", con_bool("snd_efx"))
+	if hit then con_set("snd_efx", on) end
+	ImGui.SameLine(0, -1)
+	ImGui.TextDisabled("next game start")
+
+	ImGui.BeginDisabled(not frozen and not snap.reverb)
+	if ImGui.Button(frozen and "Live reverb" or "Freeze reverb here", ZERO) then
+		if frozen then live_reverb() else freeze_reverb() end
+	end
+	ImGui.EndDisabled()
+	if ImGui.IsItemHovered(0) then
+		ImGui.SetTooltip("Holds the reverb of this spot through the console overwrite, so walking elsewhere shows what the raytracer changes")
+	end
+	ImGui.SameLine(0, -1)
+	if ImGui.Button("Dump to log", ZERO) then dump() end
+	if frozen then
+		ImGui.SameLine(0, -1)
+		text(CLR.warn, "reverb frozen")
+	end
+end
+
+local function draw_room()
+	if not ImGui.CollapsingHeader("Listener room", ImGuiTreeNodeFlags.DefaultOpen) then return end
+	local a = snap.acoustics
+	if not a then
+		ImGui.TextDisabled("no result")
+		return
+	end
+	if not begin_pairs("##room") then return end
+	bar("outside share", a.sky)
+	bar("energy returned", a.returned)
+	row("decay lf / hf", string_format("%s / %s s", band(a.decay_lf, "%.2f"), band(a.decay_hf, "%.2f")))
+	row("absorption lf / hf", string_format("%.3f / %.3f", a.absorption_lf, a.absorption_hf))
+	row("roughness", num(a.roughness))
+	row("ambient filter lf / hf", string_format("%s / %s", band(a.ambient_lf), band(a.ambient_hf)))
+	row("traced at", string_format("%.1f, %.1f, %.1f", a.position.x, a.position.y, a.position.z))
+	local q = room.result
+	if q then
+		bar("camera probe open", q.open)
+		row("camera probe reflect lf / hf", string_format("%.3f / %.3f", q.reflect_lf, q.reflect_hf))
+	end
+	ImGui.EndTable()
+end
+
+local function draw_reverb()
+	if not ImGui.CollapsingHeader("Reverb", 0) then return end
+	local r = snap.reverb
+	if not r then
+		ImGui.TextDisabled("no result")
+		return
+	end
+	if r.applied then
+		text(CLR.good, "raytraced reverb applied")
+	else
+		text(CLR.warn, "console overwrite in use, values below are the raytraced ones")
+	end
+	if not begin_pairs("##reverb") then return end
+	for _, k in ipairs(REVERB_KEYS) do
+		row(k, num(r[k], "%.4f"))
+	end
+	row("decay_hf_limit", r.decay_hf_limit and "on" or "off")
+	ImGui.EndTable()
+end
+
+local function draw_target()
+	if not ImGui.CollapsingHeader("Target", ImGuiTreeNodeFlags.DefaultOpen) then return end
+	if not target.id then
+		ImGui.TextDisabled("aim at an object")
+		return
+	end
+	text(CLR.normal, string_format("%s  %.1f m", target.name, target.dist))
+	ImGui.SameLine(0, -1)
+	if ImGui.SmallButton(target.pinned and "Unpin" or "Pin") then
+		target.pinned = not target.pinned
+	end
+	if not begin_pairs("##target") then return end
+	local m = target.muffling
+	if m then
+		bar("its sounds lf", m.lf, "%.2f")
+		bar("its sounds hf", m.hf, "%.2f")
+		row("direct share lf / hf", string_format("%.2f / %.2f", m.direct_lf, m.direct_hf))
+	else
+		row("its sounds", "no traced sound yet")
+	end
+	local p = target.path
+	if p then
+		bar("path from camera lf", p.lf, "%.2f")
+		bar("path from camera hf", p.hf, "%.2f")
+		row("direct lf / hf", string_format("%.2f / %.2f", p.direct_lf, p.direct_hf))
+		row("through walls lf / hf", string_format("%.2f / %.2f", p.through_lf, p.through_hf))
+		row("crossings", string_format("%d%s", p.crossings, p.blocked and "  blocked" or ""))
+	else
+		row("path from camera", "pending")
+	end
+	ImGui.EndTable()
+end
+
+local function draw_near()
+	if not ImGui.CollapsingHeader("Nearby stalkers", 0) then return end
+	if #near.rows == 0 then
+		ImGui.TextDisabled(string_format("none within %d m", NEAR_RANGE))
+		return
+	end
+	if not ImGui.BeginTable("##near", 6, TABLE_FLAGS, ZERO, 0) then return end
+	ImGui.TableSetupColumn("name", 0, 0, 0)
+	ImGui.TableSetupColumn("m", 0, 0, 0)
+	ImGui.TableSetupColumn("lf", 0, 0, 0)
+	ImGui.TableSetupColumn("hf", 0, 0, 0)
+	ImGui.TableSetupColumn("direct lf", 0, 0, 0)
+	ImGui.TableSetupColumn("direct hf", 0, 0, 0)
+	ImGui.TableHeadersRow()
+	for _, r in ipairs(near.rows) do
+		local clr = r.alive and CLR.normal or CLR.dim
+		local m = r.muffling
+		ImGui.TableNextRow(0, 0)
+		ImGui.TableNextColumn()
+		text(clr, r.name)
+		ImGui.TableNextColumn()
+		text(clr, string_format("%.0f", r.dist))
+		ImGui.TableNextColumn()
+		text(clr, m and string_format("%.2f", m.lf) or "-")
+		ImGui.TableNextColumn()
+		text(clr, m and string_format("%.2f", m.hf) or "-")
+		ImGui.TableNextColumn()
+		text(clr, m and string_format("%.2f", m.direct_lf) or "-")
+		ImGui.TableNextColumn()
+		text(clr, m and string_format("%.2f", m.direct_hf) or "-")
+	end
+	ImGui.EndTable()
+end
+
+local function draw_panel()
+	if not open.panel then return end
+	colors()
+	ImGui.SetNextWindowSize(PANEL_SIZE, ImGuiCond.FirstUseEver)
+	local visible, still = ImGui.Begin("Raytraced sound", true, 0)
+	if not still then
+		open.panel = false
+		save_view()
+	end
+
+	if visible then
+		if not level.present() then
+			ImGui.TextDisabled("no level")
+		else
+			tick()
+			local clr, status = status_text()
+			text(clr, status)
+			draw_switches()
+			ImGui.Separator()
+			draw_room()
+			draw_reverb()
+			draw_target()
+			draw_near()
+		end
+	end
+
+	ImGui.End()
+end
+
+local function draw_hud()
+	if not open.hud or not level.present() then return end
+	-- Unique calls race the render thread under mt_level_call
+	if mt_level_call() or device():is_paused() then return end
+
+	colors()
+	tick()
+	-- top right, clear of the shader bus HUD in the top left
+	HUD_POS:set(device().width - 15, 15)
+	ImGui.SetNextWindowPos(HUD_POS, ImGuiCond.Always, CORNER)
+	ImGui.SetNextWindowBgAlpha(0.6)
+	ImGui.Begin("Raytraced sound HUD", true, HUD_FLAGS)
+
+	local clr, status = status_text()
+	text(clr, status)
+	local a, r = snap.acoustics, snap.reverb
+	if a then
+		text(CLR.normal, string_format("outside %.2f  decay %s / %s s", a.sky, band(a.decay_lf, "%.2f"), band(a.decay_hf, "%.2f")))
+	end
+	if r then
+		text(r.applied and CLR.normal or CLR.warn, string_format("reverb %.2f s  gain %.2f%s", r.decay_time, r.gain, r.applied and "" or "  overwritten"))
+	end
+	if target.id then
+		text(CLR.normal, string_format("%s %.0f m  %s", target.name, target.dist, muffling_text(target.muffling)))
+		text(CLR.dim, "path " .. path_text(target.path))
+	end
+
+	ImGui.End()
+end
+
+local function draw_menu()
+	if not ImGui.BeginMenu("Raytraced sound", true) then return end
+	if level.present() then tick() end
+
+	if ImGui.MenuItem("Panel", nil, open.panel, true) then
+		open.panel = not open.panel
+		save_view()
+	end
+	if ImGui.MenuItem("HUD", nil, open.hud, true) then
+		open.hud = not open.hud
+		save_view()
+	end
+	if ImGui.MenuItem("Draw rays", nil, con_bool("snd_raytrace_draw"), true) then
+		con_set("snd_raytrace_draw", not con_bool("snd_raytrace_draw"))
+	end
+	if ImGui.MenuItem(frozen and "Live reverb" or "Freeze reverb here", nil, frozen ~= nil, frozen ~= nil or snap.reverb ~= nil) then
+		if frozen then live_reverb() else freeze_reverb() end
+	end
+	if ImGui.MenuItem("Dump to log", nil, false, level.present()) then dump() end
+
+	ImGui.EndMenu()
+end
+
+ImGui.Groups.Widget("Debug", draw_menu)
+ImGui.Groups.Widget("Main", draw_panel)
+ImGui.Groups.Widget("Unique", draw_hud)
+
+-- the frozen reverb never outlives the level it was taken in
+local function on_level_end()
+	live_reverb()
+	target.id, target.pinned, target.ticket, target.path = nil, false, nil, nil
+	room.ticket, room.result = nil, nil
+	near.rows = {}
+end
+
+function on_game_start()
+	colors()
+	load_view()
+	RegisterScriptCallback("actor_on_net_destroy", on_level_end)
+end
