@@ -1,0 +1,8 @@
+// writes the lens view depth so screen space passes see the lens instead of the world behind it
+
+#include "scope_common.h"
+
+float4 main(v_out I) : SV_Target
+{
+	return float4(0.0, 0.0, I.v_P.z, 0.0);
+}

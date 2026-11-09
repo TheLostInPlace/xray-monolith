@@ -163,6 +163,7 @@ void CRenderTarget::EnsureScopeShaders()
 	s_scope_depth_write.create("scope_depth_write");
 	s_svp_distort_stamp.create("svp_distort_stamp");
 	s_svp_taa_stamp.create("svp_taa_stamp");
+	s_scope_lens_depth.create("scope_lens_depth");
 	s_svp_lens_stencil.create("svp_lens_stencil");
 	s_svp_lens_stencil_glass.create("svp_lens_stencil_glass");
 	s_scope_glass_fallback.create("scope_glass_fallback");
@@ -865,6 +866,9 @@ void CRenderTarget::phase_3DSSReticle(bool object_lens_pass)
 			if (!object_lens_pass && svp)
 				svp_track_disc(M->Width, M->Height);
 
+			// Without physical glass the classic lens takes the 3DSS shadow and lens surface
+			const bool physicalGlass = !object_lens_pass && scope_glass_forward_layer_allowed() && prepare_scope_physical_glass();
+
 			if (object_lens_pass)
 			{
 				{
@@ -907,7 +911,7 @@ void CRenderTarget::phase_3DSSReticle(bool object_lens_pass)
 						M->draw_reference_capture_light();
 					u_setrt(M->rt_Generic_0, nullptr, M->rt_Position, M->baseZB);
 				}
-				if (svp && !referenceImage)
+				if (!referenceImage && (svp || !physicalGlass))
 				{
 					PIX_EVENT(SCOPE_PHASE_SHADOW);
 					draw_scope(scope_image_shader, []() { RCache.set_c("scope_phase", SCOPE_PHASE_SHADOW); });
@@ -936,10 +940,28 @@ void CRenderTarget::phase_3DSSReticle(bool object_lens_pass)
 
 			// Draw the actual surface before the synthetic optical focus-depth stamp.
 			// NVG stamps hardware depth zero, which would reject later physical glass.
-			if (!object_lens_pass && scope_glass_forward_layer_allowed() && prepare_scope_physical_glass())
+			if (physicalGlass)
 			{
 				u_setrt(M->rt_Generic_0, nullptr, M->rt_Position, M->baseZB);
 				RImplementation.GMBase.r_dsgraph_render_physical_glass();
+			}
+			else if (!object_lens_pass && !svp)
+			{
+				// The 3DSS fake scope left the world depth over the lens, so the lens writes its own depth back
+				u_setrt(M->rt_Generic_0, nullptr, M->rt_Position, M->baseZB);
+				RCache.set_CullMode(CULL_CCW);
+				RCache.set_Stencil(FALSE);
+				RCache.set_ColorWriteEnable();
+				{
+					PIX_EVENT(SCOPE_PHASE_LENS);
+					draw_scope(s_scope_color_write, []() { RCache.set_c("scope_phase", SCOPE_PHASE_LENS); });
+				}
+				{
+					PIX_EVENT(SCOPE_LENS_DEPTH);
+					u_setrt(M->rt_Position, 0, 0, 0, M->baseZB);
+					draw_scope(s_scope_lens_depth, []() { RCache.set_ColorWriteEnable(D3DCOLORWRITEENABLE_BLUE); });
+					RCache.set_ColorWriteEnable();
+				}
 			}
 
 			// The focus depth belongs only to a real SVP image and stays with the late overlays.
