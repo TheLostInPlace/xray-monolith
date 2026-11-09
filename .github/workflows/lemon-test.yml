@@ -1,0 +1,136 @@
+name: Tester build
+
+on:
+  push:
+    branches: [ "lemon-test" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOLUTION_FILE_PATH: src/engine-vs2022.sln
+  BUILD_CONF: DX11-AVX
+  PACK_GAMEDATA_NAME: 00_modded_exes_gamedata.db0
+  PATCH_REPO: TheLostInPlace/xray-monolith-bodycam-gamma-compatibility-patch
+  PATCH_REF: atlas-reticle-eyebox
+
+jobs:
+  pack_gamedata:
+    name: pack_gamedata
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Pack gamedata
+      run: |
+        new-item -path "./compressor/gamedata" -itemtype directory -force
+        copy-item -path "./gamedata/*" -destination "./compressor/gamedata" -recurse -force
+        cd ./compressor
+        start-process -filepath "./! compress_gamedata.cmd" -Wait
+        rename-item -path gamedata.db0 -newname ${{env.PACK_GAMEDATA_NAME}}
+
+    - name: Upload gamedata
+      uses: actions/upload-artifact@v4.6.0
+      with:
+        name: gamedata
+        path: ./compressor/${{env.PACK_GAMEDATA_NAME}}
+        if-no-files-found: "error"
+        retention-days: 1
+
+  build_mt:
+    name: build-mt-dx11-avx
+    runs-on: windows-latest
+
+    steps:
+    - name: Configure Pagefile
+      uses: al-cheb/configure-pagefile-action@v1.3
+      with:
+        minimum-size: 8GB
+        maximum-size: 8GB
+        disk-root: "C:"
+
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Init submodules
+      uses: snickerbockers/submodules-init@v4
+
+    - name: setup-msbuild
+      uses: microsoft/setup-msbuild@v1.3.1
+      with:
+        msbuild-architecture: "x64"
+
+    - name: Build DX11-AVX
+      run: msbuild /m /p:Configuration=${{env.BUILD_CONF}} ${{env.SOLUTION_FILE_PATH}}
+
+    - name: Upload exe and pdb
+      uses: actions/upload-artifact@v4.6.0
+      with:
+        name: engine
+        path: |
+          ./_build/_game/bin_dbg/*.exe
+          ./_build/_game/bin_dbg/*.pdb
+        if-no-files-found: "error"
+        retention-days: 1
+
+  gamma_patch:
+    name: gamma_patch
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout the GAMMA patch with the reticle eye box fix
+      uses: actions/checkout@v4
+      with:
+        repository: ${{env.PATCH_REPO}}
+        ref: ${{env.PATCH_REF}}
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Build the MO2 package
+      run: |
+        python tools/package.py
+        python .github/package_release.py
+        git rev-parse HEAD > release/patch-commit.txt
+
+    - name: Upload patch
+      uses: actions/upload-artifact@v4.6.0
+      with:
+        name: gamma_patch
+        path: release/*
+        if-no-files-found: "error"
+        retention-days: 1
+
+  package:
+    needs: [pack_gamedata, build_mt, gamma_patch]
+    name: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4.1.8
+
+    - name: Assemble the tester package
+      run: |
+        mkdir -p out/bin out/db/mods out/pdb
+        mv engine/*.exe out/bin
+        mv engine/*.pdb out/pdb
+        mv gamedata/*.db0 out/db/mods
+        mv gamma_patch/*.zip out
+
+    - name: Publish prerelease
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        TAG: lemon-test-${{ github.run_number }}
+      run: |
+        set -euo pipefail
+        (cd out && zip -r "../bodycam-$TAG.zip" .)
+        gh release create "$TAG" "bodycam-$TAG.zip" --prerelease --target "${{ github.sha }}" --title "Bodycam test build $TAG" \
+          --notes "Engine ${{ github.sha }}, GAMMA patch $(cat gamma_patch/patch-commit.txt) from ${{env.PATCH_REF}}"
