@@ -20,6 +20,13 @@ uniform float4 svp_lens_deadzone;
 #include "scope_glass_authoring.h"
 #include "svp_lens_environment.h"
 
+#ifdef SVP_LENS_VSLR
+#include "vslr_trace.h"
+uniform float4 svp_lens_vslr; // xyz capture centre, w radial limit, zero with no published capture
+uniform float4 svp_lens_vslr_fade; // x weight of the published capture over the previous one
+static float3 svp_lens_reflection_origin;
+#endif
+
 struct SvpLensChannels
 {
 	float4 environment;
@@ -333,6 +340,18 @@ float3 svp_optic_sample_reflection_path(float3 local_direction,
 	// directional shadows without fading the complete optical stack.
 	float probe_visibility = svp_optic_probe_visibility(world_direction);
 	radiance *= lerp(0.45, 1.0, probe_visibility);
+#ifdef SVP_LENS_VSLR
+	// The captured static scene in front of the weather cubes, traced in linear light at the deferred glass exposure
+	[branch] if (svp_lens_vslr.w > 0.0)
+	{
+		uint width, height, levels;
+		vslr_colour.GetDimensions(0, width, height, levels);
+		float3 captured = vslr_reflected(svp_lens_reflection_origin - svp_lens_vslr.xyz, world_direction,
+			svp_lens_vslr.w, scope_glass_lobe_lod(width, levels, base_roughness), svp_lens_vslr_fade.x,
+			SRGBToLinear(radiance) * scope_glass_live_structure);
+		radiance = LinearTosRGB(captured / scope_glass_live_structure);
+	}
+#endif
 	radiance = svp_optic_reflection_contrast(radiance, base_roughness);
 	float3 spectral_filter = lerp(float3(1.0, 1.0, 1.0),
 		svp_optic_path_coating(path, cosine_incident), path.coating_strength);
@@ -491,6 +510,9 @@ SvpLensChannels svp_evaluate_lens(float2 lens_position, float2 screen_position, 
 	channels.environment = 0;
 	channels.direct = 0;
 	channels.ghosts = 0;
+#ifdef SVP_LENS_VSLR
+	svp_lens_reflection_origin = world_position;
+#endif
 
 	// Optical coordinates may move for parallax, but no simulated surface is
 	// allowed to exist beyond the physical objective. The caller owns the one

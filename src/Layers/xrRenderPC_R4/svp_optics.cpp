@@ -138,6 +138,44 @@ bool CRenderTarget::phase_scope_reference_composite(
 	return RCache.stat.calls != callsBefore;
 }
 
+namespace
+{
+// The 3DSS lens pass of scope_color_write.s with the reflection capture bound (scope_color_write_vslr.ps)
+class SvpLensVslrBlender final : public IBlender
+{
+public:
+	LPCSTR getComment() override { return "3DSS lens with the reflection capture"; }
+	BOOL canBeLMAPped() override { return FALSE; }
+	void Compile(CBlender_Compile& C) override
+	{
+		IBlender::Compile(C);
+		if (C.iElement != 0)
+			return;
+		C.r_Pass("scope_vertex", "scope_color_write_vslr", true, TRUE, FALSE, TRUE, D3DBLEND_SRCALPHA, D3DBLEND_INVSRCALPHA);
+		C.r_dx10Texture("s_reticle", "$user$reticle");
+		C.r_dx10Texture("s_image", "$user$viewport2");
+		C.r_dx10Texture("s_tonemap", "$user$tonemap");
+		C.r_dx10Texture("s_tonemap_svp", "$user$svp_tonemap");
+		C.r_dx10Texture("s_heat", "$user$heat");
+		C.r_dx10Texture("s_distort", "$user$generic1");
+		C.r_dx10Texture("s_position", "$user$generic2");
+		C.r_dx10Texture("s_inside", "wpn\\scope_utility\\inside");
+		C.r_dx10Texture("s_inside_blurred", "wpn\\scope_utility\\inside_blurred");
+		C.r_dx10Texture("s_dirt", "wpn\\scope_utility\\dirt");
+		C.r_dx10Texture("s_reflection", "wpn\\scope_utility\\reflection");
+		C.r_dx10Texture("s_lens_env0", "$user$env_s0");
+		C.r_dx10Texture("s_lens_env1", "$user$env_s1");
+		C.r_dx10Texture("s_heat_map", "wpn\\scope_utility\\heat_map");
+		C.r_dx10Texture("s_powered_off", "wpn\\eft_echo1\\eft_echo1_screen");
+		C.r_dx10Texture("s_svp_rain", "fx\\svp_rain");
+		scope_vslr_bind(C);
+		C.r_dx10Sampler("smp_base");
+		C.r_dx10Sampler("smp_rtlinear");
+		C.r_End();
+	}
+};
+}
+
 void CRenderTarget::EnsureScopeShaders()
 {
 	if (m_scope_shaders_ready)
@@ -164,6 +202,17 @@ void CRenderTarget::EnsureScopeShaders()
 	s_svp_distort_stamp.create("svp_distort_stamp");
 	s_svp_taa_stamp.create("svp_taa_stamp");
 	s_scope_lens_depth.create("scope_lens_depth");
+	// Probed first, the resource manager ends the game on a compile error, and the capture needs the sRGB helpers of Atmospherics
+	if (!RImplementation.o.dx10_msaa)
+	{
+		if (svp_pixel_shader_compiles("scope_color_write_vslr"))
+		{
+			SvpLensVslrBlender lens;
+			s_scope_lens_vslr.create(&lens, "scope_color_write_vslr");
+		}
+		else
+			Msg("! [SVP] scope_color_write_vslr does not compile, the hip lens reflects the weather cubes only");
+	}
 	s_svp_lens_stencil.create("svp_lens_stencil");
 	s_svp_lens_stencil_glass.create("svp_lens_stencil_glass");
 	s_scope_glass_fallback.create("scope_glass_fallback");
@@ -954,7 +1003,23 @@ void CRenderTarget::phase_3DSSReticle(bool object_lens_pass)
 				RCache.set_ColorWriteEnable();
 				{
 					PIX_EVENT(SCOPE_PHASE_LENS);
-					draw_scope(s_scope_color_write, []() { RCache.set_c("scope_phase", SCOPE_PHASE_LENS); });
+					// The lens reflects the scene capture as the deferred glass does, the weather cubes without one
+					if (s_scope_lens_vslr)
+						scope_vslr_request();
+					const Fvector4 capture = scope_vslr_published();
+					if (s_scope_lens_vslr && capture.w > 0.f)
+					{
+						scope_vslr_consumer_begin();
+						draw_scope(s_scope_lens_vslr, [&capture]()
+							{
+								RCache.set_c("scope_phase", SCOPE_PHASE_LENS);
+								RCache.set_c("svp_lens_vslr", capture);
+								RCache.set_c("svp_lens_vslr_fade", scope_vslr_fade(), 0.f, 0.f, 0.f);
+							});
+						scope_vslr_consumer_end();
+					}
+					else
+						draw_scope(s_scope_color_write, []() { RCache.set_c("scope_phase", SCOPE_PHASE_LENS); });
 				}
 				{
 					PIX_EVENT(SCOPE_LENS_DEPTH);

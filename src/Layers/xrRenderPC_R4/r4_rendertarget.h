@@ -319,6 +319,7 @@ public:
 	ref_shader s_svp_distort_stamp; // pip neutral distort-mask stamp over the composited lens
 	ref_shader s_svp_taa_stamp; // pip raw taa skip mask over the composited lens
 	ref_shader s_scope_lens_depth; // lens depth into the position target and depth buffer at the hip
+	ref_shader s_scope_lens_vslr; // the hip lens with the reflection capture, empty without Atmospherics or under MSAA
 	ref_shader s_svp_lens_stencil; // pip 3DSS lens stencil (254) stamp under the late-pass overlays
 	ref_shader s_svp_lens_stencil_glass; // pip the same stamp where deferred physical glass is the visible lens
 	bool m_scope_shaders_ready = false;

@@ -72,24 +72,13 @@ float scope_glass_capture_lod(float roughness)
  return scope_glass_lobe_lod(width,levels,roughness);
 }
 
-// Radiance arriving along a reflected ray: the captured static scene within the capture radius, the
-// prefiltered environment behind it. Sharp lobes trace the capture for parallax; from the capture's
-// second mip the reflected direction is looked up directly, where coverage fades edges as the lobe
-// widens. A new capture fades in over the previous one on that wide path only.
+// Radiance arriving along a reflected ray: the captured static scene, the prefiltered environment behind it.
 float3 scope_glass_reflected_radiance(ScopeGlassPixel g,float3 direction,float lookupRoughness)
 {
  float3 environment=scope_glass_live_environment_radiance(direction,lookupRoughness);
  if(scope_glass_vslr.w<=0) return environment;
- float lod=scope_glass_capture_lod(lookupRoughness);
- float3 wide=vslr_lobe_faded(direction,lod,environment,scope_glass_vslr_fade.x);
- // Fully wide from the capture's second mip.
- float sharpness=1-saturate(lod*.5);
- [branch] if(sharpness<=0) return wide;
- VslrHit hit=vslr_trace(g.P-scope_glass_vslr.xyz,direction,scope_glass_vslr.w,vslr_hit_tolerance);
- // Where the trace finds no surface, the capture's own sky along the ray, as on the wide path.
- float3 background=vslr_lobe(direction,lod,environment);
- float3 sharp=hit.confidence>0 ? lerp(background,vslr_lobe(hit.direction,lod,environment),hit.confidence) : background;
- return lerp(wide,sharp,sharpness);
+ return vslr_reflected(g.P-scope_glass_vslr.xyz,direction,scope_glass_vslr.w,
+  scope_glass_capture_lod(lookupRoughness),scope_glass_vslr_fade.x,environment);
 }
 
 // frontTerm is the coated specular reflection, diffuseTerm the multiple-scattering remainder, shooter the

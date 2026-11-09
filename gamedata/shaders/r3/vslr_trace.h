@@ -107,4 +107,19 @@ float3 vslr_lobe_faded(float3 direction, float lod, float3 background, float fad
         return current;
     return lerp(vslr_lobe_of(vslr_colour_previous, vslr_coverage_previous, direction, lod, background), current, fade);
 }
+
+// Sharp lobes trace the capture for parallax, wide lobes from its second mip look the direction up
+// and fade a new capture in. origin is relative to the capture centre
+float3 vslr_reflected(float3 origin, float3 direction, float radius, float lod, float fade, float3 background)
+{
+    float3 wide = vslr_lobe_faded(direction, lod, background, fade);
+    float sharpness = 1.0f - saturate(lod * 0.5f);
+    [branch] if (sharpness <= 0.0f)
+        return wide;
+    VslrHit hit = vslr_trace(origin, direction, radius, vslr_hit_tolerance);
+    // A missed trace keeps the capture's own sky along the ray
+    float3 sky = vslr_lobe(direction, lod, background);
+    float3 sharp = hit.confidence > 0.0f ? lerp(sky, vslr_lobe(hit.direction, lod, background), hit.confidence) : sky;
+    return lerp(wide, sharp, sharpness);
+}
 #endif

@@ -13,16 +13,6 @@ float scope_glass_live_probe_visibility(float3 direction)
  // Visibility relative to the probe's mean, so its overall brightness cancels.
  return saturate((dot(positive,probePositive)+dot(negative,probeNegative))/max(mean*weight,.0001));
 }
-// Mean luminance of the frozen clear-noon cube this path used as its structure mask, kept as
-// the exposure so the lens level matches; the active weather cubes now supply the structure.
-static const float scope_glass_live_structure=.555;
-// Cube mip for a GGX lobe: alpha=roughness^2 is the median microfacet slope, reflection doubles
-// it, so the lobe covers about 2*width*alpha texels of a face (box-filtered mips).
-float scope_glass_lobe_lod(uint width,uint levels,float roughness)
-{
- float r=saturate(roughness);
- return clamp(log2(max(2.0*max(float(width),1.0)*r*r,1.0)),0.0,max(float(levels)-1.0,0.0));
-}
 float scope_glass_reflection_lod(float roughness)
 {
  uint width,height,levels;
