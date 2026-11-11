@@ -106,7 +106,62 @@ void CTextureDescrMngr::LoadTHM(LPCSTR initial, map_TD& s_texture_details, map_C
 	}
 }
 
-void CTextureDescrMngr::LoadLTX(LPCSTR initial, map_TD& s_texture_details)
+// ltx material words, the thm materials and the pbr slot
+static const struct
+{
+	LPCSTR name;
+	float value;
+} ltx_materials[] = {
+	{"orennayar_blin", float(STextureParams::tmOrenNayar_Blin)},
+	{"blin_phong", float(STextureParams::tmBlin_Phong)},
+	{"phong_metal", float(STextureParams::tmPhong_Metal)},
+	{"metal_orennayar", float(STextureParams::tmMetal_OrenNayar)},
+	{"pbr", 4.5f},
+};
+
+static bool parse_ltx_number(LPCSTR value, float& number)
+{
+	char* end;
+	const float v = strtof(value, &end);
+	if (end == value || *end || !_valid(v))
+		return false;
+	number = v;
+	return true;
+}
+
+static bool parse_ltx_material(LPCSTR value, float& material)
+{
+	for (const auto& m : ltx_materials)
+	{
+		if (!stricmp(value, m.name))
+		{
+			material = m.value;
+			return true;
+		}
+	}
+	return parse_ltx_number(value, material);
+}
+
+// an absent key keeps the default, an empty or bad value fails
+static bool read_ltx_number(const CInifile& ini, LPCSTR key, float& number)
+{
+	if (!ini.line_exist("texture", key))
+		return true;
+	LPCSTR value = ini.r_string("texture", key);
+	return value && parse_ltx_number(value, number);
+}
+
+static bool read_ltx_flag(const CInifile& ini, LPCSTR key, bool& flag)
+{
+	if (!ini.line_exist("texture", key))
+		return true;
+	if (!ini.r_string("texture", key))
+		return false;
+	flag = !!ini.r_bool("texture", key);
+	return true;
+}
+
+void CTextureDescrMngr::LoadLTX(LPCSTR initial, map_TD& s_texture_details, map_CS& s_detail_scalers)
 {
 	PROF_EVENT();
 
@@ -117,8 +172,6 @@ void CTextureDescrMngr::LoadLTX(LPCSTR initial, map_TD& s_texture_details)
 		string_path name;
 		xr_strcpy(name, file.name.c_str());
 		fix_texture_thm_name(name);
-		if (s_texture_details.find(name) != s_texture_details.end())
-			continue;
 
 		string_path path;
 		FS.update_path(path, initial, file.name.c_str());
@@ -149,9 +202,54 @@ void CTextureDescrMngr::LoadLTX(LPCSTR initial, map_TD& s_texture_details)
 				strconcat(sizeof(bump_name), bump_name, name, "_bump");
 		}
 
+		float material = 1.0f;
+		if (ini.line_exist("texture", "material"))
+		{
+			LPCSTR value = ini.r_string("texture", "material");
+			if (!value || !parse_ltx_material(value, material))
+			{
+				Msg("! Invalid texture material in '%s': expected a number, pbr or a thm material", path);
+				continue;
+			}
+		}
+		float material_weight = 0.0f, detail_scale = 1.0f;
+		bool diffuse_detail = false, bump_detail = false;
+		if (!read_ltx_number(ini, "material_weight", material_weight) || !read_ltx_number(ini, "detail_scale", detail_scale) ||
+			!read_ltx_flag(ini, "diffuse_detail", diffuse_detail) || !read_ltx_flag(ini, "bump_detail", bump_detail))
+		{
+			Msg("! Invalid texture value in '%s': material_weight and detail_scale take numbers, diffuse_detail and bump_detail take true or false", path);
+			continue;
+		}
+
+		LPCSTR detail_name = ini.line_exist("texture", "detail_name")
+			? ini.r_string("texture", "detail_name") : nullptr;
+		u8 detail_usage = 0;
+		if (diffuse_detail)
+			detail_usage |= (1 << 0);
+		if (bump_detail)
+			detail_usage |= (1 << 1);
+
+		// replaces the whole thm entry
 		texture_desc& desc = s_texture_details[name];
+		if (desc.m_assoc)
+			xr_delete(desc.m_assoc);
+		if (detail_name && detail_name[0] && detail_usage)
+		{
+			desc.m_assoc = xr_new<texture_assoc>();
+			desc.m_assoc->detail_name = detail_name;
+			desc.m_assoc->usage = detail_usage;
+
+			cl_dt_scaler*& dts = s_detail_scalers[name];
+			if (dts)
+				dts->scale = detail_scale;
+			else
+				dts = xr_new<cl_dt_scaler>(detail_scale);
+		}
+
+		if (desc.m_spec)
+			xr_delete(desc.m_spec);
 		desc.m_spec = xr_new<texture_spec>();
-		desc.m_spec->m_material = ini.line_exist("texture", "material") ? ini.r_float("texture", "material") : 1.0f;
+		desc.m_spec->m_material = material + (material < 4 ? material_weight : 0);
 		desc.m_spec->m_bump_name = bump_name;
 		desc.m_spec->m_use_steep_parallax = stricmp(mode, "parallax") == 0;
 	}
@@ -161,8 +259,8 @@ void CTextureDescrMngr::Load()
 {
 	LoadTHM("$game_textures$", m_texture_details, m_detail_scalers);
 	LoadTHM("$level$", m_texture_details, m_detail_scalers);
-	LoadLTX("$game_textures$", m_texture_details);
-	LoadLTX("$level$", m_texture_details);
+	LoadLTX("$game_textures$", m_texture_details, m_detail_scalers);
+	LoadLTX("$level$", m_texture_details, m_detail_scalers);
 }
 
 void CTextureDescrMngr::UnLoad()
