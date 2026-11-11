@@ -50,7 +50,7 @@ private:
 	map_CS m_detail_scalers;
 
 	static void LoadTHM(LPCSTR initial, map_TD& s_texture_details, map_CS& s_detail_scalers);
-	static void LoadLTX(LPCSTR initial, map_TD& s_texture_details);
+	static void LoadLTX(LPCSTR initial, map_TD& s_texture_details, map_CS& s_detail_scalers);
 
 public:
 	~CTextureDescrMngr();
