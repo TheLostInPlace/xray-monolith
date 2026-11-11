@@ -117,8 +117,6 @@ void CTextureDescrMngr::LoadLTX(LPCSTR initial, map_TD& s_texture_details)
 		string_path name;
 		xr_strcpy(name, file.name.c_str());
 		fix_texture_thm_name(name);
-		if (s_texture_details.find(name) != s_texture_details.end())
-			continue;
 
 		string_path path;
 		FS.update_path(path, initial, file.name.c_str());
@@ -149,7 +147,10 @@ void CTextureDescrMngr::LoadLTX(LPCSTR initial, map_TD& s_texture_details)
 				strconcat(sizeof(bump_name), bump_name, name, "_bump");
 		}
 
+		// replaces the thm bump and material, the thm detail texture stays
 		texture_desc& desc = s_texture_details[name];
+		if (desc.m_spec)
+			xr_delete(desc.m_spec);
 		desc.m_spec = xr_new<texture_spec>();
 		desc.m_spec->m_material = ini.line_exist("texture", "material") ? ini.r_float("texture", "material") : 1.0f;
 		desc.m_spec->m_bump_name = bump_name;
