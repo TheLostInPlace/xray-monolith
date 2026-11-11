@@ -1,0 +1,128 @@
+name: texture ltx test build
+
+on:
+  push:
+    branches: [ "ltx-pbr-mt" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOLUTION_FILE_PATH: src/engine-vs2022.sln
+  PACK_GAMEDATA_NAME: 00_modded_exes_gamedata.db0
+  NON_MT_REF: ltx-pbr
+
+jobs:
+  pack_gamedata:
+    name: pack_gamedata-${{matrix.flavour}}
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        flavour: ["mt", "non-mt"]
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ matrix.flavour == 'non-mt' && env.NON_MT_REF || '' }}
+
+    - name: Pack gamedata
+      run: |
+        new-item -path "./compressor/gamedata" -itemtype directory -force
+        copy-item -path "./gamedata/*" -destination "./compressor/gamedata" -recurse -force
+        cd ./compressor
+        start-process -filepath "./! compress_gamedata.cmd" -Wait
+        rename-item -path gamedata.db0 -newname ${{env.PACK_GAMEDATA_NAME}}
+
+    - name: Upload gamedata
+      uses: actions/upload-artifact@v7
+      with:
+        name: gamedata_${{matrix.flavour}}
+        path: ./compressor/${{env.PACK_GAMEDATA_NAME}}
+        if-no-files-found: "error"
+        retention-days: 1
+
+  build:
+    name: build-${{matrix.flavour}}-DX11
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        flavour: ["mt", "non-mt"]
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ matrix.flavour == 'non-mt' && env.NON_MT_REF || '' }}
+        submodules: recursive
+
+    - name: setup-msbuild
+      uses: microsoft/setup-msbuild@v3
+      with:
+        msbuild-architecture: "x64"
+
+    - name: Build DX11
+      run: msbuild /p:Configuration=DX11 ${{env.SOLUTION_FILE_PATH}}
+
+    - name: Upload Exe
+      uses: actions/upload-artifact@v7
+      with:
+        name: exe_${{matrix.flavour}}
+        path: ./_build/_game/bin_dbg/*.exe
+        if-no-files-found: "error"
+        retention-days: 1
+
+    - name: Upload PDB
+      uses: actions/upload-artifact@v7
+      with:
+        name: pdb_${{matrix.flavour}}
+        path: ./_build/_game/bin_dbg/*.pdb
+        if-no-files-found: "error"
+        retention-days: 30
+
+  bundle:
+    needs: [pack_gamedata, build]
+    name: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v8
+
+    - name: Assemble
+      id: assemble
+      run: |
+        name="texture-ltx-${GITHUB_SHA::9}"
+        for f in mt non-mt; do
+          mkdir -p "bundle-$f/bin" "bundle-$f/db/mods" "pdb/$f"
+          cp exe_${f}/*.exe "bundle-$f/bin"
+          cp gamedata_$f/*.db0 "bundle-$f/db/mods"
+          cp pdb_${f}/*.pdb "pdb/$f"
+          (cd "bundle-$f" && zip -qr "../$name-$f.zip" .)
+        done
+        (cd pdb && zip -qr "../$name-pdb.zip" .)
+        echo "name=$name" >> "$GITHUB_OUTPUT"
+
+    - name: Release
+      uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{steps.assemble.outputs.name}}
+        name: ${{steps.assemble.outputs.name}}
+        target_commitish: ${{github.sha}}
+        prerelease: true
+        make_latest: false
+        fail_on_unmatched_files: true
+        files: |
+          ${{steps.assemble.outputs.name}}-mt.zip
+          ${{steps.assemble.outputs.name}}-non-mt.zip
+          ${{steps.assemble.outputs.name}}-pdb.zip
+        body: |
+          Test build of texture `.ltx` files taking priority over the `.thm` bump and material. The MT zip is MT from ${{github.sha}}, the non-MT zip is the PR branch `${{env.NON_MT_REF}}`.
+
+          Extract the zip that matches your exes over the game folder. It puts the DX11 (non-AVX) exe in bin and the engine gamedata in db/mods.
+          The pdb zip has the matching symbols for crash dumps, one folder per zip.
